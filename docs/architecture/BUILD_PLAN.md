@@ -10,19 +10,19 @@ criterion is satisfied.
 
 ## Delivery order
 
-| ID | Milestone | Depends on |
-| --- | --- | --- |
-| M0 | Product, architecture, and design baseline | — |
-| M1 | Secure project foundation | M0 |
-| M2 | Racing Profiles and transparent persistence | M1 |
-| M3 | Local application lifecycle | M2 |
-| M4 | Session orchestration | M3 |
-| M5 | Curated catalog and local discovery | M2 |
-| M6 | Steam, non-Steam, and VR launch recipes | M4, M5 |
-| M7 | Privileged operations | M3 |
-| M8 | Desktop integration and recovery | M4, M7 |
-| M9 | Update advice and signed self-update | M5, M8 |
-| M10 | Release hardening and version-one distribution | M6, M9 |
+| ID  | Milestone                                      | Depends on |
+| --- | ---------------------------------------------- | ---------- |
+| M0  | Product, architecture, and design baseline     | —          |
+| M1  | Secure project foundation                      | M0         |
+| M2  | Racing Profiles and transparent persistence    | M1         |
+| M3  | Local application lifecycle                    | M2         |
+| M4  | Session orchestration                          | M3         |
+| M5  | Curated catalog and local discovery            | M2         |
+| M6  | Steam, non-Steam, and VR launch recipes        | M4, M5     |
+| M7  | Privileged operations                          | M3         |
+| M8  | Desktop integration and recovery               | M4, M7     |
+| M9  | Update advice and signed self-update           | M5, M8     |
+| M10 | Release hardening and version-one distribution | M6, M9     |
 
 M5 and M7 may proceed independently after their dependencies are complete.
 Only one milestone should normally be marked `in_progress`; parallel work is

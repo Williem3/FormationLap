@@ -364,12 +364,12 @@ bounded diagnostic log.
 
 These seams were explicitly approved before implementation:
 
-| Seam | What tests observe | Adapter strategy |
-| --- | --- | --- |
-| FormationLapCore | Profiles, Session actions, ownership, snapshots, events | Scripted ProcessRuntime and real temp storage |
-| ProcessRuntime | Actual Windows launch, status, close, console, child-launch behavior | Purpose-built fixture executables |
-| Tauri commands | Payloads, errors, generated TypeScript compatibility | Host integration and stale-generation check |
-| React user interface | Visible profile and Session behavior | In-memory NativeBridge adapter |
+| Seam                 | What tests observe                                                   | Adapter strategy                              |
+| -------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| FormationLapCore     | Profiles, Session actions, ownership, snapshots, events              | Scripted ProcessRuntime and real temp storage |
+| ProcessRuntime       | Actual Windows launch, status, close, console, child-launch behavior | Purpose-built fixture executables             |
+| Tauri commands       | Payloads, errors, generated TypeScript compatibility                 | Host integration and stale-generation check   |
+| React user interface | Visible profile and Session behavior                                 | In-memory NativeBridge adapter                |
 
 Tests assert behavior through these interfaces. They do not mock internal
 modules, inspect private state, or assert internal call counts.

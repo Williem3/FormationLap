@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `not_started` | — | — | — | — | Begin Racing Profiles and transparent persistence |
+| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Reject invalid Racing Profile names before storage |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,11 +34,17 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-No milestone is currently in progress.
+M2 remains in progress after the first profile-persistence slice:
 
-The next ready milestone is **M2 — Racing Profiles and transparent
-persistence**. Do not begin M3, M4, M5, or another later milestone until its
-recorded dependencies are complete.
+- Delivered: `CreateProfile` assigns a stable identifier, atomically persists
+  one versioned Racing Profile with exactly one Primary Sim, and exposes it
+  after FormationLapCore is reopened.
+- Next behavior: reject blank or whitespace-only Racing Profile and Primary Sim
+  names without changing the snapshot or writing a profile document.
+- Test seam: FormationLapCore with a real temporary storage directory.
+- Next file scope: `src-tauri/src/core.rs`,
+  `src-tauri/tests/racing_profiles.rs`,
+  `docs/architecture/evidence/M2.md`, and this ledger.
 
 Known environment facts:
 
@@ -97,6 +103,7 @@ logs.
 | 2026-07-23 | Codex | M0 | Captured product, domain, architecture, ADRs, milestone plan, UI contract, and four generated concepts | Documentation links validated; PNG dimensions verified | No blocker; start M1 by installing Rust and scaffolding the secure shell |
 | 2026-07-23 | Codex `/root` | M1 | Delivered the pinned Tauri/React foundation, native visual shell, generated Rust/TypeScript NativeBridge seam, least-privilege capability, test harnesses, CI, and setup/security docs | [`M1 evidence`](evidence/M1.md): frozen install, frontend/Rust checks, contract and capability audits, native screenshot, and debug NSIS bundle all passed | No blocker; begin only M2 with a profile-contract red test and real temporary storage |
 | 2026-07-23 | Codex `/root` | M1 | Reviewed the full M0/M1 baseline, isolated Vite loopback access to the development CSP, aligned the dark border token, and organized the initial local history | Frozen install; `pnpm.cmd verify`; Rust fmt, Clippy, and tests; native debug build; Markdown-link and PNG-integrity checks passed | No blocker; begin M2 with a profile-contract red test and real temporary storage |
+| 2026-07-23 | Codex `/root` | M2 | Added the first FormationLapCore profile command, stable IDs, versioned atomic JSON creation, restart loading, and generated snapshot contracts | [`M2 evidence`](evidence/M2.md): red compile failure, green restart test, frontend verification, Clippy, and four Rust tests passed | No blocker; reject blank profile and Primary Sim names before storage |
 
 ## Handoff entry template
 

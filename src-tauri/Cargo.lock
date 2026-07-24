@@ -812,9 +812,11 @@ name = "formation-lap"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "ts-rs",
+ "uuid",
 ]
 
 [[package]]

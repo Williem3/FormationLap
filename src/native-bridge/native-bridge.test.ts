@@ -7,6 +7,7 @@ describe("InMemoryNativeBridge", () => {
     const snapshot: AppSnapshot = {
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      profiles: [],
     };
     const bridge = new InMemoryNativeBridge(snapshot);
 

@@ -8,6 +8,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      profiles: [],
     });
 
     render(<App bridge={bridge} />);
@@ -30,6 +31,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      profiles: [],
     });
 
     render(<App bridge={bridge} />);

@@ -2,9 +2,13 @@
 
 mod commands;
 mod contracts;
+mod core;
+mod profile_library;
 
 pub use commands::get_app_snapshot;
-pub use contracts::AppSnapshot;
+pub use contracts::{AppSnapshot, ProfileSummary};
+pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
+use profile_library::ProfileLibrary;
 use tauri::Url;
 
 fn navigation_is_allowed(url: &Url) -> bool {

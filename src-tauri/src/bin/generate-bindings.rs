@@ -1,4 +1,4 @@
-use formation_lap_lib::AppSnapshot;
+use formation_lap_lib::{AppSnapshot, ProfileSummary};
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -15,10 +15,13 @@ import {{ invoke }} from "@tauri-apps/api/core";
 
 export {}
 
+export {}
+
 export function getAppSnapshot(): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("get_app_snapshot");
 }}
 "#,
+        ProfileSummary::decl(&config),
         AppSnapshot::decl(&config)
     )
 }

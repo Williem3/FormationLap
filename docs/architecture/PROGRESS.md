@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `blocked` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Confirm one native Tab traversal through the visible M2 preview |
+| M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,50 +34,17 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 is blocked after the profile-management slice:
+M2 is complete and no implementation slice is active between milestones:
 
-- Delivered: `CreateProfile` assigns a stable identifier, atomically persists
-  one versioned Racing Profile with exactly one Primary Sim; blank or
-  whitespace-only Racing Profile and Primary Sim names are rejected before
-  state or storage changes and when persisted documents are opened. Existing
-  profiles can be edited while retaining their identifier and prior backup, or
-  duplicated under a new stable identifier, or deleted while retaining a
-  recoverable backup. Complete profile behavior settings persist and are
-  exposed in authoritative snapshots and generated TypeScript contracts. The
-  selected Racing Profile survives restart in versioned local settings, and an
-  interrupted profile replacement recovers its last valid backup. Schema-one
-  profiles migrate to the complete schema-two contract with backups. Portable
-  export omits local identity and diagnostics; import assigns fresh stable IDs,
-  preserves missing paths, and flags them for repair. Eight narrow typed Tauri
-  commands and both NativeBridge adapters expose profile behavior. An
-  empty-library user can create the first Racing Profile through the React
-  wizard and see the authoritative result in the sidebar and dashboard. The
-  editor saves profile, Primary Sim, ordered Supporting Application, VR, and
-  Close Session settings through NativeBridge. Another Racing Profile can be
-  selected in the sidebar and its authoritative detail replaces the dashboard.
-  React also exposes duplication, explicit-target deletion confirmation,
-  portable JSON export, and portable JSON import through NativeBridge. Profile
-  dialogs use native modal behavior, support Escape, and restore keyboard focus
-  to their triggering action or the surviving New profile action. Successful
-  profile edits and migrations use Windows atomic replacement while retaining
-  the previous document as the bounded backup. FormationLapCore also retains
-  native-owned application identities and recomputes missing-path diagnostics
-  instead of trusting those frontend fields. Profile selection settings use
-  the same atomic replacement and recover their last valid backup when a
-  legacy interrupted write leaves a temporary marker. If a live Racing Profile
-  replacement is invalid JSON or contains invalid names, ProfileLibrary
-  validates and restores its bounded last-valid backup before exposing state.
-  The wizard and editor now stack before their minimum-width columns exceed the
-  workspace; manual checks at effective 125% and 200% show no horizontal
-  overflow. Durable wizard and editor screenshots are captured.
-- Unblock action: with the M2 wizard preview visible, press Tab from Profile
-  name through Primary Sim name, source, executable path, and Create Racing
-  Profile. Confirm that focus advances in that order and remains visibly
-  outlined.
-- Test seams: FormationLapCore, Tauri commands and generated contracts, and
-  React behavior through NativeBridge.
-- Next file scope: `docs/architecture/evidence/M2.md`, UI evidence, and this
-  ledger.
+- Evidence: [`M2 evidence`](evidence/M2.md), including 24 Rust tests, ten React
+  tests, generated contracts, backup and migration results, exported fixture,
+  wizard/editor screenshots, confirmed keyboard traversal, and effective
+  125–200% scaling checks.
+- Next ready milestone: M3 — Local application lifecycle.
+- Next action: read the M3 process-ownership decision, mark M3 `in_progress`,
+  and write the first failing FormationLapCore test through ProcessRuntime.
+- Next file scope: M3 tests and core/runtime contracts,
+  `docs/architecture/evidence/M3.md`, and this ledger.
 
 Known environment facts:
 
@@ -96,10 +63,7 @@ Known environment facts:
 
 ## Blockers
 
-- M2 screenshots and scaling evidence are complete. A native Tab traversal
-  remains pending because the in-app Browser's synthetic keyboard dispatch does
-  not perform the browser's default focus movement. The visible preview is
-  ready for the user to perform the five-control Tab pass described above.
+- None.
 
 ## M1 evidence
 
@@ -144,6 +108,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M2 | Completed the automated M2 behavior surface, including atomic profile/settings replacement and recovery of interrupted or invalid writes | [`M2 evidence`](evidence/M2.md): frontend verification, Rust fmt, Clippy, generated-contract check, capability audit, and 24 Rust tests passed | Open the documented M2 preview in a fresh in-app Browser tab; capture wizard/editor screenshots and manually verify keyboard access and 125–200% scaling |
 | 2026-07-23 | Codex `/root` | M2 | Confirmed the automated milestone surface remains complete and the development preview is healthy | Clean worktree; M2 wizard endpoint returned HTTP 200; no fresh in-app Browser tab was available on the third consecutive goal turn | Blocked on the documented manual UI evidence; open the M2 wizard preview in a fresh in-app Browser tab |
 | 2026-07-23 | Codex `/root` | M2 | Captured wizard/editor screenshots and fixed the 125% overflow by stacking profile layouts before their minimum columns exceed the workspace | [`M2 evidence`](evidence/M2.md): 125% red and green dimensions, 200% no-overflow dimensions, screenshots, formatting, lint, typecheck, ten React tests, production build, contracts, and capability audit passed | Confirm the five-control native Tab traversal in the visible wizard; then complete M2 and begin M3 |
+| 2026-07-23 | Codex `/root` | M2 | Completed every profile, persistence, recovery, UI, keyboard, and scaling exit criterion | [`M2 evidence`](evidence/M2.md); user confirmed native five-control Tab traversal; worktree and evidence links reviewed | No blocker; begin M3 with a red FormationLapCore launch test through ProcessRuntime |
 
 ## Handoff entry template
 

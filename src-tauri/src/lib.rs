@@ -6,7 +6,11 @@ mod core;
 mod profile_library;
 
 pub use commands::get_app_snapshot;
-pub use contracts::{AppSnapshot, ProfileSummary};
+pub use contracts::{
+    AppSnapshot, ApplicationRequirement, CloseSessionSettings, ConsoleVisibility, LaunchRecipe,
+    LaunchSource, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
+    SupportingApplication, VrLaunchMode,
+};
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 use profile_library::ProfileLibrary;
 use tauri::Url;

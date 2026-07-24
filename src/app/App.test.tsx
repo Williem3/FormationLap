@@ -9,6 +9,7 @@ describe("Formation Lap shell", () => {
       applicationName: "Formation Lap",
       foundationStatus: "ready",
       profiles: [],
+      selectedProfile: null,
     });
 
     render(<App bridge={bridge} />);
@@ -32,6 +33,7 @@ describe("Formation Lap shell", () => {
       applicationName: "Formation Lap",
       foundationStatus: "ready",
       profiles: [],
+      selectedProfile: null,
     });
 
     render(<App bridge={bridge} />);

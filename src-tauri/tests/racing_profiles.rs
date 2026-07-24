@@ -1,4 +1,8 @@
-use formation_lap_lib::{AppCommand, CommandOutcome, FormationLapCore, ProfileSummary};
+use formation_lap_lib::{
+    AppCommand, ApplicationRequirement, CloseSessionSettings, CommandOutcome, ConsoleVisibility,
+    FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication, ProfileSummary,
+    RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -267,5 +271,113 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
             },
         ]
+    );
+}
+
+#[test]
+fn complete_racing_profile_configuration_survives_restart() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Le Mans evening".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let configured_profile = RacingProfile {
+        id: profile_id.clone(),
+        name: "Le Mans evening".to_owned(),
+        primary_sim: ProfileApplication {
+            id: "f5a04482-c611-4e27-bb51-f467c307d76e".to_owned(),
+            name: "Le Mans Ultimate".to_owned(),
+            launch_recipe: LaunchRecipe {
+                source: LaunchSource::Steam { app_id: 2399420 },
+                arguments: vec!["-vr".to_owned()],
+                working_directory: None,
+                monitored_process: Some("LeMansUltimate.exe".to_owned()),
+                console_visibility: ConsoleVisibility::Hidden,
+                elevated: false,
+                startup_timeout_seconds: 45,
+                post_start_delay_milliseconds: 1_500,
+                shutdown_strategy: ShutdownStrategy::CloseWindows,
+            },
+            path_needs_repair: false,
+        },
+        supporting_applications: vec![
+            SupportingApplication {
+                application: ProfileApplication {
+                    id: "58968768-8710-4365-9839-9fc8dd4efad4".to_owned(),
+                    name: "SimHub".to_owned(),
+                    launch_recipe: LaunchRecipe {
+                        source: LaunchSource::DirectExecutable {
+                            executable_path: r"C:\Program Files\SimHub\SimHubWPF.exe".to_owned(),
+                        },
+                        arguments: vec!["-silent".to_owned()],
+                        working_directory: Some(r"C:\Program Files\SimHub".to_owned()),
+                        monitored_process: None,
+                        console_visibility: ConsoleVisibility::Hidden,
+                        elevated: false,
+                        startup_timeout_seconds: 30,
+                        post_start_delay_milliseconds: 500,
+                        shutdown_strategy: ShutdownStrategy::CloseWindows,
+                    },
+                    path_needs_repair: true,
+                },
+                requirement: ApplicationRequirement::Required,
+                keep_running: false,
+            },
+            SupportingApplication {
+                application: ProfileApplication {
+                    id: "209c8528-af6b-4c11-a186-de164032001f".to_owned(),
+                    name: "Garage 61".to_owned(),
+                    launch_recipe: LaunchRecipe {
+                        source: LaunchSource::DirectExecutable {
+                            executable_path: r"C:\Garage61\Garage61.Agent.exe".to_owned(),
+                        },
+                        arguments: Vec::new(),
+                        working_directory: None,
+                        monitored_process: None,
+                        console_visibility: ConsoleVisibility::Visible,
+                        elevated: true,
+                        startup_timeout_seconds: 30,
+                        post_start_delay_milliseconds: 0,
+                        shutdown_strategy: ShutdownStrategy::ConsoleInterrupt,
+                    },
+                    path_needs_repair: true,
+                },
+                requirement: ApplicationRequirement::Optional,
+                keep_running: true,
+            },
+        ],
+        vr_enabled: true,
+        preferred_vr_launch_mode: Some(VrLaunchMode::OpenXr),
+        close_session: CloseSessionSettings {
+            stop_steam_vr: true,
+        },
+    };
+
+    let outcome = core
+        .execute(AppCommand::SaveProfile {
+            profile: Box::new(configured_profile.clone()),
+        })
+        .expect("a complete Racing Profile should be saved");
+    assert_eq!(
+        outcome,
+        CommandOutcome::ProfileUpdated {
+            profile_id: profile_id.clone()
+        }
+    );
+
+    drop(core);
+    let reopened =
+        FormationLapCore::open(storage.path()).expect("configured profile storage should reopen");
+    assert_eq!(
+        reopened.snapshot().selected_profile,
+        Some(configured_profile)
     );
 }

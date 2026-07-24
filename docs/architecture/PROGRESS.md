@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Persist the complete M2 Racing Profile behavior contract |
+| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Persist the selected Racing Profile in versioned settings |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,7 +34,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 remains in progress after the core CRUD slices:
+M2 remains in progress after the complete profile-contract slice:
 
 - Delivered: `CreateProfile` assigns a stable identifier, atomically persists
   one versioned Racing Profile with exactly one Primary Sim; blank or
@@ -42,14 +42,14 @@ M2 remains in progress after the core CRUD slices:
   state or storage changes and when persisted documents are opened. Existing
   profiles can be edited while retaining their identifier and prior backup, or
   duplicated under a new stable identifier, or deleted while retaining a
-  recoverable backup.
-- Next behavior: persist and expose the M2 Racing Profile behavior contract:
-  ordered Supporting Applications, source choice, Required/Optional and
-  keep-running settings, remembered VR defaults, and Close Session settings.
+  recoverable backup. Complete profile behavior settings persist and are
+  exposed in authoritative snapshots and generated TypeScript contracts.
+- Next behavior: select a Racing Profile through FormationLapCore and preserve
+  that selection in a versioned `settings.json` document across restart.
 - Test seam: FormationLapCore with a real temporary storage directory.
 - Next file scope: `src-tauri/src/core.rs`,
   `src-tauri/src/contracts.rs`,
-  `src-tauri/src/profile_library.rs`,
+  `src-tauri/src/settings.rs`,
   `src-tauri/tests/racing_profiles.rs`,
   `src-tauri/src/bin/generate-bindings.rs`, `src/generated/bindings.ts`,
   `docs/architecture/evidence/M2.md`, and this ledger.

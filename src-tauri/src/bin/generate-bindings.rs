@@ -1,4 +1,8 @@
-use formation_lap_lib::{AppSnapshot, ProfileSummary};
+use formation_lap_lib::{
+    AppSnapshot, ApplicationRequirement, CloseSessionSettings, ConsoleVisibility, LaunchRecipe,
+    LaunchSource, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
+    SupportingApplication, VrLaunchMode,
+};
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -17,10 +21,40 @@ export {}
 
 export {}
 
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
+export {}
+
 export function getAppSnapshot(): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("get_app_snapshot");
 }}
 "#,
+        ApplicationRequirement::decl(&config),
+        ConsoleVisibility::decl(&config),
+        LaunchSource::decl(&config),
+        ShutdownStrategy::decl(&config),
+        LaunchRecipe::decl(&config),
+        ProfileApplication::decl(&config),
+        SupportingApplication::decl(&config),
+        VrLaunchMode::decl(&config),
+        CloseSessionSettings::decl(&config),
+        RacingProfile::decl(&config),
         ProfileSummary::decl(&config),
         AppSnapshot::decl(&config)
     )

@@ -1,4 +1,4 @@
-use crate::{AppSnapshot, ProfileLibrary};
+use crate::{AppSnapshot, ProfileLibrary, RacingProfile};
 use std::{error::Error, fmt, io};
 
 /// User intent accepted by FormationLapCore.
@@ -19,6 +19,9 @@ pub enum AppCommand {
     DuplicateProfile {
         source_profile_id: String,
         name: String,
+    },
+    SaveProfile {
+        profile: Box<RacingProfile>,
     },
 }
 
@@ -101,6 +104,7 @@ impl FormationLapCore {
     pub fn snapshot(&self) -> AppSnapshot {
         let mut snapshot = AppSnapshot::foundation();
         snapshot.profiles = self.profile_library.summaries();
+        snapshot.selected_profile = self.profile_library.selected_profile();
         snapshot
     }
 
@@ -132,6 +136,11 @@ impl FormationLapCore {
             } => {
                 let profile_id = self.profile_library.duplicate(&source_profile_id, name)?;
                 Ok(CommandOutcome::ProfileCreated { profile_id })
+            }
+            AppCommand::SaveProfile { profile } => {
+                let profile_id = profile.id.clone();
+                self.profile_library.save(*profile)?;
+                Ok(CommandOutcome::ProfileUpdated { profile_id })
             }
         }
     }

@@ -10,7 +10,8 @@ use std::{
 };
 use uuid::Uuid;
 
-const PROFILE_SCHEMA_VERSION: u32 = 1;
+const PROFILE_SCHEMA_VERSION: u32 = 2;
+const LEGACY_PROFILE_SCHEMA_VERSION: u32 = 1;
 
 fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
     if name.trim().is_empty() {
@@ -90,11 +91,18 @@ impl ProfileLibrary {
                 continue;
             }
 
-            let document: RacingProfileDocument = serde_json::from_slice(&fs::read(&path)?)?;
-            if document.schema_version != PROFILE_SCHEMA_VERSION {
+            let mut document: RacingProfileDocument = serde_json::from_slice(&fs::read(&path)?)?;
+            if !matches!(
+                document.schema_version,
+                LEGACY_PROFILE_SCHEMA_VERSION | PROFILE_SCHEMA_VERSION
+            ) {
                 return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
             }
             validate_profile_names(&document.name, &document.primary_sim.name)?;
+            if document.schema_version == LEGACY_PROFILE_SCHEMA_VERSION {
+                document.schema_version = PROFILE_SCHEMA_VERSION;
+                Self::persist_migration(&path, &backups_directory, &document)?;
+            }
             profiles.push(document);
         }
 
@@ -137,13 +145,49 @@ impl ProfileLibrary {
                 continue;
             }
             let document: RacingProfileDocument = serde_json::from_slice(&fs::read(&backup)?)?;
-            if document.schema_version != PROFILE_SCHEMA_VERSION {
+            if !matches!(
+                document.schema_version,
+                LEGACY_PROFILE_SCHEMA_VERSION | PROFILE_SCHEMA_VERSION
+            ) {
                 return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
             }
             validate_profile_names(&document.name, &document.primary_sim.name)?;
 
             fs::remove_file(temporary)?;
             fs::rename(backup, destination)?;
+        }
+
+        Ok(())
+    }
+
+    fn persist_migration(
+        destination: &Path,
+        backups_directory: &Path,
+        document: &RacingProfileDocument,
+    ) -> Result<(), CoreError> {
+        let profile_id = &document.id;
+        let temporary = destination
+            .parent()
+            .ok_or_else(|| std::io::Error::other("profile path has no parent"))?
+            .join(format!(".{profile_id}.json.tmp"));
+        let backup = backups_directory.join(format!("{profile_id}.json"));
+        let mut serialized = serde_json::to_vec_pretty(document)?;
+        serialized.push(b'\n');
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&serialized)?;
+        file.sync_all()?;
+        drop(file);
+
+        if backup.exists() {
+            fs::remove_file(&backup)?;
+        }
+        fs::rename(destination, &backup)?;
+        if let Err(error) = fs::rename(&temporary, destination) {
+            let _ = fs::rename(&backup, destination);
+            return Err(error.into());
         }
 
         Ok(())

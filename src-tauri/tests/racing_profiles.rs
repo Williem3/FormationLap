@@ -481,3 +481,51 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
         }]
     );
 }
+
+#[test]
+fn schema_one_profile_is_migrated_without_losing_identity() {
+    let storage = TempStorage::new();
+    let profiles = storage.path().join("profiles");
+    fs::create_dir_all(&profiles).expect("profile directory should be created");
+    let profile_id = "1ea99c98-51b0-4cb8-89ea-04440c26e6d7";
+    let profile_path = profiles.join(format!("{profile_id}.json"));
+    fs::write(
+        &profile_path,
+        format!(
+            r#"{{
+  "schemaVersion": 1,
+  "id": "{profile_id}",
+  "name": "Le Mans evening",
+  "primarySim": {{
+    "name": "Le Mans Ultimate"
+  }}
+}}"#
+        ),
+    )
+    .expect("schema-one profile fixture should be written");
+
+    let core =
+        FormationLapCore::open(storage.path()).expect("schema-one profile should be migrated");
+    let migrated = core
+        .snapshot()
+        .selected_profile
+        .expect("migrated profile should remain selected");
+    assert_eq!(migrated.id, profile_id);
+    assert_eq!(migrated.name, "Le Mans evening");
+    assert_eq!(migrated.primary_sim.name, "Le Mans Ultimate");
+    assert!(migrated.primary_sim.path_needs_repair);
+
+    let persisted: serde_json::Value = serde_json::from_slice(
+        &fs::read(&profile_path).expect("migrated profile document should remain readable"),
+    )
+    .expect("migrated profile document should remain valid JSON");
+    assert_eq!(persisted["schemaVersion"], 2);
+    assert!(
+        storage
+            .path()
+            .join("backups")
+            .join(format!("{profile_id}.json"))
+            .is_file(),
+        "migration should retain the prior schema-one document"
+    );
+}

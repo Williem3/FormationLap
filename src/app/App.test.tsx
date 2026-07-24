@@ -9,6 +9,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
     });
@@ -33,6 +34,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
     });
@@ -49,6 +51,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
     });
@@ -109,6 +112,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [
         {
           id: profile.id,
@@ -146,6 +150,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [
         {
           id: "profile-1",
@@ -205,6 +210,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [
         {
           id: "profile-1",
@@ -269,6 +275,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [
         {
           id: "profile-1",
@@ -332,6 +339,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      applicationProcesses: [],
       profiles: [
         {
           id: "profile-1",

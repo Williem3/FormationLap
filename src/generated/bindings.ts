@@ -23,7 +23,15 @@ export type RacingProfile = { id: string, name: string, primarySim: ProfileAppli
 
 export type ProfileSummary = { id: string, name: string, primarySimName: string, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, };
+export type ProcessIdentity = { pid: number, creationTime: string, canonicalExecutablePath: string, };
+
+export type ProcessOwnership = "sessionOwned" | "preExisting";
+
+export type ProcessStatus = "starting" | "running" | "runningPreExisting" | "notResponding" | "stopping" | "stopped" | "failed";
+
+export type ApplicationProcessSnapshot = { applicationId: string, status: ProcessStatus, ownership: ProcessOwnership | null, identity: ProcessIdentity | null, };
+
+export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, };
 
 export type CommandError = { code: string, message: string, recovery: string | null, diagnosticId: string | null, };
 

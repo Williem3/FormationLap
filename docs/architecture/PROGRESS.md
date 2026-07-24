@@ -23,7 +23,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
-| M3 | `not_started` | — | — | — | — | Wait for M2 |
+| M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Establish direct-launch lifecycle through ProcessRuntime |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
@@ -34,17 +34,20 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 is complete and no implementation slice is active between milestones:
+M3 is in progress with its Windows direct-launch slice:
 
-- Evidence: [`M2 evidence`](evidence/M2.md), including 24 Rust tests, ten React
-  tests, generated contracts, backup and migration results, exported fixture,
-  wizard/editor screenshots, confirmed keyboard traversal, and effective
-  125–200% scaling checks.
-- Next ready milestone: M3 — Local application lifecycle.
-- Next action: read the M3 process-ownership decision, mark M3 `in_progress`,
-  and write the first failing FormationLapCore test through ProcessRuntime.
-- Next file scope: M3 tests and core/runtime contracts,
+- Delivered: the core lifecycle tracer records Session-owned stable identity,
+  detects a matching Pre-existing Process, and suppresses duplicate launch
+  through ProcessRuntime.
+- Behavior: the Windows adapter must launch one real fixture with structured
+  arguments and working directory, then return an identity verified by PID,
+  creation time, and canonical executable path.
+- Test seam: ProcessRuntime integration test with a purpose-built local fixture;
+  no shell command construction.
+- File scope: `src-tauri/src/process_runtime.rs`, fixture binaries,
+  `src-tauri/tests/process_runtime_windows.rs`, Cargo configuration,
   `docs/architecture/evidence/M3.md`, and this ledger.
+- Next action: write the failing real-fixture launch/identity test.
 
 Known environment facts:
 

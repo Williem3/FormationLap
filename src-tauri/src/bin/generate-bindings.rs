@@ -1,7 +1,8 @@
 use formation_lap_lib::{
-    AppSnapshot, ApplicationRequirement, CloseSessionSettings, CommandError, ConsoleVisibility,
-    CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload, LaunchRecipe,
-    LaunchSource, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
+    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CloseSessionSettings,
+    CommandError, ConsoleVisibility, CreateProfilePayload, DuplicateProfilePayload,
+    ImportProfilePayload, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOwnership,
+    ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
     SaveProfilePayload, ShutdownStrategy, SupportingApplication, VrLaunchMode,
 };
 use std::{
@@ -25,6 +26,10 @@ fn render_bindings() -> String {
         CloseSessionSettings::decl(&config),
         RacingProfile::decl(&config),
         ProfileSummary::decl(&config),
+        ProcessIdentity::decl(&config),
+        ProcessOwnership::decl(&config),
+        ProcessStatus::decl(&config),
+        ApplicationProcessSnapshot::decl(&config),
         AppSnapshot::decl(&config),
         CommandError::decl(&config),
         CreateProfilePayload::decl(&config),

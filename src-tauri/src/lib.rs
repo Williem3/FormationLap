@@ -4,6 +4,7 @@ mod atomic_file;
 mod commands;
 mod contracts;
 mod core;
+mod process_runtime;
 mod profile_library;
 mod settings;
 
@@ -14,11 +15,13 @@ pub use commands::{
     select_profile,
 };
 pub use contracts::{
-    AppSnapshot, ApplicationRequirement, CloseSessionSettings, ConsoleVisibility, LaunchRecipe,
-    LaunchSource, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
+    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CloseSessionSettings,
+    ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOwnership,
+    ProcessStatus, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
     SupportingApplication, VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
+pub use process_runtime::{ProcessRuntime, ProcessRuntimeError, WindowsProcessRuntime};
 use profile_library::ProfileLibrary;
 use settings::SettingsStore;
 use tauri::Manager;

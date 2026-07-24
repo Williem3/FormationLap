@@ -72,6 +72,16 @@ impl From<CoreError> for CommandError {
                 error.to_string(),
                 Some("Refresh the profile list and try again."),
             ),
+            CoreError::ApplicationNotFound(_) => (
+                "application_not_found",
+                error.to_string(),
+                Some("Refresh the Racing Profile and try again."),
+            ),
+            CoreError::ProcessRuntime(_) => (
+                "process_runtime_failed",
+                error.to_string(),
+                Some("Check the application path and try again."),
+            ),
             CoreError::Storage(_) => (
                 "storage_failed",
                 "Formation Lap could not update local profile storage.".to_owned(),

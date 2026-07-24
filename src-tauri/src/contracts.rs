@@ -161,6 +161,52 @@ pub struct ProfileSummary {
     pub primary_sim_name: String,
 }
 
+/// Stable identity for one observed Windows process.
+///
+/// Creation time is an opaque decimal 100-nanosecond Windows timestamp.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProcessIdentity {
+    pub pid: u32,
+    pub creation_time: String,
+    pub canonical_executable_path: String,
+}
+
+/// Whether Formation Lap started a Process or merely observed it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ProcessOwnership {
+    SessionOwned,
+    PreExisting,
+}
+
+/// User-visible lifecycle state for a configured application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ProcessStatus {
+    Starting,
+    Running,
+    RunningPreExisting,
+    NotResponding,
+    Stopping,
+    Stopped,
+    Failed,
+}
+
+/// Authoritative lifecycle state for one configured application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ApplicationProcessSnapshot {
+    pub application_id: String,
+    pub status: ProcessStatus,
+    pub ownership: Option<ProcessOwnership>,
+    pub identity: Option<ProcessIdentity>,
+}
+
 /// Authoritative native state rendered by React.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -170,6 +216,7 @@ pub struct AppSnapshot {
     pub foundation_status: String,
     pub profiles: Vec<ProfileSummary>,
     pub selected_profile: Option<RacingProfile>,
+    pub application_processes: Vec<ApplicationProcessSnapshot>,
 }
 
 impl AppSnapshot {
@@ -179,6 +226,7 @@ impl AppSnapshot {
             foundation_status: "ready".to_owned(),
             profiles: Vec::new(),
             selected_profile: None,
+            application_processes: Vec::new(),
         }
     }
 }

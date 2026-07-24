@@ -811,7 +811,10 @@ mod windows_icon {
 
 #[cfg(windows)]
 mod windows_icon {
-    use std::{ffi::OsStr, mem::size_of, os::windows::ffi::OsStrExt, path::Path, ptr::null_mut};
+    use std::{
+        ffi::OsStr, mem::size_of, os::windows::ffi::OsStrExt, path::Path, ptr::null_mut,
+        sync::Mutex,
+    };
     use windows_sys::Win32::{
         Graphics::Gdi::{
             BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS,
@@ -826,6 +829,7 @@ mod windows_icon {
     struct OwnedIcon(HICON);
     struct OwnedBitmap(HBITMAP);
     struct OwnedDeviceContext(HDC);
+    static SHELL_ICON_EXTRACTION: Mutex<()> = Mutex::new(());
 
     impl Drop for OwnedIcon {
         fn drop(&mut self) {
@@ -860,6 +864,7 @@ mod windows_icon {
     }
 
     pub(super) fn extract(executable_path: &Path) -> Option<Vec<u8>> {
+        let _guard = SHELL_ICON_EXTRACTION.lock().ok()?;
         let path = wide_null(executable_path.as_os_str());
         let mut shell_info = SHFILEINFOW::default();
         let shell_info_size = u32::try_from(size_of::<SHFILEINFOW>()).ok()?;

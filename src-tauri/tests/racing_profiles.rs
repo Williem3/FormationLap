@@ -514,6 +514,52 @@ fn selected_racing_profile_survives_core_restart() {
 }
 
 #[test]
+fn interrupted_settings_replacement_recovers_the_last_profile_selection() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    core.execute(AppCommand::CreateProfile {
+        name: "First".to_owned(),
+        primary_sim_name: "Assetto Corsa".to_owned(),
+    })
+    .expect("the first Racing Profile should be created");
+    let selected_profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Selected".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("the selected Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    core.execute(AppCommand::SelectProfile {
+        profile_id: selected_profile_id.clone(),
+    })
+    .expect("the second Racing Profile should be selected");
+    drop(core);
+
+    let settings = storage.path().join("settings.json");
+    let backup = storage.path().join("backups").join("settings.json");
+    fs::rename(&settings, &backup)
+        .expect("fixture should simulate moving the last valid settings to backup");
+    fs::write(storage.path().join("settings.json.tmp"), b"{ interrupted")
+        .expect("fixture should leave an incomplete settings replacement");
+
+    let recovered =
+        FormationLapCore::open(storage.path()).expect("the last valid settings should recover");
+
+    assert_eq!(
+        recovered
+            .snapshot()
+            .selected_profile
+            .expect("the selected Racing Profile should recover")
+            .id,
+        selected_profile_id
+    );
+}
+
+#[test]
 fn interrupted_profile_replacement_recovers_the_last_valid_document() {
     let storage = TempStorage::new();
     let mut core =

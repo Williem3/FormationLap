@@ -1,5 +1,6 @@
 //! Formation Lap's narrow native host interface.
 
+mod atomic_file;
 mod commands;
 mod contracts;
 mod core;

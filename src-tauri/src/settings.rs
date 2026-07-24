@@ -1,4 +1,4 @@
-use crate::CoreError;
+use crate::{CoreError, atomic_file::replace_with_backup};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
@@ -28,6 +28,24 @@ impl SettingsStore {
         fs::create_dir_all(&backups_directory)?;
         let settings_path = storage_root.join("settings.json");
         let backup_path = backups_directory.join("settings.json");
+        let temporary_path = settings_path.with_extension("json.tmp");
+        if temporary_path.exists() {
+            if settings_path.exists() {
+                fs::remove_file(&temporary_path)?;
+            } else if backup_path.exists() {
+                let recovered: SettingsDocument = serde_json::from_slice(&fs::read(&backup_path)?)
+                    .map_err(CoreError::InvalidSettingsDocument)?;
+                if recovered.schema_version != SETTINGS_SCHEMA_VERSION {
+                    return Err(CoreError::UnsupportedSettingsSchema(
+                        recovered.schema_version,
+                    ));
+                }
+                fs::remove_file(&temporary_path)?;
+                fs::rename(&backup_path, &settings_path)?;
+            } else {
+                fs::remove_file(&temporary_path)?;
+            }
+        }
         let document = if settings_path.exists() {
             let document: SettingsDocument = serde_json::from_slice(&fs::read(&settings_path)?)
                 .map_err(CoreError::InvalidSettingsDocument)?;
@@ -73,16 +91,9 @@ impl SettingsStore {
         drop(file);
 
         if self.settings_path.exists() {
-            if self.backup_path.exists() {
-                fs::remove_file(&self.backup_path)?;
-            }
-            fs::rename(&self.settings_path, &self.backup_path)?;
-        }
-        if let Err(error) = fs::rename(&temporary, &self.settings_path) {
-            if self.backup_path.exists() {
-                let _ = fs::rename(&self.backup_path, &self.settings_path);
-            }
-            return Err(error.into());
+            replace_with_backup(&self.settings_path, &temporary, &self.backup_path)?;
+        } else {
+            fs::rename(&temporary, &self.settings_path)?;
         }
 
         self.document = document;

@@ -62,7 +62,9 @@ M2 remains in progress after the profile-management slice:
   profile edits and migrations use Windows atomic replacement while retaining
   the previous document as the bounded backup. FormationLapCore also retains
   native-owned application identities and recomputes missing-path diagnostics
-  instead of trusting those frontend fields.
+  instead of trusting those frontend fields. Profile selection settings use
+  the same atomic replacement and recover their last valid backup when a
+  legacy interrupted write leaves a temporary marker.
 - Next behavior: audit every M2 exit criterion, close any evidence gap, and
   capture the wizard and editor screenshots plus keyboard/scaling results.
 - Test seams: FormationLapCore, Tauri commands and generated contracts, and

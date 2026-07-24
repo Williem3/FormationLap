@@ -1,8 +1,9 @@
 use crate::{
-    AppSnapshot, ApplicationProcessSnapshot, ProcessOwnership, ProcessRuntime, ProcessRuntimeError,
-    ProcessStatus, ProfileLibrary, RacingProfile, SettingsStore, WindowsProcessRuntime,
+    AppSnapshot, ApplicationProcessSnapshot, ProcessObservation, ProcessOwnership,
+    ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
+    RacingProfile, SettingsStore, WindowsProcessRuntime,
 };
-use std::{collections::BTreeMap, error::Error, fmt, io};
+use std::{collections::BTreeMap, error::Error, fmt, io, time::Duration};
 
 /// User intent accepted by FormationLapCore.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,6 +40,21 @@ pub enum AppCommand {
         profile_id: String,
         application_id: String,
     },
+    ExitApplication {
+        application_id: String,
+        pre_existing_confirmed: bool,
+    },
+    ForceStopApplication {
+        application_id: String,
+        pre_existing_confirmed: bool,
+        force_confirmed: bool,
+    },
+    RestartApplication {
+        profile_id: String,
+        application_id: String,
+        pre_existing_confirmed: bool,
+    },
+    RefreshProcesses,
 }
 
 /// Observable result of a completed FormationLapCore command.
@@ -51,6 +67,11 @@ pub enum CommandOutcome {
     ProfileExported { document: String },
     ApplicationStartRequested { application_id: String },
     ApplicationAlreadyRunning { application_id: String },
+    ApplicationStopped { application_id: String },
+    ApplicationRestarted { application_id: String },
+    PreExistingControlConfirmationRequired { application_id: String },
+    ForceStopConfirmationRequired { application_id: String },
+    ProcessesRefreshed,
 }
 
 #[derive(Debug)]
@@ -142,6 +163,9 @@ pub struct FormationLapCore {
     settings_store: SettingsStore,
     process_runtime: Box<dyn ProcessRuntime>,
     application_processes: BTreeMap<String, ApplicationProcessSnapshot>,
+    failed_responsiveness_checks: BTreeMap<String, u8>,
+    application_recipes: BTreeMap<String, crate::LaunchRecipe>,
+    pending_restarts: BTreeMap<String, crate::LaunchRecipe>,
 }
 
 impl FormationLapCore {
@@ -159,6 +183,9 @@ impl FormationLapCore {
             settings_store: SettingsStore::open(storage_root)?,
             process_runtime: Box::new(process_runtime),
             application_processes: BTreeMap::new(),
+            failed_responsiveness_checks: BTreeMap::new(),
+            application_recipes: BTreeMap::new(),
+            pending_restarts: BTreeMap::new(),
         })
     }
 
@@ -241,42 +268,278 @@ impl FormationLapCore {
                         .find(|application| application.id == application_id)
                 }
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                let matches = self
+                let launch_recipe = application.launch_recipe.clone();
+                let ownership = self.launch_or_adopt(&application_id, launch_recipe)?;
+                Ok(if ownership == ProcessOwnership::PreExisting {
+                    CommandOutcome::ApplicationAlreadyRunning { application_id }
+                } else {
+                    CommandOutcome::ApplicationStartRequested { application_id }
+                })
+            }
+            AppCommand::ExitApplication {
+                application_id,
+                pre_existing_confirmed,
+            } => {
+                let process = self
+                    .application_processes
+                    .get(&application_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                if process.ownership == Some(ProcessOwnership::PreExisting)
+                    && !pre_existing_confirmed
+                {
+                    return Ok(CommandOutcome::PreExistingControlConfirmationRequired {
+                        application_id,
+                    });
+                }
+                let Some(identity) = process.identity else {
+                    return Ok(CommandOutcome::ApplicationStopped { application_id });
+                };
+                let strategy = self
+                    .application_recipes
+                    .get(&application_id)
+                    .map(|recipe| &recipe.shutdown_strategy)
+                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                let graceful = self
                     .process_runtime
-                    .matching_processes(&application.launch_recipe)?;
+                    .request_graceful_stop(&identity, strategy)?;
+                self.application_processes
+                    .get_mut(&application_id)
+                    .expect("application Process should remain present")
+                    .status = ProcessStatus::Stopping;
 
-                let (status, ownership, identity, outcome) =
-                    if let Some(identity) = matches.into_iter().next() {
-                        (
-                            ProcessStatus::RunningPreExisting,
-                            ProcessOwnership::PreExisting,
-                            identity,
-                            CommandOutcome::ApplicationAlreadyRunning {
-                                application_id: application_id.clone(),
-                            },
-                        )
+                if graceful == crate::GracefulStopResult::Requested
+                    && self
+                        .process_runtime
+                        .wait_for_exit(&identity, Duration::from_secs(5))?
+                {
+                    let process = self
+                        .application_processes
+                        .get_mut(&application_id)
+                        .expect("application Process should remain present");
+                    process.status = ProcessStatus::Stopped;
+                    process.ownership = None;
+                    process.identity = None;
+                    self.failed_responsiveness_checks.remove(&application_id);
+                    Ok(CommandOutcome::ApplicationStopped { application_id })
+                } else {
+                    Ok(CommandOutcome::ForceStopConfirmationRequired { application_id })
+                }
+            }
+            AppCommand::ForceStopApplication {
+                application_id,
+                pre_existing_confirmed,
+                force_confirmed,
+            } => {
+                if !force_confirmed {
+                    return Ok(CommandOutcome::ForceStopConfirmationRequired { application_id });
+                }
+                let process = self
+                    .application_processes
+                    .get(&application_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                if process.ownership == Some(ProcessOwnership::PreExisting)
+                    && !pre_existing_confirmed
+                {
+                    return Ok(CommandOutcome::PreExistingControlConfirmationRequired {
+                        application_id,
+                    });
+                }
+                let Some(identity) = process.identity else {
+                    return Ok(CommandOutcome::ApplicationStopped { application_id });
+                };
+                self.process_runtime.force_stop(&identity)?;
+                let process = self
+                    .application_processes
+                    .get_mut(&application_id)
+                    .expect("application Process should remain present");
+                process.status = ProcessStatus::Stopped;
+                process.ownership = None;
+                process.identity = None;
+                self.failed_responsiveness_checks.remove(&application_id);
+                if let Some(recipe) = self.pending_restarts.remove(&application_id) {
+                    let ownership = self.launch_or_adopt(&application_id, recipe)?;
+                    Ok(if ownership == ProcessOwnership::PreExisting {
+                        CommandOutcome::ApplicationAlreadyRunning { application_id }
                     } else {
-                        (
-                            ProcessStatus::Starting,
-                            ProcessOwnership::SessionOwned,
-                            self.process_runtime.launch(&application.launch_recipe)?,
-                            CommandOutcome::ApplicationStartRequested {
-                                application_id: application_id.clone(),
-                            },
-                        )
-                    };
-                self.application_processes.insert(
-                    application_id.clone(),
-                    ApplicationProcessSnapshot {
-                        application_id: application_id.clone(),
-                        status,
-                        ownership: Some(ownership),
-                        identity: Some(identity),
-                    },
-                );
+                        CommandOutcome::ApplicationRestarted { application_id }
+                    })
+                } else {
+                    Ok(CommandOutcome::ApplicationStopped { application_id })
+                }
+            }
+            AppCommand::RestartApplication {
+                profile_id,
+                application_id,
+                pre_existing_confirmed,
+            } => {
+                let profile = self
+                    .profile_library
+                    .profile(&profile_id)
+                    .ok_or_else(|| CoreError::ProfileNotFound(profile_id.clone()))?;
+                let application = if profile.primary_sim.id == application_id {
+                    Some(&profile.primary_sim)
+                } else {
+                    profile
+                        .supporting_applications
+                        .iter()
+                        .map(|supporting| &supporting.application)
+                        .find(|application| application.id == application_id)
+                }
+                .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                let recipe = application.launch_recipe.clone();
+                let process = self
+                    .application_processes
+                    .get(&application_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                if process.ownership == Some(ProcessOwnership::PreExisting)
+                    && !pre_existing_confirmed
+                {
+                    return Ok(CommandOutcome::PreExistingControlConfirmationRequired {
+                        application_id,
+                    });
+                }
+                let Some(identity) = process.identity else {
+                    let ownership = self.launch_or_adopt(&application_id, recipe)?;
+                    return Ok(if ownership == ProcessOwnership::PreExisting {
+                        CommandOutcome::ApplicationAlreadyRunning { application_id }
+                    } else {
+                        CommandOutcome::ApplicationRestarted { application_id }
+                    });
+                };
+                let graceful = self
+                    .process_runtime
+                    .request_graceful_stop(&identity, &recipe.shutdown_strategy)?;
+                self.application_processes
+                    .get_mut(&application_id)
+                    .expect("application Process should remain present")
+                    .status = ProcessStatus::Stopping;
 
-                Ok(outcome)
+                if graceful == crate::GracefulStopResult::Requested
+                    && self
+                        .process_runtime
+                        .wait_for_exit(&identity, Duration::from_secs(5))?
+                {
+                    let ownership = self.launch_or_adopt(&application_id, recipe)?;
+                    Ok(if ownership == ProcessOwnership::PreExisting {
+                        CommandOutcome::ApplicationAlreadyRunning { application_id }
+                    } else {
+                        CommandOutcome::ApplicationRestarted { application_id }
+                    })
+                } else {
+                    self.pending_restarts.insert(application_id.clone(), recipe);
+                    Ok(CommandOutcome::ForceStopConfirmationRequired { application_id })
+                }
+            }
+            AppCommand::RefreshProcesses => {
+                let application_ids = self
+                    .application_processes
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for application_id in application_ids {
+                    let Some((identity, previous_status)) = self
+                        .application_processes
+                        .get(&application_id)
+                        .and_then(|process| {
+                            process
+                                .identity
+                                .clone()
+                                .map(|identity| (identity, process.status.clone()))
+                        })
+                    else {
+                        continue;
+                    };
+                    let observation = self.process_runtime.observe(&identity)?;
+                    let output = self.process_runtime.read_output(&identity)?;
+                    let process = self
+                        .application_processes
+                        .get_mut(&application_id)
+                        .expect("collected application Process should remain present");
+                    process.output = if output.stdout.is_empty()
+                        && output.stderr.is_empty()
+                        && !output.truncated
+                    {
+                        None
+                    } else {
+                        Some(output)
+                    };
+                    match observation {
+                        ProcessObservation::Running { responsiveness } => {
+                            let failed_checks = self
+                                .failed_responsiveness_checks
+                                .entry(application_id.clone())
+                                .or_default();
+                            match responsiveness {
+                                ProcessResponsiveness::NotResponsive => {
+                                    *failed_checks = failed_checks.saturating_add(1);
+                                }
+                                ProcessResponsiveness::NotApplicable
+                                | ProcessResponsiveness::Responsive => {
+                                    *failed_checks = 0;
+                                }
+                            }
+                            process.status = if *failed_checks >= 2 {
+                                ProcessStatus::NotResponding
+                            } else if process.ownership == Some(ProcessOwnership::PreExisting) {
+                                ProcessStatus::RunningPreExisting
+                            } else {
+                                ProcessStatus::Running
+                            };
+                        }
+                        ProcessObservation::Exited | ProcessObservation::Replaced { .. } => {
+                            process.status = if previous_status == ProcessStatus::Starting {
+                                ProcessStatus::Failed
+                            } else {
+                                ProcessStatus::Stopped
+                            };
+                            process.ownership = None;
+                            process.identity = None;
+                            self.failed_responsiveness_checks.remove(&application_id);
+                        }
+                    }
+                }
+                Ok(CommandOutcome::ProcessesRefreshed)
             }
         }
+    }
+
+    fn launch_or_adopt(
+        &mut self,
+        application_id: &str,
+        launch_recipe: crate::LaunchRecipe,
+    ) -> Result<ProcessOwnership, CoreError> {
+        let matches = self.process_runtime.matching_processes(&launch_recipe)?;
+        let (status, ownership, identity) = if let Some(identity) = matches.into_iter().next() {
+            (
+                ProcessStatus::RunningPreExisting,
+                ProcessOwnership::PreExisting,
+                identity,
+            )
+        } else {
+            (
+                ProcessStatus::Starting,
+                ProcessOwnership::SessionOwned,
+                self.process_runtime.launch(&launch_recipe)?,
+            )
+        };
+        self.application_processes.insert(
+            application_id.to_owned(),
+            ApplicationProcessSnapshot {
+                application_id: application_id.to_owned(),
+                status,
+                ownership: Some(ownership.clone()),
+                identity: Some(identity),
+                output: None,
+            },
+        );
+        self.failed_responsiveness_checks
+            .insert(application_id.to_owned(), 0);
+        self.application_recipes
+            .insert(application_id.to_owned(), launch_recipe);
+
+        Ok(ownership)
     }
 }

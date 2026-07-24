@@ -29,7 +29,9 @@ export type ProcessOwnership = "sessionOwned" | "preExisting";
 
 export type ProcessStatus = "starting" | "running" | "runningPreExisting" | "notResponding" | "stopping" | "stopped" | "failed";
 
-export type ApplicationProcessSnapshot = { applicationId: string, status: ProcessStatus, ownership: ProcessOwnership | null, identity: ProcessIdentity | null, };
+export type ProcessOutput = { stdout: string, stderr: string, truncated: boolean, };
+
+export type ApplicationProcessSnapshot = { applicationId: string, status: ProcessStatus, ownership: ProcessOwnership | null, identity: ProcessIdentity | null, output: ProcessOutput | null, };
 
 export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, };
 
@@ -44,6 +46,14 @@ export type ProfileIdPayload = { profileId: string, };
 export type DuplicateProfilePayload = { sourceProfileId: string, name: string, };
 
 export type ImportProfilePayload = { document: string, };
+
+export type ApplicationTargetPayload = { profileId: string, applicationId: string, };
+
+export type ExitApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, };
+
+export type ForceStopApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, forceConfirmed: boolean, };
+
+export type RestartApplicationPayload = { profileId: string, applicationId: string, preExistingConfirmed: boolean, };
 
 export function getAppSnapshot(): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("get_app_snapshot");
@@ -75,4 +85,24 @@ export function exportProfile(payload: ProfileIdPayload): Promise<string> {
 
 export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("import_profile", { payload });
+}
+
+export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("start_application", { payload });
+}
+
+export function refreshProcesses(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("refresh_processes");
+}
+
+export function exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("exit_application", { payload });
+}
+
+export function forceStopApplication(payload: ForceStopApplicationPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("force_stop_application", { payload });
+}
+
+export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("restart_application", { payload });
 }

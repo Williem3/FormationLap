@@ -9,19 +9,24 @@ mod profile_library;
 mod settings;
 
 pub use commands::{
-    CommandError, CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload,
-    NativeCommandHost, ProfileIdPayload, SaveProfilePayload, create_profile, delete_profile,
-    duplicate_profile, export_profile, get_app_snapshot, import_profile, save_profile,
-    select_profile,
+    ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
+    ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, NativeCommandHost,
+    ProfileIdPayload, RestartApplicationPayload, SaveProfilePayload, create_profile,
+    delete_profile, duplicate_profile, exit_application, export_profile, force_stop_application,
+    get_app_snapshot, import_profile, refresh_processes, restart_application, save_profile,
+    select_profile, start_application,
 };
 pub use contracts::{
     AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CloseSessionSettings,
-    ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOwnership,
-    ProcessStatus, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
-    SupportingApplication, VrLaunchMode,
+    ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput,
+    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileSummary, RacingProfile,
+    ShutdownStrategy, SupportingApplication, VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
-pub use process_runtime::{ProcessRuntime, ProcessRuntimeError, WindowsProcessRuntime};
+pub use process_runtime::{
+    GracefulStopResult, ProcessObservation, ProcessResponsiveness, ProcessRuntime,
+    ProcessRuntimeError, WindowsProcessRuntime,
+};
 use profile_library::ProfileLibrary;
 use settings::SettingsStore;
 use tauri::Manager;
@@ -59,7 +64,12 @@ pub fn run() {
             commands::duplicate_profile,
             commands::delete_profile,
             commands::export_profile,
-            commands::import_profile
+            commands::import_profile,
+            commands::start_application,
+            commands::refresh_processes,
+            commands::exit_application,
+            commands::force_stop_application,
+            commands::restart_application
         ])
         .run(tauri::generate_context!())
         .expect("Formation Lap failed to start");

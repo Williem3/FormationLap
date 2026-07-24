@@ -48,6 +48,44 @@ pub struct ImportProfilePayload {
     pub document: String,
 }
 
+/// Racing Profile and configured application accepted by start commands.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ApplicationTargetPayload {
+    pub profile_id: String,
+    pub application_id: String,
+}
+
+/// Explicit application exit request plus Pre-existing Process confirmation.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ExitApplicationPayload {
+    pub application_id: String,
+    pub pre_existing_confirmed: bool,
+}
+
+/// Explicit force-stop request with both required ownership confirmations.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ForceStopApplicationPayload {
+    pub application_id: String,
+    pub pre_existing_confirmed: bool,
+    pub force_confirmed: bool,
+}
+
+/// Explicit restart request plus Pre-existing Process confirmation.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RestartApplicationPayload {
+    pub profile_id: String,
+    pub application_id: String,
+    pub pre_existing_confirmed: bool,
+}
+
 /// Structured error returned across the Rust/TypeScript seam.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +153,18 @@ impl NativeCommandHost {
     pub fn open(storage_root: impl AsRef<Path>) -> Result<Self, CommandError> {
         Ok(Self {
             core: Mutex::new(FormationLapCore::open(storage_root).map_err(CommandError::from)?),
+        })
+    }
+
+    pub fn open_with_runtime(
+        storage_root: impl AsRef<Path>,
+        process_runtime: impl crate::ProcessRuntime + 'static,
+    ) -> Result<Self, CommandError> {
+        Ok(Self {
+            core: Mutex::new(
+                FormationLapCore::open_with_runtime(storage_root, process_runtime)
+                    .map_err(CommandError::from)?,
+            ),
         })
     }
 
@@ -213,6 +263,67 @@ impl NativeCommandHost {
         .map_err(CommandError::from)?;
         Ok(core.snapshot())
     }
+
+    pub fn start_application(
+        &self,
+        payload: ApplicationTargetPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        let mut core = self.core()?;
+        core.execute(AppCommand::StartApplication {
+            profile_id: payload.profile_id,
+            application_id: payload.application_id,
+        })
+        .map_err(CommandError::from)?;
+        Ok(core.snapshot())
+    }
+
+    pub fn refresh_processes(&self) -> Result<AppSnapshot, CommandError> {
+        let mut core = self.core()?;
+        core.execute(AppCommand::RefreshProcesses)
+            .map_err(CommandError::from)?;
+        Ok(core.snapshot())
+    }
+
+    pub fn exit_application(
+        &self,
+        payload: ExitApplicationPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        let mut core = self.core()?;
+        core.execute(AppCommand::ExitApplication {
+            application_id: payload.application_id,
+            pre_existing_confirmed: payload.pre_existing_confirmed,
+        })
+        .map_err(CommandError::from)?;
+        Ok(core.snapshot())
+    }
+
+    pub fn force_stop_application(
+        &self,
+        payload: ForceStopApplicationPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        let mut core = self.core()?;
+        core.execute(AppCommand::ForceStopApplication {
+            application_id: payload.application_id,
+            pre_existing_confirmed: payload.pre_existing_confirmed,
+            force_confirmed: payload.force_confirmed,
+        })
+        .map_err(CommandError::from)?;
+        Ok(core.snapshot())
+    }
+
+    pub fn restart_application(
+        &self,
+        payload: RestartApplicationPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        let mut core = self.core()?;
+        core.execute(AppCommand::RestartApplication {
+            profile_id: payload.profile_id,
+            application_id: payload.application_id,
+            pre_existing_confirmed: payload.pre_existing_confirmed,
+        })
+        .map_err(CommandError::from)?;
+        Ok(core.snapshot())
+    }
 }
 
 #[tauri::command]
@@ -276,4 +387,43 @@ pub fn import_profile(
     payload: ImportProfilePayload,
 ) -> Result<AppSnapshot, CommandError> {
     commands.import_profile(payload)
+}
+
+#[tauri::command]
+pub fn start_application(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ApplicationTargetPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.start_application(payload)
+}
+
+#[tauri::command]
+pub fn refresh_processes(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<AppSnapshot, CommandError> {
+    commands.refresh_processes()
+}
+
+#[tauri::command]
+pub fn exit_application(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ExitApplicationPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.exit_application(payload)
+}
+
+#[tauri::command]
+pub fn force_stop_application(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ForceStopApplicationPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.force_stop_application(payload)
+}
+
+#[tauri::command]
+pub fn restart_application(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: RestartApplicationPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.restart_application(payload)
 }

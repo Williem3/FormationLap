@@ -196,6 +196,16 @@ pub enum ProcessStatus {
     Failed,
 }
 
+/// Bounded stdout and stderr tail captured for one launched Process.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProcessOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub truncated: bool,
+}
+
 /// Authoritative lifecycle state for one configured application.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -205,6 +215,7 @@ pub struct ApplicationProcessSnapshot {
     pub status: ProcessStatus,
     pub ownership: Option<ProcessOwnership>,
     pub identity: Option<ProcessIdentity>,
+    pub output: Option<ProcessOutput>,
 }
 
 /// Authoritative native state rendered by React.

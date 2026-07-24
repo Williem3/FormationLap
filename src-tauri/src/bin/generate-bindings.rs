@@ -1,9 +1,11 @@
 use formation_lap_lib::{
-    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CloseSessionSettings,
-    CommandError, ConsoleVisibility, CreateProfilePayload, DuplicateProfilePayload,
-    ImportProfilePayload, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOwnership,
-    ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
-    SaveProfilePayload, ShutdownStrategy, SupportingApplication, VrLaunchMode,
+    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, ApplicationTargetPayload,
+    CloseSessionSettings, CommandError, ConsoleVisibility, CreateProfilePayload,
+    DuplicateProfilePayload, ExitApplicationPayload, ForceStopApplicationPayload,
+    ImportProfilePayload, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput,
+    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary,
+    RacingProfile, RestartApplicationPayload, SaveProfilePayload, ShutdownStrategy,
+    SupportingApplication, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -29,6 +31,7 @@ fn render_bindings() -> String {
         ProcessIdentity::decl(&config),
         ProcessOwnership::decl(&config),
         ProcessStatus::decl(&config),
+        ProcessOutput::decl(&config),
         ApplicationProcessSnapshot::decl(&config),
         AppSnapshot::decl(&config),
         CommandError::decl(&config),
@@ -37,6 +40,10 @@ fn render_bindings() -> String {
         ProfileIdPayload::decl(&config),
         DuplicateProfilePayload::decl(&config),
         ImportProfilePayload::decl(&config),
+        ApplicationTargetPayload::decl(&config),
+        ExitApplicationPayload::decl(&config),
+        ForceStopApplicationPayload::decl(&config),
+        RestartApplicationPayload::decl(&config),
     ]
     .into_iter()
     .map(|declaration| format!("export {declaration}"))
@@ -79,6 +86,26 @@ export function exportProfile(payload: ProfileIdPayload): Promise<string> {{
 
 export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("import_profile", {{ payload }});
+}}
+
+export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("start_application", {{ payload }});
+}}
+
+export function refreshProcesses(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("refresh_processes");
+}}
+
+export function exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("exit_application", {{ payload }});
+}}
+
+export function forceStopApplication(payload: ForceStopApplicationPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("force_stop_application", {{ payload }});
+}}
+
+export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("restart_application", {{ payload }});
 }}
 "#,
     )

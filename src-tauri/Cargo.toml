@@ -8,9 +8,33 @@ license = "MIT"
 rust-version = "1.97.1"
 default-run = "formation-lap"
 
+[features]
+process-fixtures = []
+
 [lib]
 name = "formation_lap_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "formation-lap-process-fixture"
+path = "tests/fixtures/process_fixture.rs"
+required-features = ["process-fixtures"]
+test = false
+bench = false
+
+[[bin]]
+name = "formation-lap-launcher-fixture"
+path = "tests/fixtures/launcher_fixture.rs"
+required-features = ["process-fixtures"]
+test = false
+bench = false
+
+[[bin]]
+name = "formation-lap-stop-fixture"
+path = "tests/fixtures/stop_fixture.rs"
+required-features = ["process-fixtures"]
+test = false
+bench = false
 
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
@@ -23,4 +47,13 @@ ts-rs = { version = "=12.0.1", features = ["serde-compat"] }
 uuid = { version = "=1.24.0", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Console",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }

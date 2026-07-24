@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 function parseArguments(arguments_) {
   const values = {};
@@ -72,13 +73,19 @@ function cargoPackages(root) {
     }));
 }
 
-function pnpmPackages(root) {
+export function resolvePnpmEntrypoint(
+  environment = process.env,
+  exists = existsSync,
+) {
   const candidates = [
-    process.env.npm_execpath,
-    process.env.PNPM_HOME ? join(process.env.PNPM_HOME, "pnpm.cjs") : null,
-    process.env.APPDATA
+    environment.npm_execpath,
+    environment.PNPM_HOME
+      ? resolve(environment.PNPM_HOME, "..", "pnpm", "bin", "pnpm.cjs")
+      : null,
+    environment.PNPM_HOME ? join(environment.PNPM_HOME, "pnpm.cjs") : null,
+    environment.APPDATA
       ? join(
-          process.env.APPDATA,
+          environment.APPDATA,
           "npm",
           "node_modules",
           "pnpm",
@@ -87,7 +94,11 @@ function pnpmPackages(root) {
         )
       : null,
   ].filter(Boolean);
-  const pnpm = candidates.find((candidate) => existsSync(candidate));
+  return candidates.find((candidate) => exists(candidate));
+}
+
+function pnpmPackages(root) {
+  const pnpm = resolvePnpmEntrypoint();
   if (!pnpm) {
     throw new Error(
       "The pinned pnpm JavaScript entrypoint could not be found.",
@@ -184,13 +195,18 @@ function generate() {
   );
 }
 
-try {
-  generate();
-} catch (error) {
-  console.error(
-    `Dependency license report failed: ${
-      error instanceof Error ? error.message : String(error)
-    }`,
-  );
-  process.exitCode = 1;
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  try {
+    generate();
+  } catch (error) {
+    console.error(
+      `Dependency license report failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    process.exitCode = 1;
+  }
 }

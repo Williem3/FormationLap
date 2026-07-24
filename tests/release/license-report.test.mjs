@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "..", "..");
 const generator = join(
@@ -12,6 +13,27 @@ const generator = join(
   "release",
   "generate-license-report.mjs",
 );
+
+test("resolves the pnpm entrypoint installed by pnpm/action-setup", async () => {
+  const { resolvePnpmEntrypoint } = await import(pathToFileURL(generator).href);
+  const pnpmHome = join(
+    "C:",
+    "Users",
+    "runneradmin",
+    "setup-pnpm",
+    "node_modules",
+    ".bin",
+  );
+  const expected = resolve(pnpmHome, "..", "pnpm", "bin", "pnpm.cjs");
+
+  assert.equal(
+    resolvePnpmEntrypoint(
+      { PNPM_HOME: pnpmHome },
+      (candidate) => candidate === expected,
+    ),
+    expected,
+  );
+});
 
 test("generates a reviewed production dependency inventory and notices", () => {
   const directory = mkdtempSync(join(tmpdir(), "formation-lap-licenses-"));

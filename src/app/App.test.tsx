@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { App } from "./App";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
 import { describe, expect, it } from "vitest";
@@ -198,5 +198,210 @@ describe("Formation Lap shell", () => {
     expect(
       screen.getByRole("button", { name: /Le Mans evening/ }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("duplicates the selected Racing Profile through NativeBridge", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [
+        {
+          id: "profile-1",
+          name: "Endurance",
+          primarySimName: "Le Mans Ultimate",
+        },
+      ],
+      selectedProfile: {
+        id: "profile-1",
+        name: "Endurance",
+        primarySim: {
+          id: "sim-1",
+          name: "Le Mans Ultimate",
+          launchRecipe: {
+            source: { kind: "steam", appId: 2399420 },
+            arguments: [],
+            workingDirectory: null,
+            monitoredProcess: null,
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        supportingApplications: [],
+        vrEnabled: false,
+        preferredVrLaunchMode: null,
+        closeSession: { stopSteamVr: false },
+      },
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Duplicate profile" }),
+    );
+    const name = screen.getByLabelText("Duplicate name");
+    await user.clear(name);
+    await user.type(name, "Endurance test");
+    await user.click(screen.getByRole("button", { name: "Create duplicate" }));
+
+    expect(
+      await screen.findByRole("button", { name: /Endurance test/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Endurance" }),
+    ).toBeVisible();
+  });
+
+  it("requires confirmation before deleting the selected Racing Profile", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [
+        {
+          id: "profile-1",
+          name: "Endurance",
+          primarySimName: "Le Mans Ultimate",
+        },
+      ],
+      selectedProfile: {
+        id: "profile-1",
+        name: "Endurance",
+        primarySim: {
+          id: "sim-1",
+          name: "Le Mans Ultimate",
+          launchRecipe: {
+            source: { kind: "steam", appId: 2399420 },
+            arguments: [],
+            workingDirectory: null,
+            monitoredProcess: null,
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        supportingApplications: [],
+        vrEnabled: false,
+        preferredVrLaunchMode: null,
+        closeSession: { stopSteamVr: false },
+      },
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Delete profile" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Delete Endurance?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Endurance" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Delete Endurance" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Secure foundation ready",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Endurance/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("exports and imports portable Racing Profiles through NativeBridge", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [
+        {
+          id: "profile-1",
+          name: "Endurance",
+          primarySimName: "Le Mans Ultimate",
+        },
+      ],
+      selectedProfile: {
+        id: "profile-1",
+        name: "Endurance",
+        primarySim: {
+          id: "sim-1",
+          name: "Le Mans Ultimate",
+          launchRecipe: {
+            source: { kind: "steam", appId: 2399420 },
+            arguments: [],
+            workingDirectory: null,
+            monitoredProcess: null,
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        supportingApplications: [],
+        vrEnabled: false,
+        preferredVrLaunchMode: null,
+        closeSession: { stopSteamVr: false },
+      },
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Export profile" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Export Endurance" }),
+    ).toBeVisible();
+    expect(
+      (screen.getByLabelText("Portable profile JSON") as HTMLTextAreaElement)
+        .value,
+    ).toContain('"name": "Endurance"');
+    await user.click(screen.getByRole("button", { name: "Close export" }));
+
+    await user.click(screen.getByRole("button", { name: "Import profile" }));
+    fireEvent.change(screen.getByLabelText("Portable profile JSON"), {
+      target: {
+        value: JSON.stringify({
+          schemaVersion: 1,
+          name: "Imported sprint",
+          primarySim: {
+            name: "Automobilista 2",
+            launchRecipe: {
+              source: { kind: "steam", appId: 1066890 },
+              arguments: [],
+              workingDirectory: null,
+              monitoredProcess: null,
+              consoleVisibility: "hidden",
+              elevated: false,
+              startupTimeoutSeconds: 30,
+              postStartDelayMilliseconds: 0,
+              shutdownStrategy: { kind: "closeWindows" },
+            },
+          },
+          supportingApplications: [],
+          vrEnabled: false,
+          preferredVrLaunchMode: null,
+          closeSession: { stopSteamVr: false },
+        }),
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Import Racing Profile" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Imported sprint/ }),
+    ).toBeVisible();
   });
 });

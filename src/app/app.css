@@ -219,6 +219,19 @@ button:disabled {
   cursor: pointer;
 }
 
+.import-profile-button {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.import-profile-button:not(:disabled):hover {
+  color: var(--accent);
+}
+
 .profile-nav {
   display: grid;
   gap: 5px;
@@ -363,6 +376,21 @@ button:disabled {
 
 .secondary-button:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.danger-button {
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.danger-button:disabled {
+  opacity: 0.55;
 }
 
 .foundation-action {
@@ -860,8 +888,59 @@ button:disabled {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  justify-content: flex-end;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  inset: 0;
+  padding: 24px;
+  place-items: center;
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
+}
+
+.profile-dialog {
+  width: min(440px, 100%);
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 20px 56px color-mix(in srgb, var(--ink) 26%, transparent);
+}
+
+.profile-dialog h2 {
+  margin: 7px 0 8px;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.profile-dialog > p:not(.eyebrow) {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.transfer-dialog {
+  width: min(620px, 100%);
+}
+
+.transfer-dialog textarea {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
 }
 
 .profile-editor {

@@ -1,14 +1,39 @@
 import type {
+  ApplicationRequirement,
   AppSnapshot,
+  CloseSessionSettings,
   CreateProfilePayload,
   DuplicateProfilePayload,
   ImportProfilePayload,
+  LaunchRecipe,
   ProfileIdPayload,
   ProfileSummary,
   RacingProfile,
   SaveProfilePayload,
+  VrLaunchMode,
 } from "../generated/bindings";
 import type { NativeBridge } from "./native-bridge";
+
+interface PortableProfileApplication {
+  name: string;
+  launchRecipe: LaunchRecipe;
+}
+
+interface PortableSupportingApplication {
+  application: PortableProfileApplication;
+  requirement: ApplicationRequirement;
+  keepRunning: boolean;
+}
+
+interface PortableRacingProfile {
+  schemaVersion: number;
+  name: string;
+  primarySim: PortableProfileApplication;
+  supportingApplications: PortableSupportingApplication[];
+  vrEnabled: boolean;
+  preferredVrLaunchMode: VrLaunchMode | null;
+  closeSession: CloseSessionSettings;
+}
 
 export class InMemoryNativeBridge implements NativeBridge {
   #nextId = 1;
@@ -136,18 +161,75 @@ export class InMemoryNativeBridge implements NativeBridge {
     if (!profile) {
       return Promise.reject(new Error("Racing Profile was not found"));
     }
-    return Promise.resolve(JSON.stringify(profile));
+    const portable: PortableRacingProfile = {
+      schemaVersion: 1,
+      name: profile.name,
+      primarySim: {
+        name: profile.primarySim.name,
+        launchRecipe: structuredClone(profile.primarySim.launchRecipe),
+      },
+      supportingApplications: profile.supportingApplications.map(
+        ({ application, requirement, keepRunning }) => ({
+          application: {
+            name: application.name,
+            launchRecipe: structuredClone(application.launchRecipe),
+          },
+          requirement,
+          keepRunning,
+        }),
+      ),
+      vrEnabled: profile.vrEnabled,
+      preferredVrLaunchMode: profile.preferredVrLaunchMode,
+      closeSession: structuredClone(profile.closeSession),
+    };
+    return Promise.resolve(JSON.stringify(portable, null, 2));
   }
 
   importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {
-    const portable = JSON.parse(payload.document) as {
-      name: string;
-      primarySim: { name: string };
-    };
-    return this.createProfile({
+    const portable = JSON.parse(payload.document) as PortableRacingProfile;
+    if (portable.schemaVersion !== 1) {
+      return Promise.reject(
+        new Error("Portable profile schema is unsupported"),
+      );
+    }
+    const profile: RacingProfile = {
+      id: this.#id("profile"),
       name: portable.name,
-      primarySimName: portable.primarySim.name,
+      primarySim: {
+        id: this.#id("application"),
+        name: portable.primarySim.name,
+        launchRecipe: structuredClone(portable.primarySim.launchRecipe),
+        pathNeedsRepair:
+          portable.primarySim.launchRecipe.source.kind === "directExecutable",
+      },
+      supportingApplications: portable.supportingApplications.map(
+        ({ application, requirement, keepRunning }) => ({
+          application: {
+            id: this.#id("application"),
+            name: application.name,
+            launchRecipe: structuredClone(application.launchRecipe),
+            pathNeedsRepair:
+              application.launchRecipe.source.kind === "directExecutable",
+          },
+          requirement,
+          keepRunning,
+        }),
+      ),
+      vrEnabled: portable.vrEnabled,
+      preferredVrLaunchMode: portable.preferredVrLaunchMode,
+      closeSession: structuredClone(portable.closeSession),
+    };
+    this.#profilesById.set(profile.id, structuredClone(profile));
+    this.#snapshot.profiles.push({
+      id: profile.id,
+      name: profile.name,
+      primarySimName: profile.primarySim.name,
     });
+    this.#snapshot.profiles.sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+    this.#snapshot.selectedProfile ??= profile;
+    return this.getAppSnapshot();
   }
 
   #id(prefix: string): string {

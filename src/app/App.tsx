@@ -39,6 +39,13 @@ export function App({ bridge }: AppProps) {
     useState<PrimarySimSource>("direct");
   const [sourceValue, setSourceValue] = useState("");
   const [profileDraft, setProfileDraft] = useState<RacingProfile | null>(null);
+  const [duplicateName, setDuplicateName] = useState("");
+  const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportDocument, setExportDocument] = useState("");
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importDocument, setImportDocument] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -159,6 +166,102 @@ export function App({ bridge }: AppProps) {
     }
   };
 
+  const openDuplicateProfile = () => {
+    if (!selectedProfile) {
+      return;
+    }
+    setFormError(null);
+    setDuplicateName(`${selectedProfile.name} Copy`);
+    setIsDuplicateOpen(true);
+  };
+
+  const duplicateProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.duplicateProfile({
+        sourceProfileId: selectedProfile.id,
+        name: duplicateName,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setIsDuplicateOpen(false);
+      setDuplicateName("");
+    } catch {
+      setFormError(
+        "The Racing Profile could not be duplicated. Choose a different name and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteProfile = async () => {
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.deleteProfile({
+        profileId: selectedProfile.id,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setIsDeleteOpen(false);
+    } catch {
+      setFormError(
+        "The Racing Profile could not be deleted. Close this dialog and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const exportProfile = async () => {
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    setExportDocument("");
+    setIsExportOpen(true);
+    try {
+      const document = await bridge.exportProfile({
+        profileId: selectedProfile.id,
+      });
+      setExportDocument(document);
+    } catch {
+      setFormError(
+        "The Racing Profile could not be exported. Close this dialog and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const importProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.importProfile({
+        document: importDocument,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setIsImportOpen(false);
+      setImportDocument("");
+    } catch {
+      setFormError(
+        "The Racing Profile could not be imported. Check the portable JSON and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary">
@@ -228,6 +331,18 @@ export function App({ bridge }: AppProps) {
             <PlusIcon />
             New profile
           </button>
+          <button
+            type="button"
+            className="import-profile-button"
+            disabled={state.kind !== "ready"}
+            onClick={() => {
+              setFormError(null);
+              setImportDocument("");
+              setIsImportOpen(true);
+            }}
+          >
+            Import profile
+          </button>
         </div>
 
         <nav className="utility-nav" aria-label="Utilities">
@@ -278,10 +393,204 @@ export function App({ bridge }: AppProps) {
             applicationName={applicationName}
             selectedProfile={selectedProfile}
             onCreateProfile={openNewProfile}
+            onDeleteProfile={() => {
+              setFormError(null);
+              setIsDeleteOpen(true);
+            }}
+            onDuplicateProfile={openDuplicateProfile}
             onEditProfile={openProfileEditor}
+            onExportProfile={() => void exportProfile()}
           />
         )}
       </main>
+
+      {isDuplicateOpen && selectedProfile && (
+        <div className="dialog-backdrop">
+          <section
+            className="profile-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="duplicate-profile-title"
+          >
+            <p className="eyebrow">Profile action</p>
+            <h2 id="duplicate-profile-title">
+              Duplicate {selectedProfile.name}
+            </h2>
+            <p>
+              Create an independent copy with the same startup order and
+              settings.
+            </p>
+            <form onSubmit={duplicateProfile}>
+              <label className="field">
+                <span>Duplicate name</span>
+                <input
+                  autoFocus
+                  required
+                  value={duplicateName}
+                  onChange={(event) =>
+                    setDuplicateName(event.currentTarget.value)
+                  }
+                />
+              </label>
+              {formError && (
+                <p className="form-error" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsDuplicateOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Duplicating…" : "Create duplicate"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {isDeleteOpen && selectedProfile && (
+        <div className="dialog-backdrop">
+          <section
+            className="profile-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-profile-title"
+          >
+            <p className="eyebrow">Destructive action</p>
+            <h2 id="delete-profile-title">Delete {selectedProfile.name}?</h2>
+            <p>
+              This removes the Racing Profile from your library. Formation Lap
+              keeps a bounded local backup for recovery.
+            </p>
+            {formError && (
+              <p className="form-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsDeleteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={isSaving}
+                onClick={() => void deleteProfile()}
+              >
+                {isSaving ? "Deleting…" : `Delete ${selectedProfile.name}`}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isExportOpen && selectedProfile && (
+        <div className="dialog-backdrop">
+          <section
+            className="profile-dialog transfer-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-profile-title"
+          >
+            <p className="eyebrow">Portable profile</p>
+            <h2 id="export-profile-title">Export {selectedProfile.name}</h2>
+            <p>
+              Copy this JSON into a local text file. Machine-specific paths are
+              marked for repair when imported elsewhere.
+            </p>
+            <label className="field">
+              <span>Portable profile JSON</span>
+              <textarea
+                readOnly
+                rows={12}
+                value={exportDocument}
+                aria-busy={isSaving}
+              />
+            </label>
+            {formError && (
+              <p className="form-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setIsExportOpen(false)}
+              >
+                Close export
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isImportOpen && (
+        <div className="dialog-backdrop">
+          <section
+            className="profile-dialog transfer-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-profile-title"
+          >
+            <p className="eyebrow">Portable profile</p>
+            <h2 id="import-profile-title">Import Racing Profile</h2>
+            <p>
+              Paste a Formation Lap profile document. A fresh local identity is
+              assigned and missing paths remain visible for repair.
+            </p>
+            <form onSubmit={importProfile}>
+              <label className="field">
+                <span>Portable profile JSON</span>
+                <textarea
+                  autoFocus
+                  required
+                  rows={12}
+                  value={importDocument}
+                  onChange={(event) =>
+                    setImportDocument(event.currentTarget.value)
+                  }
+                />
+              </label>
+              {formError && (
+                <p className="form-error" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsImportOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSaving}
+                >
+                  {isSaving ? "Importing…" : "Import Racing Profile"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -1101,7 +1410,10 @@ interface DashboardProps {
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
   onCreateProfile(): void;
+  onDeleteProfile(): void;
+  onDuplicateProfile(): void;
   onEditProfile(): void;
+  onExportProfile(): void;
 }
 
 function Dashboard({
@@ -1109,7 +1421,10 @@ function Dashboard({
   applicationName,
   selectedProfile,
   onCreateProfile,
+  onDeleteProfile,
+  onDuplicateProfile,
   onEditProfile,
+  onExportProfile,
 }: DashboardProps) {
   const pageTitle = selectedProfile?.name ?? applicationName;
 
@@ -1132,9 +1447,36 @@ function Dashboard({
             <button
               type="button"
               className="secondary-button"
+              onClick={onDuplicateProfile}
+            >
+              Duplicate profile
+            </button>
+          )}
+          {selectedProfile && (
+            <button
+              type="button"
+              className="secondary-button"
               onClick={onEditProfile}
             >
               Edit profile
+            </button>
+          )}
+          {selectedProfile && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onExportProfile}
+            >
+              Export profile
+            </button>
+          )}
+          {selectedProfile && (
+            <button
+              type="button"
+              className="secondary-button danger-text"
+              onClick={onDeleteProfile}
+            >
+              Delete profile
             </button>
           )}
           <button

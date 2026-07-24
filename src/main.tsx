@@ -35,6 +35,14 @@ async function resolveNativeBridge(): Promise<NativeBridge> {
     const { createM5PreviewBridge } = await import("./preview/m5-preview");
     return createM5PreviewBridge();
   }
+  if (import.meta.env.DEV && preview === "m8-settings") {
+    const { createM8PreviewBridge } = await import("./preview/m8-preview");
+    const theme =
+      new URLSearchParams(window.location.search).get("theme") === "dark"
+        ? "dark"
+        : "light";
+    return createM8PreviewBridge(theme);
+  }
 
   return new TauriNativeBridge();
 }

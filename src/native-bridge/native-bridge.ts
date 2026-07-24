@@ -4,15 +4,18 @@ import type {
   CreateProfilePayload,
   DuplicateProfilePayload,
   ExitApplicationPayload,
+  DiagnosticExport,
   ForceStopApplicationPayload,
   GameLaunchDiagnostic,
   ImportProfilePayload,
   DiscoverySnapshot,
   PrimarySimIdPayload,
   ProfileIdPayload,
+  QuitPayload,
   RestartApplicationPayload,
   SaveProfilePayload,
   SupportingApplicationRecommendation,
+  UpdateSettingsPayload,
 } from "../generated/bindings";
 
 export interface NativeBridge {
@@ -35,6 +38,10 @@ export interface NativeBridge {
   testGameLaunch(payload: ProfileIdPayload): Promise<GameLaunchDiagnostic>;
   cancelStartup(): Promise<AppSnapshot>;
   closeSession(): Promise<AppSnapshot>;
+  requestQuit(payload: QuitPayload): Promise<AppSnapshot>;
+  listenForQuitRequest(listener: () => void): Promise<() => void>;
+  updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot>;
+  exportDiagnostics(): Promise<DiagnosticExport>;
   acceptRecovery(): Promise<AppSnapshot>;
   dismissRecovery(): Promise<AppSnapshot>;
   discoverApplications(): Promise<DiscoverySnapshot>;

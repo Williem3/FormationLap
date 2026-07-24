@@ -55,7 +55,15 @@ export type SessionApplicationSnapshot = { applicationId: string, name: string, 
 
 export type SessionSnapshot = { state: SessionState, activeProfileId: string | null, applications: Array<SessionApplicationSnapshot>, summary: SessionSummary | null, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
+export type ThemePreference = "system" | "light" | "dark";
+
+export type DesktopSettings = { startWithWindows: boolean, theme: ThemePreference, reduceMotion: boolean, };
+
+export type DiagnosticEntry = { timestampUnixSeconds: number, event: string, outcome: string, };
+
+export type DiagnosticExport = { schemaVersion: number, applicationVersion: string, platform: string, settings: DesktopSettings, sessionState: SessionState, profileCount: number, configuredApplicationCount: number, recentEvents: Array<DiagnosticEntry>, telemetryUpload: boolean, };
+
+export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
 
 export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
 
@@ -98,6 +106,12 @@ export type ForceStopApplicationPayload = { applicationId: string, preExistingCo
 export type RestartApplicationPayload = { profileId: string, applicationId: string, preExistingConfirmed: boolean, };
 
 export type PrimarySimIdPayload = { primarySimId: string, };
+
+export type QuitDisposition = "closeSession" | "leaveApplicationsRunning";
+
+export type QuitPayload = { disposition: QuitDisposition, };
+
+export type UpdateSettingsPayload = { settings: DesktopSettings, };
 
 export function getAppSnapshot(): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("get_app_snapshot");
@@ -165,6 +179,18 @@ export function cancelStartup(): Promise<AppSnapshot> {
 
 export function closeSession(): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("close_session");
+}
+
+export function requestQuit(payload: QuitPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("request_quit", { payload });
+}
+
+export function updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("update_settings", { payload });
+}
+
+export function exportDiagnostics(): Promise<DiagnosticExport> {
+  return invoke<DiagnosticExport>("export_diagnostics");
 }
 
 export function acceptRecovery(): Promise<AppSnapshot> {

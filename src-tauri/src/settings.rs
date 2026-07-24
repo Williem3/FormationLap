@@ -8,11 +8,13 @@ use std::{
 
 const SETTINGS_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsDocument {
     schema_version: u32,
     selected_profile_id: Option<String>,
+    #[serde(default)]
+    desktop: crate::DesktopSettings,
 }
 
 pub(crate) struct SettingsStore {
@@ -59,6 +61,7 @@ impl SettingsStore {
             SettingsDocument {
                 schema_version: SETTINGS_SCHEMA_VERSION,
                 selected_profile_id: None,
+                desktop: crate::DesktopSettings::default(),
             }
         };
 
@@ -73,11 +76,26 @@ impl SettingsStore {
         self.document.selected_profile_id.as_deref()
     }
 
+    pub(crate) fn desktop(&self) -> &crate::DesktopSettings {
+        &self.document.desktop
+    }
+
     pub(crate) fn select_profile(&mut self, profile_id: String) -> Result<(), CoreError> {
-        let document = SettingsDocument {
-            schema_version: SETTINGS_SCHEMA_VERSION,
-            selected_profile_id: Some(profile_id),
-        };
+        let mut document = self.document.clone();
+        document.selected_profile_id = Some(profile_id);
+        self.persist(document)
+    }
+
+    pub(crate) fn update_desktop(
+        &mut self,
+        desktop: crate::DesktopSettings,
+    ) -> Result<(), CoreError> {
+        let mut document = self.document.clone();
+        document.desktop = desktop;
+        self.persist(document)
+    }
+
+    fn persist(&mut self, document: SettingsDocument) -> Result<(), CoreError> {
         let temporary = self.settings_path.with_extension("json.tmp");
         let mut serialized =
             serde_json::to_vec_pretty(&document).map_err(CoreError::InvalidSettingsDocument)?;

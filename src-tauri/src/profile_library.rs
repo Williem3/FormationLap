@@ -275,6 +275,13 @@ impl ProfileLibrary {
             .collect()
     }
 
+    pub(crate) fn configured_application_count(&self) -> usize {
+        self.profiles
+            .iter()
+            .map(|profile| 1 + profile.supporting_applications.len())
+            .sum()
+    }
+
     pub(crate) fn selected_profile(&self) -> Option<RacingProfile> {
         self.profiles.first().map(RacingProfileDocument::as_profile)
     }

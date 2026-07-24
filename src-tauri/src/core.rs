@@ -1,3 +1,4 @@
+use crate::diagnostics::DiagnosticLog;
 use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
 use crate::game_launch_diagnostics::GameLaunchDiagnostics;
 use crate::{
@@ -77,7 +78,47 @@ pub enum AppCommand {
     TestGameLaunch {
         profile_id: String,
     },
+    RequestWindowClose,
+    RequestQuit {
+        disposition: crate::QuitDisposition,
+    },
+    UpdateSettings {
+        settings: crate::DesktopSettings,
+    },
+    ExportDiagnostics,
     RefreshProcesses,
+}
+
+impl AppCommand {
+    fn diagnostic_label(&self) -> &'static str {
+        match self {
+            Self::CreateProfile { .. } => "profile.create",
+            Self::EditProfile { .. } => "profile.edit",
+            Self::DeleteProfile { .. } => "profile.delete",
+            Self::DuplicateProfile { .. } => "profile.duplicate",
+            Self::SaveProfile { .. } => "profile.save",
+            Self::SelectProfile { .. } => "profile.select",
+            Self::ExportProfile { .. } => "profile.export",
+            Self::ImportProfile { .. } => "profile.import",
+            Self::StartApplication { .. } => "application.start",
+            Self::ExitApplication { .. } => "application.exit",
+            Self::ForceStopApplication { .. } => "application.force_stop",
+            Self::RestartApplication { .. } => "application.restart",
+            Self::StartSession { .. } => "session.start",
+            Self::CancelStartup => "session.cancel_startup",
+            Self::CloseSession => "session.close",
+            Self::AcceptRecovery => "recovery.accept",
+            Self::DismissRecovery => "recovery.dismiss",
+            Self::DiscoverApplications => "discovery.scan",
+            Self::RecommendApplications { .. } => "discovery.recommend",
+            Self::TestGameLaunch { .. } => "game.test_launch",
+            Self::RequestWindowClose => "desktop.window_close",
+            Self::RequestQuit { .. } => "desktop.quit",
+            Self::UpdateSettings { .. } => "settings.update",
+            Self::ExportDiagnostics => "diagnostics.export",
+            Self::RefreshProcesses => "process.refresh",
+        }
+    }
 }
 
 /// Observable result of a completed FormationLapCore command.
@@ -134,6 +175,16 @@ pub enum CommandOutcome {
     },
     GameLaunchTested {
         diagnostic: crate::GameLaunchDiagnostic,
+    },
+    WindowCloseRequested {
+        action: crate::WindowCloseAction,
+    },
+    QuitRequested {
+        action: crate::QuitAction,
+    },
+    SettingsUpdated,
+    DiagnosticsExported {
+        diagnostics: crate::DiagnosticExport,
     },
     ProcessesRefreshed,
 }
@@ -279,6 +330,7 @@ impl From<DiscoveryCatalogError> for CoreError {
 pub struct FormationLapCore {
     profile_library: ProfileLibrary,
     settings_store: SettingsStore,
+    diagnostic_log: DiagnosticLog,
     process_runtime: Box<dyn ProcessRuntime>,
     privilege_broker: Box<dyn PrivilegeBroker>,
     application_processes: BTreeMap<String, ApplicationProcessSnapshot>,
@@ -414,6 +466,7 @@ impl FormationLapCore {
         Ok(Self {
             profile_library,
             settings_store: SettingsStore::open(storage_root)?,
+            diagnostic_log: DiagnosticLog::open(storage_root)?,
             process_runtime: Box::new(process_runtime),
             privilege_broker: Box::new(privilege_broker),
             application_processes,
@@ -439,15 +492,31 @@ impl FormationLapCore {
             .selected_profile_id()
             .and_then(|profile_id| self.profile_library.profile(profile_id))
             .or_else(|| self.profile_library.selected_profile());
+        snapshot.settings = self.settings_store.desktop().clone();
         snapshot.application_processes = self.application_processes.values().cloned().collect();
         snapshot.session = self.session.clone();
         snapshot
     }
 
     pub fn execute(&mut self, command: AppCommand) -> Result<CommandOutcome, CoreError> {
-        let outcome = self.execute_inner(command)?;
-        self.sync_session_journal()?;
-        Ok(outcome)
+        let diagnostic_label = command.diagnostic_label();
+        let record_success = !matches!(command, AppCommand::RefreshProcesses);
+        match self.execute_inner(command) {
+            Ok(outcome) => {
+                if let Err(error) = self.sync_session_journal() {
+                    let _ = self.diagnostic_log.record(diagnostic_label, "failed");
+                    return Err(error);
+                }
+                if record_success {
+                    let _ = self.diagnostic_log.record(diagnostic_label, "succeeded");
+                }
+                Ok(outcome)
+            }
+            Err(error) => {
+                let _ = self.diagnostic_log.record(diagnostic_label, "failed");
+                Err(error)
+            }
+        }
     }
 
     fn execute_inner(&mut self, command: AppCommand) -> Result<CommandOutcome, CoreError> {
@@ -813,6 +882,71 @@ impl FormationLapCore {
                 }
                 self.finish_session();
                 Ok(CommandOutcome::RecoveryDismissed)
+            }
+            AppCommand::RequestWindowClose => {
+                let action = match self.session.state {
+                    crate::SessionState::Starting
+                    | crate::SessionState::Cancelling
+                    | crate::SessionState::Active
+                    | crate::SessionState::Closing => crate::WindowCloseAction::HideToTray,
+                    crate::SessionState::Idle | crate::SessionState::RecoveryAvailable => {
+                        crate::WindowCloseAction::Exit
+                    }
+                };
+                Ok(CommandOutcome::WindowCloseRequested { action })
+            }
+            AppCommand::RequestQuit { disposition } => {
+                let action = match disposition {
+                    crate::QuitDisposition::LeaveApplicationsRunning => {
+                        for process in self.application_processes.values_mut() {
+                            if process.identity.is_some() {
+                                process.ownership = Some(ProcessOwnership::PreExisting);
+                                process.status = ProcessStatus::RunningPreExisting;
+                            }
+                        }
+                        for application in &mut self.session.applications {
+                            application.state = crate::SessionApplicationState::Detached;
+                        }
+                        self.finish_session();
+                        crate::QuitAction::ExitNow
+                    }
+                    crate::QuitDisposition::CloseSession => match self.session.state {
+                        crate::SessionState::Idle => crate::QuitAction::ExitNow,
+                        crate::SessionState::Starting => {
+                            self.session.state = crate::SessionState::Cancelling;
+                            crate::QuitAction::WaitForSessionClose
+                        }
+                        crate::SessionState::Active | crate::SessionState::RecoveryAvailable => {
+                            self.session.state = crate::SessionState::Closing;
+                            crate::QuitAction::WaitForSessionClose
+                        }
+                        crate::SessionState::Cancelling | crate::SessionState::Closing => {
+                            crate::QuitAction::WaitForSessionClose
+                        }
+                    },
+                };
+                Ok(CommandOutcome::QuitRequested { action })
+            }
+            AppCommand::UpdateSettings { settings } => {
+                self.settings_store.update_desktop(settings)?;
+                Ok(CommandOutcome::SettingsUpdated)
+            }
+            AppCommand::ExportDiagnostics => {
+                let snapshot = self.snapshot();
+                let diagnostics = crate::DiagnosticExport {
+                    schema_version: 1,
+                    application_version: env!("CARGO_PKG_VERSION").to_owned(),
+                    platform: std::env::consts::OS.to_owned(),
+                    settings: snapshot.settings,
+                    session_state: snapshot.session.state,
+                    profile_count: snapshot.profiles.len(),
+                    configured_application_count: self
+                        .profile_library
+                        .configured_application_count(),
+                    recent_events: self.diagnostic_log.recent_entries(),
+                    telemetry_upload: false,
+                };
+                Ok(CommandOutcome::DiagnosticsExported { diagnostics })
             }
             AppCommand::RefreshProcesses => {
                 let application_ids = self

@@ -393,6 +393,81 @@ pub enum SessionState {
     RecoveryAvailable,
 }
 
+/// Native window action chosen from authoritative Session state.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum WindowCloseAction {
+    Exit,
+    HideToTray,
+}
+
+/// Explicit choice made before Formation Lap exits with a live Session.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum QuitDisposition {
+    CloseSession,
+    LeaveApplicationsRunning,
+}
+
+/// Native application action after FormationLapCore applies Quit policy.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum QuitAction {
+    ExitNow,
+    WaitForSessionClose,
+}
+
+/// Visual theme selected for Formation Lap.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ThemePreference {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+/// Local desktop preferences shared by the native host and React.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DesktopSettings {
+    pub start_with_windows: bool,
+    pub theme: ThemePreference,
+    pub reduce_motion: bool,
+}
+
+/// One sanitized entry from Formation Lap's bounded local diagnostic log.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiagnosticEntry {
+    #[ts(type = "number")]
+    pub timestamp_unix_seconds: u64,
+    pub event: String,
+    pub outcome: String,
+}
+
+/// Copyable local-only evidence for support and troubleshooting.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiagnosticExport {
+    pub schema_version: u32,
+    pub application_version: String,
+    pub platform: String,
+    pub settings: DesktopSettings,
+    pub session_state: SessionState,
+    pub profile_count: usize,
+    pub configured_application_count: usize,
+    pub recent_events: Vec<DiagnosticEntry>,
+    pub telemetry_upload: bool,
+}
+
 /// Placement of one application in a Session's immutable Startup Sequence.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -475,6 +550,7 @@ pub struct SessionSnapshot {
 pub struct AppSnapshot {
     pub application_name: String,
     pub foundation_status: String,
+    pub settings: DesktopSettings,
     pub profiles: Vec<ProfileSummary>,
     pub selected_profile: Option<RacingProfile>,
     pub application_processes: Vec<ApplicationProcessSnapshot>,
@@ -486,6 +562,7 @@ impl AppSnapshot {
         Self {
             application_name: "Formation Lap".to_owned(),
             foundation_status: "ready".to_owned(),
+            settings: DesktopSettings::default(),
             profiles: Vec::new(),
             selected_profile: None,
             application_processes: Vec::new(),

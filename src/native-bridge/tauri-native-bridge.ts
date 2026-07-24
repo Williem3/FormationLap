@@ -8,19 +8,23 @@ import {
   discoverApplications,
   duplicateProfile,
   exitApplication,
+  exportDiagnostics,
   exportProfile,
   forceStopApplication,
   getAppSnapshot,
   importProfile,
   refreshProcesses,
   recommendApplications,
+  requestQuit,
   restartApplication,
   saveProfile,
   selectProfile,
   startApplication,
   startSession,
   testGameLaunch,
+  updateSettings,
 } from "../generated/bindings";
+import { listen } from "@tauri-apps/api/event";
 import type { NativeBridge } from "./native-bridge";
 
 export class TauriNativeBridge implements NativeBridge {
@@ -41,6 +45,12 @@ export class TauriNativeBridge implements NativeBridge {
   testGameLaunch = testGameLaunch;
   cancelStartup = cancelStartup;
   closeSession = closeSession;
+  requestQuit = requestQuit;
+  listenForQuitRequest(listener: () => void): Promise<() => void> {
+    return listen("formation-lap://quit-requested", listener);
+  }
+  updateSettings = updateSettings;
+  exportDiagnostics = exportDiagnostics;
   acceptRecovery = acceptRecovery;
   dismissRecovery = dismissRecovery;
   discoverApplications = discoverApplications;

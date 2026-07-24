@@ -2,15 +2,17 @@ use formation_lap_lib::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
     ApplicationTargetPayload, CatalogPrimarySim, CatalogSupportingApplication,
     CatalogUpdateProvider, CloseSessionSettings, CommandError, CompatibilityRank,
-    ConsoleVisibility, CreateProfilePayload, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoveredSupportingApplication, DiscoverySnapshot, DuplicateProfilePayload,
-    ExitApplicationPayload, ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget,
-    ImportProfilePayload, LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity,
-    ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload,
-    ProfileSummary, RacingProfile, RestartApplicationPayload, SaveProfilePayload,
+    ConsoleVisibility, CreateProfilePayload, DesktopSettings, DiagnosticEntry, DiagnosticExport,
+    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
+    DiscoverySnapshot, DuplicateProfilePayload, ExitApplicationPayload,
+    ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget, ImportProfilePayload,
+    LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity, ProcessOutput,
+    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary,
+    QuitDisposition, QuitPayload, RacingProfile, RestartApplicationPayload, SaveProfilePayload,
     SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
     SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
-    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation, VrLaunchMode,
+    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation,
+    ThemePreference, UpdateSettingsPayload, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -49,6 +51,10 @@ fn render_bindings() -> String {
         SessionSummary::decl(&config),
         SessionApplicationSnapshot::decl(&config),
         SessionSnapshot::decl(&config),
+        ThemePreference::decl(&config),
+        DesktopSettings::decl(&config),
+        DiagnosticEntry::decl(&config),
+        DiagnosticExport::decl(&config),
         AppSnapshot::decl(&config),
         ApplicationIcon::decl(&config),
         DiscoveredInstallation::decl(&config),
@@ -71,6 +77,9 @@ fn render_bindings() -> String {
         ForceStopApplicationPayload::decl(&config),
         RestartApplicationPayload::decl(&config),
         PrimarySimIdPayload::decl(&config),
+        QuitDisposition::decl(&config),
+        QuitPayload::decl(&config),
+        UpdateSettingsPayload::decl(&config),
     ]
     .into_iter()
     .map(|declaration| format!("export {declaration}"))
@@ -149,6 +158,18 @@ export function cancelStartup(): Promise<AppSnapshot> {{
 
 export function closeSession(): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("close_session");
+}}
+
+export function requestQuit(payload: QuitPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("request_quit", {{ payload }});
+}}
+
+export function updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("update_settings", {{ payload }});
+}}
+
+export function exportDiagnostics(): Promise<DiagnosticExport> {{
+  return invoke<DiagnosticExport>("export_diagnostics");
 }}
 
 export function acceptRecovery(): Promise<AppSnapshot> {{

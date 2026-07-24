@@ -12,6 +12,11 @@ describe("InMemoryNativeBridge", () => {
     const snapshot: AppSnapshot = {
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
@@ -26,6 +31,11 @@ describe("InMemoryNativeBridge", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
@@ -74,6 +84,11 @@ describe("InMemoryNativeBridge", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        settings: {
+          startWithWindows: false,
+          theme: "system",
+          reduceMotion: false,
+        },
         session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],

@@ -9,6 +9,8 @@ import markUrl from "../assets/formation-lap-mark.svg";
 import type {
   ApplicationProcessSnapshot,
   AppSnapshot,
+  DesktopSettings,
+  DiagnosticExport,
   DiscoveredInstallation,
   DiscoveredPrimarySim,
   DiscoveredSupportingApplication,
@@ -17,6 +19,7 @@ import type {
   LaunchSource,
   ProfileApplication,
   RacingProfile,
+  QuitDisposition,
   SessionApplicationSnapshot,
   SupportingApplication,
   SupportingApplicationRecommendation,
@@ -57,7 +60,8 @@ type RecommendationState =
     }
   | { kind: "error"; primarySimName: string };
 
-type WorkspaceView = "dashboard" | "new-profile" | "edit-profile";
+type WorkspaceView =
+  "dashboard" | "new-profile" | "edit-profile" | "settings" | "diagnostics";
 type PrimarySimSource = "direct" | "steam";
 type PendingProcessAction = {
   kind: "exit" | "restart" | "force";
@@ -67,7 +71,12 @@ type PendingProcessAction = {
 
 export function App({ bridge }: AppProps) {
   const [state, setState] = useState<SnapshotState>({ kind: "loading" });
-  const [view, setView] = useState<WorkspaceView>("dashboard");
+  const [view, setView] = useState<WorkspaceView>(() =>
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("preview") === "m8-settings"
+      ? "settings"
+      : "dashboard",
+  );
   const [profileName, setProfileName] = useState("");
   const [primarySimName, setPrimarySimName] = useState("");
   const [primarySimSource, setPrimarySimSource] =
@@ -101,6 +110,10 @@ export function App({ bridge }: AppProps) {
     useState<ProfileApplication | null>(null);
   const [gameLaunchDiagnostic, setGameLaunchDiagnostic] =
     useState<GameLaunchDiagnostic | null>(null);
+  const [diagnosticExport, setDiagnosticExport] =
+    useState<DiagnosticExport | null>(null);
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
+  const [isQuitOpen, setIsQuitOpen] = useState(false);
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const newProfileButton = useRef<HTMLButtonElement | null>(null);
   const wasDialogOpen = useRef(false);
@@ -136,7 +149,33 @@ export function App({ bridge }: AppProps) {
     isExportOpen ||
     isImportOpen ||
     pendingProcessAction !== null ||
-    outputApplication !== null;
+    outputApplication !== null ||
+    isQuitOpen;
+
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+    document.documentElement.dataset.theme = snapshot.settings.theme;
+    document.documentElement.dataset.reduceMotion = String(
+      snapshot.settings.reduceMotion,
+    );
+  }, [snapshot]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void bridge
+      .listenForQuitRequest(() => {
+        if (document.activeElement instanceof HTMLElement) {
+          dialogReturnFocus.current = document.activeElement;
+        }
+        setIsQuitOpen(true);
+      })
+      .then((cleanup) => {
+        unlisten = cleanup;
+      });
+    return () => unlisten?.();
+  }, [bridge]);
 
   const activeProcessKey =
     snapshot?.applicationProcesses
@@ -704,6 +743,48 @@ export function App({ bridge }: AppProps) {
     }
   };
 
+  const updateDesktopSettings = async (settings: DesktopSettings) => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.updateSettings({ settings });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+    } catch {
+      setFormError(
+        "Formation Lap could not save these local desktop settings.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openDiagnostics = async () => {
+    setView("diagnostics");
+    setIsDiagnosticsLoading(true);
+    setFormError(null);
+    try {
+      setDiagnosticExport(await bridge.exportDiagnostics());
+    } catch {
+      setFormError("Formation Lap could not export local diagnostics.");
+    } finally {
+      setIsDiagnosticsLoading(false);
+    }
+  };
+
+  const requestQuit = async (disposition: QuitDisposition) => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.requestQuit({ disposition });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setIsQuitOpen(false);
+    } catch {
+      setFormError("Formation Lap could not apply the selected Quit action.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary">
@@ -790,19 +871,66 @@ export function App({ bridge }: AppProps) {
         </div>
 
         <nav className="utility-nav" aria-label="Utilities">
-          <button type="button" className="nav-item" disabled>
+          <button
+            type="button"
+            className={`nav-item ${view === "settings" ? "nav-item-active" : ""}`}
+            aria-current={view === "settings" ? "page" : undefined}
+            disabled={state.kind !== "ready"}
+            onClick={() => {
+              setFormError(null);
+              setView("settings");
+            }}
+          >
             <SettingsIcon />
             Settings
           </button>
-          <button type="button" className="nav-item" disabled>
+          <button
+            type="button"
+            className={`nav-item ${view === "diagnostics" ? "nav-item-active" : ""}`}
+            aria-current={view === "diagnostics" ? "page" : undefined}
+            disabled={state.kind !== "ready"}
+            onClick={() => void openDiagnostics()}
+          >
             <PulseIcon />
             Diagnostics
+          </button>
+          <button
+            type="button"
+            className="nav-item quit-nav-item"
+            disabled={state.kind !== "ready"}
+            onClick={() => {
+              rememberDialogTrigger();
+              setFormError(null);
+              setIsQuitOpen(true);
+            }}
+          >
+            <FlagIcon />
+            Quit…
           </button>
         </nav>
       </aside>
 
       <main className="workspace">
-        {view === "new-profile" && state.kind === "ready" ? (
+        {view === "settings" && state.kind === "ready" ? (
+          <SettingsScreen
+            settings={state.snapshot.settings}
+            isSaving={isSaving}
+            error={formError}
+            onChange={(settings) => void updateDesktopSettings(settings)}
+            onOpenDiagnostics={() => void openDiagnostics()}
+            onQuit={() => {
+              rememberDialogTrigger();
+              setIsQuitOpen(true);
+            }}
+          />
+        ) : view === "diagnostics" && state.kind === "ready" ? (
+          <DiagnosticsScreen
+            diagnostics={diagnosticExport}
+            isLoading={isDiagnosticsLoading}
+            error={formError}
+            onRefresh={() => void openDiagnostics()}
+          />
+        ) : view === "new-profile" && state.kind === "ready" ? (
           <ProfileWizard
             profileName={profileName}
             primarySimName={primarySimName}
@@ -885,6 +1013,65 @@ export function App({ bridge }: AppProps) {
           />
         )}
       </main>
+
+      {isQuitOpen && (
+        <ModalDialog
+          labelledBy="quit-title"
+          onClose={() => setIsQuitOpen(false)}
+        >
+          <p className="eyebrow">Explicit Quit</p>
+          <h2 id="quit-title">
+            {snapshot?.session.state === "idle"
+              ? "Quit Formation Lap?"
+              : "What should happen to this Session?"}
+          </h2>
+          <p>
+            {snapshot?.session.state === "idle"
+              ? "No Session is active. Formation Lap can exit now."
+              : "Choose whether Formation Lap closes Session-owned applications or leaves every running application untouched."}
+          </p>
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+          <div className="dialog-actions quit-dialog-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setIsQuitOpen(false)}
+            >
+              Cancel
+            </button>
+            {snapshot?.session.state !== "idle" && (
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isSaving}
+                onClick={() => void requestQuit("leaveApplicationsRunning")}
+              >
+                Leave applications running
+              </button>
+            )}
+            <button
+              type="button"
+              className="primary-button"
+              disabled={isSaving}
+              onClick={() =>
+                void requestQuit(
+                  snapshot?.session.state === "idle"
+                    ? "leaveApplicationsRunning"
+                    : "closeSession",
+                )
+              }
+            >
+              {snapshot?.session.state === "idle"
+                ? "Quit Formation Lap"
+                : "Close Session and quit"}
+            </button>
+          </div>
+        </ModalDialog>
+      )}
 
       {pendingProcessAction && (
         <ModalDialog
@@ -1204,6 +1391,270 @@ function ModalDialog({
     >
       {children}
     </dialog>
+  );
+}
+
+interface SettingsScreenProps {
+  settings: DesktopSettings;
+  isSaving: boolean;
+  error: string | null;
+  onChange(settings: DesktopSettings): void;
+  onOpenDiagnostics(): void;
+  onQuit(): void;
+}
+
+function SettingsScreen({
+  settings,
+  isSaving,
+  error,
+  onChange,
+  onOpenDiagnostics,
+  onQuit,
+}: SettingsScreenProps) {
+  const update = (change: Partial<DesktopSettings>) =>
+    onChange({ ...settings, ...change });
+
+  return (
+    <div className="settings-screen">
+      <header className="workspace-header settings-header">
+        <div>
+          <p className="eyebrow">Local preferences</p>
+          <h1>Settings</h1>
+          <p className="workspace-summary">
+            Tune desktop behavior and appearance without sending configuration
+            or usage data anywhere.
+          </p>
+        </div>
+        <span className="settings-save-state" role="status">
+          {isSaving ? "Saving…" : "Saved locally"}
+        </span>
+      </header>
+
+      {error && (
+        <p className="form-error settings-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="settings-grid">
+        <section className="settings-group" aria-labelledby="general-settings">
+          <div className="settings-group-heading">
+            <p className="eyebrow">Desktop</p>
+            <h2 id="general-settings">General</h2>
+          </div>
+          <label className="settings-row">
+            <span>
+              <strong>Start with Windows</strong>
+              <small>
+                Opens minimized to the tray. Racing Profiles never auto-start.
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.startWithWindows}
+              disabled={isSaving}
+              onChange={(event) =>
+                update({ startWithWindows: event.currentTarget.checked })
+              }
+            />
+          </label>
+        </section>
+
+        <section
+          className="settings-group"
+          aria-labelledby="appearance-settings"
+        >
+          <div className="settings-group-heading">
+            <p className="eyebrow">Interface</p>
+            <h2 id="appearance-settings">Appearance</h2>
+          </div>
+          <div className="settings-row settings-row-stacked">
+            <span>
+              <strong>Theme</strong>
+              <small>Follow Windows or keep a fixed local theme.</small>
+            </span>
+            <div className="theme-options" role="group" aria-label="Theme">
+              {(["system", "light", "dark"] as const).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  className={
+                    settings.theme === theme ? "theme-option-active" : ""
+                  }
+                  aria-pressed={settings.theme === theme}
+                  disabled={isSaving}
+                  onClick={() => update({ theme })}
+                >
+                  {theme[0]?.toUpperCase()}
+                  {theme.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="settings-row">
+            <span>
+              <strong>Reduce motion</strong>
+              <small>Stops progress and transition animation.</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.reduceMotion}
+              disabled={isSaving}
+              onChange={(event) =>
+                update({ reduceMotion: event.currentTarget.checked })
+              }
+            />
+          </label>
+        </section>
+
+        <section className="settings-group" aria-labelledby="update-settings">
+          <div className="settings-group-heading">
+            <p className="eyebrow">Release channel</p>
+            <h2 id="update-settings">Updates</h2>
+          </div>
+          <div className="settings-row">
+            <span>
+              <strong>Stable signed releases</strong>
+              <small>
+                Formation Lap will install only verified first-party updates.
+                Third-party applications remain notification-only.
+              </small>
+            </span>
+            <span className="settings-value">Stable</span>
+          </div>
+        </section>
+
+        <section
+          className="settings-group"
+          aria-labelledby="race-safe-settings"
+        >
+          <div className="settings-group-heading">
+            <p className="eyebrow">While driving</p>
+            <h2 id="race-safe-settings">Race-safe behavior</h2>
+          </div>
+          <div className="settings-row">
+            <span>
+              <strong>Suppress unsolicited disruptions</strong>
+              <small>
+                Updates and non-critical summaries wait until the Primary Sim
+                exits.
+              </small>
+            </span>
+            <span className="settings-value status-enabled">On</span>
+          </div>
+        </section>
+
+        <section className="settings-group" aria-labelledby="privacy-settings">
+          <div className="settings-group-heading">
+            <p className="eyebrow">Local only</p>
+            <h2 id="privacy-settings">Data &amp; privacy</h2>
+          </div>
+          <div className="settings-row">
+            <span>
+              <strong>No telemetry upload</strong>
+              <small>
+                Profiles, process observations, logs, and discovery results stay
+                on this PC.
+              </small>
+            </span>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onOpenDiagnostics}
+            >
+              Export diagnostics
+            </button>
+          </div>
+        </section>
+
+        <section
+          className="settings-group settings-group-advanced"
+          aria-labelledby="advanced-settings"
+        >
+          <div className="settings-group-heading">
+            <p className="eyebrow">Maintenance</p>
+            <h2 id="advanced-settings">Advanced</h2>
+          </div>
+          <div className="settings-row">
+            <span>
+              <strong>Bounded backups and logs</strong>
+              <small>
+                The last valid settings are backed up locally; diagnostic logs
+                rotate at a fixed size.
+              </small>
+            </span>
+            <button type="button" className="danger-button" onClick={onQuit}>
+              Quit Formation Lap…
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+interface DiagnosticsScreenProps {
+  diagnostics: DiagnosticExport | null;
+  isLoading: boolean;
+  error: string | null;
+  onRefresh(): void;
+}
+
+function DiagnosticsScreen({
+  diagnostics,
+  isLoading,
+  error,
+  onRefresh,
+}: DiagnosticsScreenProps) {
+  return (
+    <div className="diagnostics-screen">
+      <header className="workspace-header settings-header">
+        <div>
+          <p className="eyebrow">Local support bundle</p>
+          <h1>Diagnostics</h1>
+          <p className="workspace-summary">
+            Review the sanitized evidence before copying it. Formation Lap does
+            not upload this export.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={isLoading}
+          onClick={onRefresh}
+        >
+          {isLoading ? "Refreshing…" : "Refresh export"}
+        </button>
+      </header>
+      {error && (
+        <p className="form-error settings-error" role="alert">
+          {error}
+        </p>
+      )}
+      <section className="diagnostic-export" aria-labelledby="diagnostic-title">
+        <div>
+          <p className="eyebrow">Sanitized JSON</p>
+          <h2 id="diagnostic-title">Diagnostic export</h2>
+        </div>
+        <textarea
+          aria-label="Diagnostic export"
+          readOnly
+          rows={24}
+          value={
+            diagnostics
+              ? JSON.stringify(diagnostics, null, 2)
+              : isLoading
+                ? "Preparing local diagnostics…"
+                : "No diagnostic export is available."
+          }
+        />
+        <p>
+          Includes application version, platform, local settings, Session state,
+          counts, and a bounded command-event tail. Executable paths and profile
+          contents are omitted.
+        </p>
+      </section>
+    </div>
   );
 }
 
@@ -2817,7 +3268,7 @@ function Dashboard({
             </small>
           </span>
         </div>
-        <span className="utility-data">M4 · LOCAL</span>
+        <span className="utility-data">V1 · LOCAL ONLY</span>
       </footer>
     </>
   );

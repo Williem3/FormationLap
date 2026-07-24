@@ -7,6 +7,7 @@ type M2Preview = "m2-wizard" | "m2-editor";
 const editorSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  settings: { startWithWindows: false, theme: "system", reduceMotion: false },
   session: idleSessionSnapshot(),
   applicationProcesses: [],
   profiles: [
@@ -96,6 +97,11 @@ export function createM2PreviewBridge(
     return new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],

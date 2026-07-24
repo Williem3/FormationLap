@@ -5,6 +5,7 @@ import type {
   CloseSessionSettings,
   CreateProfilePayload,
   DuplicateProfilePayload,
+  DiagnosticExport,
   DiscoverySnapshot,
   ExitApplicationPayload,
   ForceStopApplicationPayload,
@@ -14,10 +15,12 @@ import type {
   ProfileIdPayload,
   ProfileSummary,
   PrimarySimIdPayload,
+  QuitPayload,
   RacingProfile,
   RestartApplicationPayload,
   SaveProfilePayload,
   SupportingApplicationRecommendation,
+  UpdateSettingsPayload,
   VrLaunchMode,
 } from "../generated/bindings";
 import type { NativeBridge } from "./native-bridge";
@@ -348,6 +351,56 @@ export class InMemoryNativeBridge implements NativeBridge {
       primary.state = "stopping";
     }
     return this.getAppSnapshot();
+  }
+
+  requestQuit(payload: QuitPayload): Promise<AppSnapshot> {
+    if (payload.disposition === "closeSession") {
+      if (this.#snapshot.session.state === "starting") {
+        this.#snapshot.session.state = "cancelling";
+      } else if (
+        this.#snapshot.session.state === "active" ||
+        this.#snapshot.session.state === "recoveryAvailable"
+      ) {
+        this.#snapshot.session.state = "closing";
+      }
+    } else {
+      for (const process of this.#snapshot.applicationProcesses) {
+        if (process.identity) {
+          process.ownership = "preExisting";
+          process.status = "runningPreExisting";
+        }
+      }
+      for (const application of this.#snapshot.session.applications) {
+        application.state = "detached";
+      }
+      this.#snapshot.session.state = "idle";
+      this.#snapshot.session.activeProfileId = null;
+    }
+    return this.getAppSnapshot();
+  }
+
+  listenForQuitRequest(listener: () => void): Promise<() => void> {
+    void listener;
+    return Promise.resolve(() => undefined);
+  }
+
+  updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot> {
+    this.#snapshot.settings = structuredClone(payload.settings);
+    return this.getAppSnapshot();
+  }
+
+  exportDiagnostics(): Promise<DiagnosticExport> {
+    return Promise.resolve({
+      schemaVersion: 1,
+      applicationVersion: "0.1.0-preview",
+      platform: "browser-preview",
+      settings: structuredClone(this.#snapshot.settings),
+      sessionState: this.#snapshot.session.state,
+      profileCount: this.#snapshot.profiles.length,
+      configuredApplicationCount: this.#snapshot.profiles.length,
+      recentEvents: [],
+      telemetryUpload: false,
+    });
   }
 
   acceptRecovery(): Promise<AppSnapshot> {

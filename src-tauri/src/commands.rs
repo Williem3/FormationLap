@@ -1,7 +1,8 @@
 use crate::{
-    AppCommand, AppSnapshot, CommandOutcome, CoreError, DiscoverySnapshot, FormationLapCore,
-    GameLaunchDiagnostic, RacingProfile, SupportingApplicationRecommendation,
-    TargetedDiscoverySources,
+    AppCommand, AppSnapshot, CommandOutcome, CoreError, DesktopSettings, DiagnosticExport,
+    DiscoverySnapshot, FormationLapCore, GameLaunchDiagnostic, QuitAction, QuitDisposition,
+    RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
+    WindowCloseAction,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::mpsc, thread};
@@ -93,6 +94,22 @@ pub struct RestartApplicationPayload {
 #[ts(rename_all = "camelCase")]
 pub struct PrimarySimIdPayload {
     pub primary_sim_id: String,
+}
+
+/// Complete local desktop settings accepted by the update command.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct UpdateSettingsPayload {
+    pub settings: DesktopSettings,
+}
+
+/// Explicit application disposition accepted by the native Quit command.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct QuitPayload {
+    pub disposition: QuitDisposition,
 }
 
 /// Structured error returned across the Rust/TypeScript seam.
@@ -424,6 +441,49 @@ impl NativeCommandHost {
             .map(|(_, snapshot)| snapshot)
     }
 
+    pub fn request_window_close(&self) -> Result<WindowCloseAction, CommandError> {
+        match self.execute_command(AppCommand::RequestWindowClose)?.0 {
+            CommandOutcome::WindowCloseRequested { action } => Ok(action),
+            _ => Err(Self::unexpected_outcome(
+                "Formation Lap could not apply its window-close policy.",
+            )),
+        }
+    }
+
+    pub fn request_quit(
+        &self,
+        payload: QuitPayload,
+    ) -> Result<(QuitAction, AppSnapshot), CommandError> {
+        let (outcome, snapshot) = self.execute_command(AppCommand::RequestQuit {
+            disposition: payload.disposition,
+        })?;
+        match outcome {
+            CommandOutcome::QuitRequested { action } => Ok((action, snapshot)),
+            _ => Err(Self::unexpected_outcome(
+                "Formation Lap could not apply its Quit policy.",
+            )),
+        }
+    }
+
+    pub fn update_settings(
+        &self,
+        payload: UpdateSettingsPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::UpdateSettings {
+            settings: payload.settings,
+        })
+        .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn export_diagnostics(&self) -> Result<DiagnosticExport, CommandError> {
+        match self.execute_command(AppCommand::ExportDiagnostics)?.0 {
+            CommandOutcome::DiagnosticsExported { diagnostics } => Ok(diagnostics),
+            _ => Err(Self::unexpected_outcome(
+                "Formation Lap could not export local diagnostics.",
+            )),
+        }
+    }
+
     pub fn accept_recovery(&self) -> Result<AppSnapshot, CommandError> {
         self.execute_command(AppCommand::AcceptRecovery)
             .map(|(_, snapshot)| snapshot)
@@ -463,6 +523,15 @@ impl NativeCommandHost {
                 recovery: Some("Select the Primary Sim again.".to_owned()),
                 diagnostic_id: None,
             }),
+        }
+    }
+
+    fn unexpected_outcome(message: &str) -> CommandError {
+        CommandError {
+            code: "unexpected_outcome".to_owned(),
+            message: message.to_owned(),
+            recovery: Some("Try the action again.".to_owned()),
+            diagnostic_id: None,
         }
     }
 }
@@ -597,6 +666,68 @@ pub fn close_session(
     commands: tauri::State<'_, NativeCommandHost>,
 ) -> Result<AppSnapshot, CommandError> {
     commands.close_session()
+}
+
+#[tauri::command]
+pub fn request_quit(
+    app: tauri::AppHandle,
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: QuitPayload,
+) -> Result<AppSnapshot, CommandError> {
+    let (action, snapshot) = commands.request_quit(payload)?;
+    match action {
+        QuitAction::ExitNow => app.exit(0),
+        QuitAction::WaitForSessionClose => {
+            let app = app.clone();
+            let commands = commands.inner().clone();
+            thread::Builder::new()
+                .name("formation-lap-quit".to_owned())
+                .spawn(move || {
+                    loop {
+                        thread::sleep(std::time::Duration::from_millis(250));
+                        let Ok(snapshot) = commands.refresh_processes() else {
+                            break;
+                        };
+                        if snapshot.session.state == crate::SessionState::Idle {
+                            app.exit(0);
+                            break;
+                        }
+                    }
+                })
+                .map_err(|_| NativeCommandHost::worker_unavailable())?;
+        }
+    }
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub fn update_settings(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: UpdateSettingsPayload,
+) -> Result<AppSnapshot, CommandError> {
+    let previous = commands.get_app_snapshot()?.settings.start_with_windows;
+    crate::desktop_host::set_start_with_windows(payload.settings.start_with_windows).map_err(
+        |_| CommandError {
+            code: "startup_registration_failed".to_owned(),
+            message: "Formation Lap could not update Start with Windows.".to_owned(),
+            recovery: Some("Check current-user registry access and try again.".to_owned()),
+            diagnostic_id: None,
+        },
+    )?;
+    match commands.update_settings(payload) {
+        Ok(snapshot) => Ok(snapshot),
+        Err(error) => {
+            let _ = crate::desktop_host::set_start_with_windows(previous);
+            Err(error)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn export_diagnostics(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<DiagnosticExport, CommandError> {
+    commands.export_diagnostics()
 }
 
 #[tauri::command]

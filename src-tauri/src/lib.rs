@@ -4,6 +4,8 @@ mod atomic_file;
 mod commands;
 mod contracts;
 mod core;
+mod desktop_host;
+mod diagnostics;
 mod discovery_catalog;
 mod game_launch_diagnostics;
 mod launch_recipe;
@@ -17,23 +19,26 @@ mod settings;
 pub use commands::{
     ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
     ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, NativeCommandHost,
-    PrimarySimIdPayload, ProfileIdPayload, RestartApplicationPayload, SaveProfilePayload,
-    accept_recovery, cancel_startup, close_session, create_profile, delete_profile,
-    discover_applications, dismiss_recovery, duplicate_profile, exit_application, export_profile,
-    force_stop_application, get_app_snapshot, import_profile, recommend_applications,
-    refresh_processes, restart_application, save_profile, select_profile, start_application,
-    start_session, test_game_launch,
+    PrimarySimIdPayload, ProfileIdPayload, QuitPayload, RestartApplicationPayload,
+    SaveProfilePayload, UpdateSettingsPayload, accept_recovery, cancel_startup, close_session,
+    create_profile, delete_profile, discover_applications, dismiss_recovery, duplicate_profile,
+    exit_application, export_diagnostics, export_profile, force_stop_application, get_app_snapshot,
+    import_profile, recommend_applications, refresh_processes, request_quit, restart_application,
+    save_profile, select_profile, start_application, start_session, test_game_launch,
+    update_settings,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
     CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings,
-    CompatibilityRank, ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoveredSupportingApplication, DiscoverySnapshot, GameLaunchDiagnostic, GameLaunchTarget,
-    LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
-    ProfileApplication, ProfileSummary, RacingProfile, SessionApplicationRole,
+    CompatibilityRank, ConsoleVisibility, DesktopSettings, DiagnosticEntry, DiagnosticExport,
+    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
+    DiscoverySnapshot, GameLaunchDiagnostic, GameLaunchTarget, LaunchRecipe, LaunchSource,
+    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
+    ProfileSummary, QuitAction, QuitDisposition, RacingProfile, SessionApplicationRole,
     SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
     SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SteamLaunchSelector,
-    SupportingApplication, SupportingApplicationRecommendation, VrLaunchMode,
+    SupportingApplication, SupportingApplicationRecommendation, ThemePreference, VrLaunchMode,
+    WindowCloseAction,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{
@@ -58,8 +63,11 @@ pub use process_runtime::{
 };
 use profile_library::ProfileLibrary;
 use settings::SettingsStore;
-use tauri::Manager;
-use tauri::Url;
+use tauri::{
+    Emitter, Manager, Url,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 
 fn navigation_is_allowed(url: &Url) -> bool {
     match (url.scheme(), url.host_str()) {
@@ -70,8 +78,131 @@ fn navigation_is_allowed(url: &Url) -> bool {
     }
 }
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn tray_status(session: &SessionSnapshot) -> (&'static str, &'static str, bool) {
+    match session.state {
+        SessionState::Idle => ("Ready", "No Active Session", false),
+        SessionState::Starting => ("Starting Session", "Cancel Startup", true),
+        SessionState::Cancelling => ("Cancelling Startup", "Cancelling…", false),
+        SessionState::Active => ("Session active", "Close Session", true),
+        SessionState::Closing => ("Closing Session", "Closing…", false),
+        SessionState::RecoveryAvailable => ("Recovery available", "Review Recovery", true),
+    }
+}
+
+fn build_tray(
+    app: &mut tauri::App,
+    commands: NativeCommandHost,
+) -> tauri::Result<tauri::tray::TrayIcon> {
+    let snapshot = commands
+        .get_app_snapshot()
+        .map_err(|error| std::io::Error::other(error.message))?;
+    let (status_text, session_action_text, session_action_enabled) = tray_status(&snapshot.session);
+    let status = MenuItem::with_id(
+        app,
+        "tray-status",
+        format!("Status: {status_text}"),
+        false,
+        None::<&str>,
+    )?;
+    let open = MenuItem::with_id(app, "tray-open", "Open Formation Lap", true, None::<&str>)?;
+    let session_action = MenuItem::with_id(
+        app,
+        "tray-session-action",
+        session_action_text,
+        session_action_enabled,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(app, "tray-quit", "Quit…", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&status, &open, &session_action, &separator, &quit])?;
+
+    let menu_commands = commands.clone();
+    let mut builder = TrayIconBuilder::with_id("formation-lap-tray")
+        .menu(&menu)
+        .tooltip(format!("Formation Lap — {status_text}"))
+        .show_menu_on_left_click(false)
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "tray-open" => show_main_window(app),
+            "tray-session-action" => {
+                let Ok(snapshot) = menu_commands.get_app_snapshot() else {
+                    return;
+                };
+                match snapshot.session.state {
+                    SessionState::Starting => {
+                        let _ = menu_commands.cancel_startup();
+                    }
+                    SessionState::Active => {
+                        let _ = menu_commands.close_session();
+                    }
+                    SessionState::RecoveryAvailable => show_main_window(app),
+                    SessionState::Idle | SessionState::Cancelling | SessionState::Closing => {}
+                }
+            }
+            "tray-quit" => {
+                show_main_window(app);
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("formation-lap://quit-requested", ());
+                }
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } | TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    let tray = builder.build(app)?;
+
+    let status_commands = commands;
+    let status_item = status;
+    let session_action_item = session_action;
+    let app_handle = app.handle().clone();
+    std::thread::Builder::new()
+        .name("formation-lap-tray-status".to_owned())
+        .spawn(move || {
+            while let Ok(snapshot) = status_commands.refresh_processes() {
+                let (status_text, session_action_text, session_action_enabled) =
+                    tray_status(&snapshot.session);
+                let _ = status_item.set_text(format!("Status: {status_text}"));
+                let _ = session_action_item.set_text(session_action_text);
+                let _ = session_action_item.set_enabled(session_action_enabled);
+                if let Some(tray) = app_handle.tray_by_id("formation-lap-tray") {
+                    let _ = tray.set_tooltip(Some(format!("Formation Lap — {status_text}")));
+                }
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        })
+        .map_err(tauri::Error::Io)?;
+
+    Ok(tray)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let Ok(Some(_single_instance)) = desktop_host::SingleInstanceGuard::acquire() else {
+        return;
+    };
     let navigation_guard = tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard")
         .on_navigation(|_webview, url| navigation_is_allowed(url))
         .build();
@@ -82,8 +213,33 @@ pub fn run() {
             let storage_root = app.path().app_config_dir()?;
             let commands = NativeCommandHost::open(storage_root)
                 .map_err(|error| std::io::Error::other(error.message))?;
+            let settings = commands
+                .get_app_snapshot()
+                .map_err(|error| std::io::Error::other(error.message))?
+                .settings;
+            let _ = desktop_host::set_start_with_windows(settings.start_with_windows);
+            let tray = build_tray(app, commands.clone())?;
             app.manage(commands);
+            app.manage(tray);
+            if desktop_host::started_minimized()
+                && let Some(window) = app.get_webview_window("main")
+            {
+                window.hide()?;
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let commands = window.state::<NativeCommandHost>();
+                match commands.request_window_close() {
+                    Ok(WindowCloseAction::HideToTray) => {
+                        let _ = window.hide();
+                    }
+                    Ok(WindowCloseAction::Exit) => window.app_handle().exit(0),
+                    Err(_) => {}
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_snapshot,
@@ -103,6 +259,9 @@ pub fn run() {
             commands::test_game_launch,
             commands::cancel_startup,
             commands::close_session,
+            commands::request_quit,
+            commands::update_settings,
+            commands::export_diagnostics,
             commands::accept_recovery,
             commands::dismiss_recovery,
             commands::discover_applications,

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { App } from "./App";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
 import { describe, expect, it } from "vitest";
@@ -34,6 +40,7 @@ function lifecycleSnapshot(): AppSnapshot {
   return {
     applicationName: "Formation Lap",
     foundationStatus: "ready",
+    settings: { startWithWindows: false, theme: "system", reduceMotion: false },
     session: idleSessionSnapshot(),
     applicationProcesses: [],
     profiles: [
@@ -324,6 +331,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
@@ -350,6 +362,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
@@ -368,6 +385,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
@@ -471,6 +493,11 @@ describe("Formation Lap shell", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        settings: {
+          startWithWindows: false,
+          theme: "system",
+          reduceMotion: false,
+        },
         session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],
@@ -524,6 +551,11 @@ describe("Formation Lap shell", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        settings: {
+          startWithWindows: false,
+          theme: "system",
+          reduceMotion: false,
+        },
         session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],
@@ -652,6 +684,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
@@ -691,6 +728,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
@@ -752,6 +794,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
@@ -818,6 +865,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
@@ -883,6 +935,11 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+      },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
@@ -965,5 +1022,89 @@ describe("Formation Lap shell", () => {
     expect(
       await screen.findByRole("button", { name: /Imported sprint/ }),
     ).toBeVisible();
+  });
+
+  it("persists desktop settings and applies theme and reduced-motion preferences", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Settings" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByLabelText(/Start with Windows/));
+    await user.click(screen.getByRole("button", { name: "Dark" }));
+    await user.click(screen.getByLabelText(/Reduce motion/));
+
+    await waitFor(async () => {
+      const settings = (await bridge.getAppSnapshot()).settings;
+      expect(settings).toEqual({
+        startWithWindows: true,
+        theme: "dark",
+        reduceMotion: true,
+      });
+    });
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.reduceMotion).toBe("true");
+    expect(screen.getByText(/Racing Profiles never auto-start/)).toBeVisible();
+  });
+
+  it("shows a sanitized local diagnostic export with no upload path", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Diagnostics" }),
+    );
+
+    const exportField = await screen.findByRole("textbox", {
+      name: "Diagnostic export",
+    });
+    const exportValue = (exportField as HTMLTextAreaElement).value;
+    expect(exportValue).toContain('"telemetryUpload": false');
+    expect(exportValue).not.toContain("canonicalExecutablePath");
+    expect(screen.getByText(/does not upload this export/)).toBeVisible();
+  });
+
+  it("makes active-Session Quit choices explicit and honors leave-running", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.session = {
+      state: "active",
+      activeProfileId: "profile-lifecycle",
+      applications: [
+        {
+          applicationId: "sim-lifecycle",
+          name: "Healthy fixture",
+          role: "primarySim",
+          requirement: null,
+          state: "running",
+        },
+      ],
+      summary: null,
+    };
+    snapshot.applicationProcesses = [processSnapshot()];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(await screen.findByRole("button", { name: "Quit…" }));
+    expect(
+      screen.getByRole("heading", {
+        name: "What should happen to this Session?",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Close Session and quit" }),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Leave applications running" }),
+    );
+    const detached = await bridge.getAppSnapshot();
+    expect(detached.session.state).toBe("idle");
+    expect(detached.applicationProcesses[0]?.ownership).toBe("preExisting");
+    expect(detached.applicationProcesses[0]?.status).toBe("runningPreExisting");
   });
 });

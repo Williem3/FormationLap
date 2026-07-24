@@ -9,6 +9,7 @@ import { idleSessionSnapshot } from "../session/session-snapshot";
 const emptySnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  settings: { startWithWindows: false, theme: "system", reduceMotion: false },
   session: idleSessionSnapshot(),
   applicationProcesses: [],
   profiles: [],

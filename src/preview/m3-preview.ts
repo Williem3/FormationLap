@@ -94,6 +94,7 @@ const leMansUltimate = {
 const dashboardSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  settings: { startWithWindows: false, theme: "system", reduceMotion: false },
   session: idleSessionSnapshot(),
   applicationProcesses: [
     {

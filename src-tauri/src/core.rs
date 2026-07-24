@@ -26,6 +26,12 @@ pub enum AppCommand {
     SelectProfile {
         profile_id: String,
     },
+    ExportProfile {
+        profile_id: String,
+    },
+    ImportProfile {
+        document: String,
+    },
 }
 
 /// Observable result of a completed FormationLapCore command.
@@ -35,6 +41,7 @@ pub enum CommandOutcome {
     ProfileUpdated { profile_id: String },
     ProfileDeleted { profile_id: String },
     ProfileSelected { profile_id: String },
+    ProfileExported { document: String },
 }
 
 #[derive(Debug)]
@@ -172,6 +179,14 @@ impl FormationLapCore {
                 }
                 self.settings_store.select_profile(profile_id.clone())?;
                 Ok(CommandOutcome::ProfileSelected { profile_id })
+            }
+            AppCommand::ExportProfile { profile_id } => {
+                let document = self.profile_library.export(&profile_id)?;
+                Ok(CommandOutcome::ProfileExported { document })
+            }
+            AppCommand::ImportProfile { document } => {
+                let profile_id = self.profile_library.import(&document)?;
+                Ok(CommandOutcome::ProfileCreated { profile_id })
             }
         }
     }

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "name": "Le Mans evening",
+  "primarySim": {
+    "name": "Le Mans Ultimate",
+    "launchRecipe": {
+      "source": {
+        "kind": "directExecutable",
+        "executablePath": ""
+      },
+      "arguments": [],
+      "workingDirectory": null,
+      "monitoredProcess": null,
+      "consoleVisibility": "hidden",
+      "elevated": false,
+      "startupTimeoutSeconds": 30,
+      "postStartDelayMilliseconds": 0,
+      "shutdownStrategy": {
+        "kind": "closeWindows"
+      }
+    }
+  },
+  "supportingApplications": [],
+  "vrEnabled": false,
+  "preferredVrLaunchMode": null,
+  "closeSession": {
+    "stopSteamVr": false
+  }
+}

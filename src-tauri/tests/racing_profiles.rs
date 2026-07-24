@@ -529,3 +529,86 @@ fn schema_one_profile_is_migrated_without_losing_identity() {
         "migration should retain the prior schema-one document"
     );
 }
+
+#[test]
+fn exported_racing_profile_is_portable_and_contains_no_runtime_identity() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Le Mans evening".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+
+    let document = match core
+        .execute(AppCommand::ExportProfile { profile_id })
+        .expect("an existing Racing Profile should export")
+    {
+        CommandOutcome::ProfileExported { document } => document,
+        other => panic!("expected profile export, got {other:?}"),
+    };
+
+    assert!(!document.contains("\"id\""));
+    assert!(!document.contains("pathNeedsRepair"));
+    assert!(!document.contains("processIdentity"));
+    let actual: serde_json::Value =
+        serde_json::from_str(&document).expect("export should be valid JSON");
+    let expected: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("example exported profile fixture should be valid JSON");
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn imported_profile_gets_fresh_identity_and_marks_missing_paths_for_repair() {
+    let storage = TempStorage::new();
+    let mut portable: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("example exported profile fixture should be valid JSON");
+    portable["id"] = serde_json::json!("transient-profile-id");
+    portable["primarySim"]["id"] = serde_json::json!("transient-entry-id");
+    portable["primarySim"]["processIdentity"] = serde_json::json!({
+        "pid": 42,
+        "creationTime": 1234
+    });
+    portable["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(r"C:\Missing\LeMansUltimate.exe");
+    let document =
+        serde_json::to_string_pretty(&portable).expect("portable fixture should serialize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+
+    let profile_id = match core
+        .execute(AppCommand::ImportProfile { document })
+        .expect("a portable Racing Profile should import")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected imported profile creation, got {other:?}"),
+    };
+
+    let imported = core
+        .snapshot()
+        .selected_profile
+        .expect("the imported Racing Profile should be selected");
+    assert_eq!(imported.id, profile_id);
+    assert_ne!(imported.id, "transient-profile-id");
+    assert_ne!(imported.primary_sim.id, "transient-entry-id");
+    assert_eq!(
+        imported.primary_sim.launch_recipe.source,
+        LaunchSource::DirectExecutable {
+            executable_path: r"C:\Missing\LeMansUltimate.exe".to_owned()
+        }
+    );
+    assert!(imported.primary_sim.path_needs_repair);
+    assert!(
+        !serde_json::to_string(&imported)
+            .expect("imported profile should serialize")
+            .contains("processIdentity")
+    );
+}

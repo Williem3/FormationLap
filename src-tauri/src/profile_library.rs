@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 const PROFILE_SCHEMA_VERSION: u32 = 2;
 const LEGACY_PROFILE_SCHEMA_VERSION: u32 = 1;
+const PORTABLE_PROFILE_SCHEMA_VERSION: u32 = 1;
 
 fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
     if name.trim().is_empty() {
@@ -66,6 +67,61 @@ impl From<RacingProfile> for RacingProfileDocument {
             vr_enabled: profile.vr_enabled,
             preferred_vr_launch_mode: profile.preferred_vr_launch_mode,
             close_session: profile.close_session,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableProfileApplication {
+    name: String,
+    launch_recipe: LaunchRecipe,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableSupportingApplication {
+    application: PortableProfileApplication,
+    requirement: crate::ApplicationRequirement,
+    keep_running: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableRacingProfileDocument {
+    schema_version: u32,
+    name: String,
+    primary_sim: PortableProfileApplication,
+    supporting_applications: Vec<PortableSupportingApplication>,
+    vr_enabled: bool,
+    preferred_vr_launch_mode: Option<crate::VrLaunchMode>,
+    close_session: CloseSessionSettings,
+}
+
+impl PortableRacingProfileDocument {
+    fn from_stored(profile: &RacingProfileDocument) -> Self {
+        Self {
+            schema_version: PORTABLE_PROFILE_SCHEMA_VERSION,
+            name: profile.name.clone(),
+            primary_sim: PortableProfileApplication {
+                name: profile.primary_sim.name.clone(),
+                launch_recipe: profile.primary_sim.launch_recipe.clone(),
+            },
+            supporting_applications: profile
+                .supporting_applications
+                .iter()
+                .map(|supporting_application| PortableSupportingApplication {
+                    application: PortableProfileApplication {
+                        name: supporting_application.application.name.clone(),
+                        launch_recipe: supporting_application.application.launch_recipe.clone(),
+                    },
+                    requirement: supporting_application.requirement.clone(),
+                    keep_running: supporting_application.keep_running,
+                })
+                .collect(),
+            vr_enabled: profile.vr_enabled,
+            preferred_vr_launch_mode: profile.preferred_vr_launch_mode.clone(),
+            close_session: profile.close_session.clone(),
         }
     }
 }
@@ -217,6 +273,99 @@ impl ProfileLibrary {
             .iter()
             .find(|profile| profile.id == profile_id)
             .map(RacingProfileDocument::as_profile)
+    }
+
+    pub(crate) fn export(&self, profile_id: &str) -> Result<String, CoreError> {
+        let profile = self
+            .profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
+        let mut document =
+            serde_json::to_string_pretty(&PortableRacingProfileDocument::from_stored(profile))?;
+        document.push('\n');
+        Ok(document)
+    }
+
+    pub(crate) fn import(&mut self, serialized: &str) -> Result<String, CoreError> {
+        let portable: PortableRacingProfileDocument = serde_json::from_str(serialized)?;
+        if portable.schema_version != PORTABLE_PROFILE_SCHEMA_VERSION {
+            return Err(CoreError::UnsupportedProfileSchema(portable.schema_version));
+        }
+        validate_profile_names(&portable.name, &portable.primary_sim.name)?;
+        for supporting_application in &portable.supporting_applications {
+            if supporting_application.application.name.trim().is_empty() {
+                return Err(CoreError::InvalidProfileName("Supporting Application name"));
+            }
+        }
+
+        let profile_id = Uuid::new_v4().to_string();
+        let primary_sim = ProfileApplication {
+            id: Uuid::new_v4().to_string(),
+            name: portable.primary_sim.name,
+            path_needs_repair: Self::path_needs_repair(&portable.primary_sim.launch_recipe),
+            launch_recipe: portable.primary_sim.launch_recipe,
+        };
+        let supporting_applications = portable
+            .supporting_applications
+            .into_iter()
+            .map(|supporting_application| {
+                let path_needs_repair =
+                    Self::path_needs_repair(&supporting_application.application.launch_recipe);
+                crate::SupportingApplication {
+                    application: ProfileApplication {
+                        id: Uuid::new_v4().to_string(),
+                        name: supporting_application.application.name,
+                        launch_recipe: supporting_application.application.launch_recipe,
+                        path_needs_repair,
+                    },
+                    requirement: supporting_application.requirement,
+                    keep_running: supporting_application.keep_running,
+                }
+            })
+            .collect();
+        let profile = RacingProfileDocument {
+            schema_version: PROFILE_SCHEMA_VERSION,
+            id: profile_id.clone(),
+            name: portable.name,
+            primary_sim,
+            supporting_applications,
+            vr_enabled: portable.vr_enabled,
+            preferred_vr_launch_mode: portable.preferred_vr_launch_mode,
+            close_session: portable.close_session,
+        };
+        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
+        let temporary = self
+            .profiles_directory
+            .join(format!(".{profile_id}.json.tmp"));
+        let mut document = serde_json::to_vec_pretty(&profile)?;
+        document.push(b'\n');
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&document)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(temporary, destination)?;
+
+        self.profiles.push(profile);
+        self.profiles.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        Ok(profile_id)
+    }
+
+    fn path_needs_repair(recipe: &LaunchRecipe) -> bool {
+        match &recipe.source {
+            crate::LaunchSource::DirectExecutable { executable_path } => {
+                !Path::new(executable_path).is_file()
+            }
+            crate::LaunchSource::Steam { .. } => false,
+        }
     }
 
     pub(crate) fn create(

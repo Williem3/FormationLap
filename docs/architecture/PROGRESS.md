@@ -3,7 +3,7 @@
 This is the only source of truth for milestone status. The milestone definitions
 and exit criteria live in [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Status values
 
@@ -23,8 +23,8 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
-| M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
-| M4 | `not_started` | — | — | — | — | Wait for M3 |
+| M3 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M3 evidence](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg) | Begin M4 |
+| M4 | `not_started` | — | — | — | — | Ready after M3 |
 | M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Capture and review recommended/Manual Entry wizard screenshots |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
@@ -34,28 +34,10 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M3 and M5 are active with non-overlapping scopes while M3 awaits its manual
-browser evidence.
+M5 is active while its automated behavior is complete and the two required
+wizard screenshots remain.
 
-M3 final Dashboard evidence slice:
-
-- Delivered: the complete FormationLapCore and Windows ProcessRuntime lifecycle,
-  stable identity and PID-reuse protection, real healthy/slow/failing/launcher/
-  console/window fixtures, graceful-before-force shutdown, Pre-existing Process
-  confirmation, bounded output, five typed commands, generated contracts, and
-  Dashboard lifecycle controls.
-- Behavior: the Dashboard renders only Rust-shaped snapshot state and shows
-  Running, Running (pre-existing), Not Responding, and Failed with icon and text.
-- Test seams: FormationLapCore with ScriptedProcessRuntime, real Windows
-  ProcessRuntime integration tests, narrow Tauri commands, and React through
-  NativeBridge.
-- File scope: `src/app`, `src/native-bridge`, `src/preview/m3-preview.ts`,
-  `scripts/audit-capabilities.mjs`, `docs/architecture/evidence/M3.md`, and this
-  ledger.
-- Next action: reload `?preview=m3-dashboard`, capture the status screenshot,
-  verify scaling and interactions, then complete M3.
-
-M5 targeted Steam discovery slice:
+M5 final wizard evidence slice:
 
 - Delivered: versioned bundled catalogs contain the exact ten Primary Sims and
   nine Supporting Applications; reviewed Steam IDs are unique; the actionable
@@ -181,6 +163,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M5 | Added local Steam and executable icon extraction, generic fallback, and documented the existing missing-path repair workflow | [`M5 evidence`](evidence/M5.md) and [discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md): 56 Rust tests and all-target/all-feature Clippy passed | No blocker; expose discovery and recommendations through NativeBridge, then build Manual Entry |
 | 2026-07-23 | Codex `/root` | M5 | Exposed discovery and ranked recommendations through two narrow Tauri commands, generated contracts, and matching NativeBridge adapters | [`M5 evidence`](evidence/M5.md): 57 Rust tests, 15 React tests, contracts, Clippy, and fifteen-command capability audit passed | No blocker; build and capture the recommended and Manual Entry wizard paths |
 | 2026-07-23 | Codex `/root` | M5 | Added the installed-sim picker, ranked installed recommendations, saved discovered launch sources, Manual Entry, and a deterministic M5 preview | [`M5 evidence`](evidence/M5.md): 17 React tests, lint, typecheck, and production build passed | Reload `?preview=m5-wizard`; capture and review the required recommended and Manual Entry screenshots |
+| 2026-07-24 | Codex `/root` | M3 | Captured all Dashboard status families and fixed lifecycle-row overflow at a 200% effective viewport | [`M3 evidence`](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg), `pnpm.cmd verify`, and browser measurements at 125%/200% | M3 complete; M4 and M7 are ready |
 
 ## Handoff entry template
 

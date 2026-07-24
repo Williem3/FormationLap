@@ -1767,6 +1767,43 @@ button:disabled {
     --workspace-gutter: 16px;
   }
 
+  .profile-dashboard {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .lifecycle-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .lifecycle-row > .application-icon {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+  }
+
+  .lifecycle-row > .application-copy {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .lifecycle-row > .classification-label {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .lifecycle-row > .status-label {
+    grid-row: 2;
+    grid-column: 2 / -1;
+  }
+
+  .lifecycle-row > .application-actions {
+    grid-row: 3;
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
   .workspace-header {
     gap: 16px;
   }

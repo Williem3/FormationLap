@@ -3,7 +3,14 @@
   "applications": [
     {
       "id": "simhub",
-      "name": "SimHub"
+      "name": "SimHub",
+      "executableNames": ["SimHubWPF.exe", "SimHub.exe"],
+      "knownLocations": [
+        {
+          "root": "programFilesX86",
+          "executableRelativePath": "SimHub/SimHubWPF.exe"
+        }
+      ]
     },
     {
       "id": "crew-chief",

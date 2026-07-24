@@ -4,7 +4,13 @@
     {
       "id": "iracing",
       "name": "iRacing",
-      "steamAppId": 266410
+      "steamAppId": 266410,
+      "installedAppMatchers": [
+        {
+          "displayName": "iRacing.com Race Simulation",
+          "executableRelativePath": "iRacingSim64DX11.exe"
+        }
+      ]
     },
     {
       "id": "assetto-corsa",

@@ -1,5 +1,7 @@
 use formation_lap_lib::{
     AppCommand, CommandOutcome, DiscoveredInstallation, FormationLapCore, TargetedDiscoverySources,
+    WindowsInstalledApplication, WindowsKnownLocation, WindowsKnownLocationRoot,
+    WindowsRunningProcess,
 };
 use std::{
     fs,
@@ -274,6 +276,7 @@ fn steam_discovery_follows_declared_libraries_and_omits_missing_installations() 
         storage.path(),
         TargetedDiscoverySources {
             steam_roots: vec![steam_root],
+            ..TargetedDiscoverySources::default()
         },
     )
     .expect("FormationLapCore should open with targeted Steam roots");
@@ -298,5 +301,178 @@ fn steam_discovery_follows_declared_libraries_and_omits_missing_installations() 
             })
             .collect::<Vec<_>>(),
         vec![("assetto-corsa", 244210), ("le-mans-ultimate", 2399420)]
+    );
+}
+
+#[test]
+fn installed_app_discovery_distinguishes_standalone_iracing_from_steam() {
+    let storage = TempStorage::new();
+    let steam_root = storage.path().join("Steam");
+    let steamapps = steam_root.join("steamapps");
+    fs::create_dir_all(steamapps.join("common").join("iRacing"))
+        .expect("Steam iRacing installation should be created");
+    fs::write(
+        steamapps.join("appmanifest_266410.acf"),
+        r#""AppState"
+{
+  "appid" "266410"
+  "installdir" "iRacing"
+}"#,
+    )
+    .expect("Steam iRacing manifest should be written");
+
+    let standalone_root = storage.path().join("iRacing standalone");
+    fs::create_dir_all(&standalone_root).expect("standalone iRacing root should be created");
+    let standalone_executable = standalone_root.join("iRacingSim64DX11.exe");
+    fs::write(&standalone_executable, b"fixture")
+        .expect("standalone iRacing executable should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            steam_roots: vec![steam_root],
+            installed_applications: vec![
+                WindowsInstalledApplication {
+                    display_name: "iRacing.com Race Simulation".to_owned(),
+                    install_location: standalone_root,
+                },
+                WindowsInstalledApplication {
+                    display_name: "Unrelated telemetry utility".to_owned(),
+                    install_location: storage.path().join("unrelated"),
+                },
+            ],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with targeted installed-app records");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("installed-app discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    let iracing_installations = discovery
+        .installed_primary_sims
+        .iter()
+        .filter(|sim| sim.id == "iracing")
+        .map(|sim| match &sim.installation {
+            DiscoveredInstallation::Steam { app_id, .. } => format!("steam:{app_id}"),
+            DiscoveredInstallation::DirectExecutable { executable_path } => {
+                format!("direct:{executable_path}")
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        iracing_installations,
+        vec![
+            "steam:266410".to_owned(),
+            format!(
+                "direct:{}",
+                standalone_executable
+                    .canonicalize()
+                    .expect("fixture executable should canonicalize")
+                    .to_string_lossy()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn running_process_discovery_matches_curated_executable_names_only() {
+    let storage = TempStorage::new();
+    let simhub_executable = storage.path().join("SimHubWPF.exe");
+    let unrelated_executable = storage.path().join("simhub-helper.exe");
+    fs::write(&simhub_executable, b"fixture").expect("SimHub fixture should be written");
+    fs::write(&unrelated_executable, b"fixture").expect("unrelated fixture should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            running_processes: vec![
+                WindowsRunningProcess {
+                    executable_path: simhub_executable.clone(),
+                },
+                WindowsRunningProcess {
+                    executable_path: unrelated_executable,
+                },
+            ],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with targeted running Processes");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("running Process discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    assert_eq!(
+        discovery.installed_supporting_applications.len(),
+        1,
+        "only an exact curated executable name should match"
+    );
+    let simhub = &discovery.installed_supporting_applications[0];
+    assert_eq!(simhub.id, "simhub");
+    assert_eq!(
+        simhub.installation,
+        DiscoveredInstallation::DirectExecutable {
+            executable_path: simhub_executable
+                .canonicalize()
+                .expect("fixture executable should canonicalize")
+                .to_string_lossy()
+                .into_owned(),
+        }
+    );
+}
+
+#[test]
+fn known_location_discovery_checks_only_signed_catalog_paths() {
+    let storage = TempStorage::new();
+    let program_files_x86 = storage.path().join("Program Files (x86)");
+    let simhub_executable = program_files_x86.join("SimHub").join("SimHubWPF.exe");
+    fs::create_dir_all(
+        simhub_executable
+            .parent()
+            .expect("fixture executable should have a parent"),
+    )
+    .expect("known SimHub location should be created");
+    fs::write(&simhub_executable, b"fixture").expect("SimHub fixture should be written");
+    fs::write(storage.path().join("SimHubWPF.exe"), b"unscoped fixture")
+        .expect("unscoped lookalike should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            known_location_roots: vec![WindowsKnownLocationRoot {
+                kind: WindowsKnownLocation::ProgramFilesX86,
+                path: program_files_x86,
+            }],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with targeted known-location roots");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("known-location discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    assert_eq!(discovery.installed_supporting_applications.len(), 1);
+    assert_eq!(
+        discovery.installed_supporting_applications[0].installation,
+        DiscoveredInstallation::DirectExecutable {
+            executable_path: simhub_executable
+                .canonicalize()
+                .expect("fixture executable should canonicalize")
+                .to_string_lossy()
+                .into_owned(),
+        }
     );
 }

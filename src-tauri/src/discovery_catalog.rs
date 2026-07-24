@@ -1,13 +1,13 @@
 use crate::{
     CatalogPrimarySim, CatalogSupportingApplication, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoverySnapshot,
+    DiscoveredSupportingApplication, DiscoverySnapshot,
 };
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt, fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 const BUNDLED_SIMS: &str = include_str!("../../catalog/sims.json");
@@ -18,6 +18,266 @@ const CATALOG_SCHEMA_VERSION: u32 = 1;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TargetedDiscoverySources {
     pub steam_roots: Vec<PathBuf>,
+    pub installed_applications: Vec<WindowsInstalledApplication>,
+    pub running_processes: Vec<WindowsRunningProcess>,
+    pub known_location_roots: Vec<WindowsKnownLocationRoot>,
+}
+
+/// One application record observed from a targeted Windows installed-app key.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsInstalledApplication {
+    pub display_name: String,
+    pub install_location: PathBuf,
+}
+
+/// One Process image observed from the targeted Windows process inventory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsRunningProcess {
+    pub executable_path: PathBuf,
+}
+
+/// One allowlisted Windows root used by Curated Catalog relative paths.
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(rename_all = "camelCase")]
+pub enum WindowsKnownLocation {
+    ProgramFiles,
+    ProgramFilesX86,
+    LocalAppData,
+    ProgramData,
+    UserProfile,
+}
+
+/// The local path observed for one allowlisted Windows root.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsKnownLocationRoot {
+    pub kind: WindowsKnownLocation,
+    pub path: PathBuf,
+}
+
+impl TargetedDiscoverySources {
+    pub(crate) fn windows_defaults() -> Self {
+        windows_sources::collect()
+    }
+}
+
+#[cfg(not(windows))]
+mod windows_sources {
+    use super::TargetedDiscoverySources;
+
+    pub(super) fn collect() -> TargetedDiscoverySources {
+        TargetedDiscoverySources::default()
+    }
+}
+
+#[cfg(windows)]
+mod windows_sources {
+    use super::{
+        TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
+        WindowsKnownLocationRoot, WindowsRunningProcess,
+    };
+    use std::{
+        collections::BTreeSet,
+        ffi::{OsStr, OsString},
+        mem::size_of,
+        os::windows::ffi::{OsStrExt, OsStringExt},
+        path::PathBuf,
+        ptr::{null, null_mut},
+    };
+    use windows_sys::Win32::{
+        Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS},
+        System::Registry::{
+            HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY,
+            KEY_WOW64_64KEY, REG_EXPAND_SZ, REG_SZ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
+            RegQueryValueExW,
+        },
+    };
+
+    const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+
+    struct OwnedRegistryKey(HKEY);
+
+    impl Drop for OwnedRegistryKey {
+        fn drop(&mut self) {
+            unsafe {
+                RegCloseKey(self.0);
+            }
+        }
+    }
+
+    pub(super) fn collect() -> TargetedDiscoverySources {
+        TargetedDiscoverySources {
+            steam_roots: steam_roots(),
+            installed_applications: installed_applications(),
+            running_processes: crate::process_runtime::running_executable_paths()
+                .into_iter()
+                .map(|executable_path| WindowsRunningProcess { executable_path })
+                .collect(),
+            known_location_roots: known_location_roots(),
+        }
+    }
+
+    fn wide_null(value: impl AsRef<OsStr>) -> Vec<u16> {
+        value
+            .as_ref()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    fn open_key(root: HKEY, path: impl AsRef<OsStr>, access: u32) -> Option<OwnedRegistryKey> {
+        let path = wide_null(path);
+        let mut key = null_mut();
+        let status = unsafe { RegOpenKeyExW(root, path.as_ptr(), 0, access, &mut key) };
+        (status == ERROR_SUCCESS).then_some(OwnedRegistryKey(key))
+    }
+
+    fn query_string(key: HKEY, value_name: &str) -> Option<String> {
+        let value_name = wide_null(value_name);
+        let mut value_type = 0;
+        let mut byte_count = 0;
+        let status = unsafe {
+            RegQueryValueExW(
+                key,
+                value_name.as_ptr(),
+                null_mut(),
+                &mut value_type,
+                null_mut(),
+                &mut byte_count,
+            )
+        };
+        if status != ERROR_SUCCESS
+            || !matches!(value_type, REG_SZ | REG_EXPAND_SZ)
+            || byte_count == 0
+        {
+            return None;
+        }
+        let mut buffer = vec![0_u16; (byte_count as usize).div_ceil(size_of::<u16>())];
+        let status = unsafe {
+            RegQueryValueExW(
+                key,
+                value_name.as_ptr(),
+                null_mut(),
+                &mut value_type,
+                buffer.as_mut_ptr().cast(),
+                &mut byte_count,
+            )
+        };
+        if status != ERROR_SUCCESS {
+            return None;
+        }
+        while buffer.last() == Some(&0) {
+            buffer.pop();
+        }
+        let value = OsString::from_wide(&buffer)
+            .to_string_lossy()
+            .trim()
+            .to_owned();
+        (!value.is_empty()).then_some(value)
+    }
+
+    fn subkey_names(key: HKEY) -> Vec<OsString> {
+        let mut names = Vec::new();
+        for index in 0.. {
+            let mut buffer = vec![0_u16; 16_384];
+            let mut length = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+            let status = unsafe {
+                RegEnumKeyExW(
+                    key,
+                    index,
+                    buffer.as_mut_ptr(),
+                    &mut length,
+                    null(),
+                    null_mut(),
+                    null_mut(),
+                    null_mut(),
+                )
+            };
+            if status == ERROR_NO_MORE_ITEMS {
+                break;
+            }
+            if status != ERROR_SUCCESS {
+                continue;
+            }
+            buffer.truncate(length as usize);
+            names.push(OsString::from_wide(&buffer));
+        }
+        names
+    }
+
+    fn installed_applications() -> Vec<WindowsInstalledApplication> {
+        let mut applications = Vec::new();
+        let mut seen = BTreeSet::new();
+        for root in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+            for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+                let Some(uninstall_key) = open_key(root, UNINSTALL_KEY, KEY_READ | view) else {
+                    continue;
+                };
+                for subkey_name in subkey_names(uninstall_key.0) {
+                    let Some(application_key) = open_key(uninstall_key.0, &subkey_name, KEY_READ)
+                    else {
+                        continue;
+                    };
+                    let Some(display_name) = query_string(application_key.0, "DisplayName") else {
+                        continue;
+                    };
+                    let Some(install_location) = query_string(application_key.0, "InstallLocation")
+                    else {
+                        continue;
+                    };
+                    let install_location = PathBuf::from(install_location);
+                    let identity = (
+                        display_name.to_lowercase(),
+                        install_location.to_string_lossy().to_lowercase(),
+                    );
+                    if seen.insert(identity) {
+                        applications.push(WindowsInstalledApplication {
+                            display_name,
+                            install_location,
+                        });
+                    }
+                }
+            }
+        }
+        applications
+    }
+
+    fn steam_roots() -> Vec<PathBuf> {
+        let mut roots = Vec::new();
+        for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+            let Some(steam_key) =
+                open_key(HKEY_CURRENT_USER, r"Software\Valve\Steam", KEY_READ | view)
+            else {
+                continue;
+            };
+            if let Some(steam_path) = query_string(steam_key.0, "SteamPath") {
+                roots.push(PathBuf::from(steam_path));
+            }
+        }
+        if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
+            roots.push(PathBuf::from(program_files_x86).join("Steam"));
+        }
+        roots.sort();
+        roots.dedup();
+        roots
+    }
+
+    fn known_location_roots() -> Vec<WindowsKnownLocationRoot> {
+        [
+            ("ProgramFiles", WindowsKnownLocation::ProgramFiles),
+            ("ProgramFiles(x86)", WindowsKnownLocation::ProgramFilesX86),
+            ("LOCALAPPDATA", WindowsKnownLocation::LocalAppData),
+            ("ProgramData", WindowsKnownLocation::ProgramData),
+            ("USERPROFILE", WindowsKnownLocation::UserProfile),
+        ]
+        .into_iter()
+        .filter_map(|(environment_name, kind)| {
+            std::env::var_os(environment_name).map(|path| WindowsKnownLocationRoot {
+                kind,
+                path: PathBuf::from(path),
+            })
+        })
+        .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -96,19 +356,58 @@ impl Error for DiscoveryCatalogError {
 #[serde(rename_all = "camelCase")]
 struct SimCatalogDocument {
     schema_version: u32,
-    sims: Vec<CatalogPrimarySim>,
+    sims: Vec<SimCatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SimCatalogEntry {
+    id: String,
+    name: String,
+    #[serde(default)]
+    steam_app_id: Option<u32>,
+    #[serde(default)]
+    installed_app_matchers: Vec<InstalledApplicationMatcher>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledApplicationMatcher {
+    display_name: String,
+    executable_relative_path: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SupportingApplicationCatalogDocument {
     schema_version: u32,
-    applications: Vec<CatalogSupportingApplication>,
+    applications: Vec<SupportingApplicationCatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupportingApplicationCatalogEntry {
+    id: String,
+    name: String,
+    #[serde(default)]
+    executable_names: Vec<String>,
+    #[serde(default)]
+    known_locations: Vec<KnownLocationMatcher>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KnownLocationMatcher {
+    root: WindowsKnownLocation,
+    executable_relative_path: String,
 }
 
 pub(crate) struct DiscoveryCatalog {
     primary_sims: Vec<CatalogPrimarySim>,
     supporting_applications: Vec<CatalogSupportingApplication>,
+    installed_app_matchers: BTreeMap<String, Vec<InstalledApplicationMatcher>>,
+    supporting_executable_names: BTreeMap<String, Vec<String>>,
+    supporting_known_locations: BTreeMap<String, Vec<KnownLocationMatcher>>,
     sources: TargetedDiscoverySources,
 }
 
@@ -116,24 +415,228 @@ impl DiscoveryCatalog {
     pub(crate) fn bundled_with_sources(
         sources: TargetedDiscoverySources,
     ) -> Result<Self, DiscoveryCatalogError> {
-        let snapshot = validate_catalog_documents(BUNDLED_SIMS, BUNDLED_APPLICATIONS)?;
+        let documents = parse_and_validate_catalog_documents(BUNDLED_SIMS, BUNDLED_APPLICATIONS)?;
+        let mut primary_sims = Vec::with_capacity(documents.sims.len());
+        let mut installed_app_matchers = BTreeMap::new();
+        for sim in documents.sims {
+            installed_app_matchers.insert(sim.id.clone(), sim.installed_app_matchers);
+            primary_sims.push(CatalogPrimarySim {
+                id: sim.id,
+                name: sim.name,
+                steam_app_id: sim.steam_app_id,
+            });
+        }
+        let mut supporting_applications =
+            Vec::with_capacity(documents.supporting_applications.len());
+        let mut supporting_executable_names = BTreeMap::new();
+        let mut supporting_known_locations = BTreeMap::new();
+        for application in documents.supporting_applications {
+            supporting_executable_names
+                .insert(application.id.clone(), application.executable_names);
+            supporting_known_locations.insert(application.id.clone(), application.known_locations);
+            supporting_applications.push(CatalogSupportingApplication {
+                id: application.id,
+                name: application.name,
+            });
+        }
         Ok(Self {
-            primary_sims: snapshot.primary_sims,
-            supporting_applications: snapshot.supporting_applications,
+            primary_sims,
+            supporting_applications,
+            installed_app_matchers,
+            supporting_executable_names,
+            supporting_known_locations,
             sources,
         })
     }
 
     pub(crate) fn snapshot(&self) -> DiscoverySnapshot {
+        let mut installed_primary_sims =
+            discover_steam_installations(&self.primary_sims, &self.sources.steam_roots);
+        installed_primary_sims.extend(discover_installed_applications(
+            &self.primary_sims,
+            &self.installed_app_matchers,
+            &self.sources.installed_applications,
+        ));
+        let mut installed_supporting_applications = discover_running_supporting_applications(
+            &self.supporting_applications,
+            &self.supporting_executable_names,
+            &self.sources.running_processes,
+        );
+        installed_supporting_applications.extend(discover_known_location_supporting_applications(
+            &self.supporting_applications,
+            &self.supporting_known_locations,
+            &self.sources.known_location_roots,
+        ));
+        installed_supporting_applications =
+            unique_supporting_applications(installed_supporting_applications);
         DiscoverySnapshot {
             primary_sims: self.primary_sims.clone(),
             supporting_applications: self.supporting_applications.clone(),
-            installed_primary_sims: discover_steam_installations(
-                &self.primary_sims,
-                &self.sources.steam_roots,
-            ),
+            installed_primary_sims,
+            installed_supporting_applications,
         }
     }
+}
+
+fn discover_known_location_supporting_applications(
+    supporting_applications: &[CatalogSupportingApplication],
+    matchers_by_application: &BTreeMap<String, Vec<KnownLocationMatcher>>,
+    known_location_roots: &[WindowsKnownLocationRoot],
+) -> Vec<DiscoveredSupportingApplication> {
+    let mut discovered = Vec::new();
+    for application in supporting_applications {
+        let Some(matchers) = matchers_by_application.get(&application.id) else {
+            continue;
+        };
+        for matcher in matchers {
+            for known_root in known_location_roots {
+                if known_root.kind != matcher.root {
+                    continue;
+                }
+                let Some(executable_path) =
+                    safe_catalog_relative_path(&known_root.path, &matcher.executable_relative_path)
+                else {
+                    continue;
+                };
+                if !executable_path.is_file() {
+                    continue;
+                }
+                let executable_path = executable_path
+                    .canonicalize()
+                    .unwrap_or(executable_path)
+                    .to_string_lossy()
+                    .into_owned();
+                discovered.push(DiscoveredSupportingApplication {
+                    id: application.id.clone(),
+                    name: application.name.clone(),
+                    installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                });
+            }
+        }
+    }
+    discovered
+}
+
+fn unique_supporting_applications(
+    applications: Vec<DiscoveredSupportingApplication>,
+) -> Vec<DiscoveredSupportingApplication> {
+    let mut seen = BTreeSet::new();
+    applications
+        .into_iter()
+        .filter(|application| {
+            let installation = match &application.installation {
+                DiscoveredInstallation::DirectExecutable { executable_path } => {
+                    format!("direct:{executable_path}")
+                }
+                DiscoveredInstallation::Steam { app_id, .. } => format!("steam:{app_id}"),
+            };
+            seen.insert((application.id.clone(), installation))
+        })
+        .collect()
+}
+
+fn discover_running_supporting_applications(
+    supporting_applications: &[CatalogSupportingApplication],
+    executable_names_by_application: &BTreeMap<String, Vec<String>>,
+    running_processes: &[WindowsRunningProcess],
+) -> Vec<DiscoveredSupportingApplication> {
+    let mut executable_paths = BTreeSet::new();
+    let mut discovered = Vec::new();
+    for application in supporting_applications {
+        let Some(executable_names) = executable_names_by_application.get(&application.id) else {
+            continue;
+        };
+        for process in running_processes {
+            let Some(file_name) = process
+                .executable_path
+                .file_name()
+                .and_then(|name| name.to_str())
+            else {
+                continue;
+            };
+            if !executable_names
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(file_name))
+                || !process.executable_path.is_file()
+            {
+                continue;
+            }
+            let executable_path = process
+                .executable_path
+                .canonicalize()
+                .unwrap_or_else(|_| process.executable_path.clone())
+                .to_string_lossy()
+                .into_owned();
+            if !executable_paths.insert(executable_path.clone()) {
+                continue;
+            }
+            discovered.push(DiscoveredSupportingApplication {
+                id: application.id.clone(),
+                name: application.name.clone(),
+                installation: DiscoveredInstallation::DirectExecutable { executable_path },
+            });
+        }
+    }
+    discovered
+}
+
+fn discover_installed_applications(
+    primary_sims: &[CatalogPrimarySim],
+    matchers_by_sim: &BTreeMap<String, Vec<InstalledApplicationMatcher>>,
+    installed_applications: &[WindowsInstalledApplication],
+) -> Vec<DiscoveredPrimarySim> {
+    let mut executable_paths = BTreeSet::new();
+    let mut discovered = Vec::new();
+    for sim in primary_sims {
+        let Some(matchers) = matchers_by_sim.get(&sim.id) else {
+            continue;
+        };
+        for matcher in matchers {
+            for installed_application in installed_applications {
+                if !matcher
+                    .display_name
+                    .eq_ignore_ascii_case(&installed_application.display_name)
+                {
+                    continue;
+                }
+                let Some(executable_path) = safe_catalog_relative_path(
+                    &installed_application.install_location,
+                    &matcher.executable_relative_path,
+                ) else {
+                    continue;
+                };
+                if !executable_path.is_file() {
+                    continue;
+                }
+                let executable_path = executable_path
+                    .canonicalize()
+                    .unwrap_or(executable_path)
+                    .to_string_lossy()
+                    .into_owned();
+                if !executable_paths.insert(executable_path.clone()) {
+                    continue;
+                }
+                discovered.push(DiscoveredPrimarySim {
+                    id: sim.id.clone(),
+                    name: sim.name.clone(),
+                    installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                });
+            }
+        }
+    }
+    discovered
+}
+
+fn safe_catalog_relative_path(root: &Path, relative_path: &str) -> Option<PathBuf> {
+    let relative_path = Path::new(relative_path);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return None;
+    }
+    Some(root.join(relative_path))
 }
 
 fn discover_steam_installations(
@@ -241,10 +744,15 @@ fn quoted_tokens(document: &str) -> Vec<String> {
     tokens
 }
 
-pub fn validate_catalog_documents(
+struct ValidatedCatalogDocuments {
+    sims: Vec<SimCatalogEntry>,
+    supporting_applications: Vec<SupportingApplicationCatalogEntry>,
+}
+
+fn parse_and_validate_catalog_documents(
     sims: &str,
     supporting_applications: &str,
-) -> Result<DiscoverySnapshot, DiscoveryCatalogError> {
+) -> Result<ValidatedCatalogDocuments, DiscoveryCatalogError> {
     let document: SimCatalogDocument =
         serde_json::from_str(sims).map_err(DiscoveryCatalogError::InvalidDocument)?;
     if document.schema_version != CATALOG_SCHEMA_VERSION {
@@ -285,9 +793,36 @@ pub fn validate_catalog_documents(
         );
     }
 
-    Ok(DiscoverySnapshot {
-        primary_sims: document.sims,
+    Ok(ValidatedCatalogDocuments {
+        sims: document.sims,
         supporting_applications: application_document.applications,
+    })
+}
+
+pub fn validate_catalog_documents(
+    sims: &str,
+    supporting_applications: &str,
+) -> Result<DiscoverySnapshot, DiscoveryCatalogError> {
+    let documents = parse_and_validate_catalog_documents(sims, supporting_applications)?;
+    Ok(DiscoverySnapshot {
+        primary_sims: documents
+            .sims
+            .into_iter()
+            .map(|sim| CatalogPrimarySim {
+                id: sim.id,
+                name: sim.name,
+                steam_app_id: sim.steam_app_id,
+            })
+            .collect(),
+        supporting_applications: documents
+            .supporting_applications
+            .into_iter()
+            .map(|application| CatalogSupportingApplication {
+                id: application.id,
+                name: application.name,
+            })
+            .collect(),
         installed_primary_sims: Vec::new(),
+        installed_supporting_applications: Vec::new(),
     })
 }

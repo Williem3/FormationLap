@@ -25,7 +25,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
-| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add targeted Windows installed-app, running-process, and known-location discovery |
+| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add compatibility-ranked recommendations and LMUFFB's GitHub Update Provider |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
@@ -75,7 +75,15 @@ M5 targeted Steam discovery slice:
   discovers Assetto Corsa and Le Mans Ultimate from separate manifests, and
   omits a stale Assetto Corsa Competizione manifest with no installation
   directory.
-- Next action: write the red targeted Windows installed-app discovery test.
+- Delivered: bounded production Windows collection for uninstall records,
+  accessible Process images, the Steam registry root, and five known-location
+  roots; signed matchers and existing-file checks decide results.
+- Evidence: standalone and Steam iRacing remain distinct; exact running-process
+  and signed known-location SimHub fixtures pass; the
+  [targeted discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md) documents
+  every read and match scope.
+- Next action: write the red compatibility-ranking test for Le Mans Ultimate
+  and LMUFFB.
 
 Known environment facts:
 
@@ -142,6 +150,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M2 | Completed every profile, persistence, recovery, UI, keyboard, and scaling exit criterion | [`M2 evidence`](evidence/M2.md); user confirmed native five-control Tab traversal; worktree and evidence links reviewed | No blocker; begin M3 with a red FormationLapCore launch test through ProcessRuntime |
 | 2026-07-23 | Codex `/root` | M3 | Delivered stable process identity, the complete local lifecycle policy, 11 real Windows fixture cases, five typed commands, Dashboard controls/status/output, and the VirtualDesktopSwitcher-compatible demonstration | [`M3 evidence`](evidence/M3.md): 45 Rust tests, 14 React tests, Rust fmt/Clippy, frontend verify/build, generated contracts, and zero-permission capability audit passed | Reload the already-open `?preview=m3-dashboard` tab so screenshot/scaling review can complete M3 |
 | 2026-07-23 | Codex `/root` | M5 | Added limited Steam discovery through FormationLapCore, following declared libraries and curated App IDs while omitting stale installations | [`M5 evidence`](evidence/M5.md): 50 Rust tests and all-target/all-feature Clippy passed; the real temporary fixture covers two libraries and a missing installation | No blocker; add targeted Windows installed-app, running-process, and known-location discovery |
+| 2026-07-23 | Codex `/root` | M5 | Added bounded installed-app, running-Process, and known-location discovery with separate Steam and standalone iRacing results | [`M5 evidence`](evidence/M5.md) and the [discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md): 53 Rust tests and all-target/all-feature Clippy passed | No blocker; rank compatibility recommendations and add LMUFFB's GitHub Update Provider |
 
 ## Handoff entry template
 

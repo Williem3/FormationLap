@@ -266,6 +266,16 @@ pub struct DiscoveredPrimarySim {
     pub installation: DiscoveredInstallation,
 }
 
+/// One curated Supporting Application found at a targeted local source.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoveredSupportingApplication {
+    pub id: String,
+    pub name: String,
+    pub installation: DiscoveredInstallation,
+}
+
 /// Curated and locally discovered applications available to profile flows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -275,6 +285,8 @@ pub struct DiscoverySnapshot {
     pub supporting_applications: Vec<CatalogSupportingApplication>,
     #[serde(default)]
     pub installed_primary_sims: Vec<DiscoveredPrimarySim>,
+    #[serde(default)]
+    pub installed_supporting_applications: Vec<DiscoveredSupportingApplication>,
 }
 
 /// Authoritative native state rendered by React.

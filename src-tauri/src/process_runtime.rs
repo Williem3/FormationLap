@@ -3,6 +3,16 @@ use crate::{LaunchRecipe, ProcessIdentity, ProcessOutput, ShutdownStrategy};
 use std::collections::BTreeMap;
 use std::{error::Error, fmt, time::Duration};
 
+#[cfg(windows)]
+pub(crate) fn running_executable_paths() -> Vec<std::path::PathBuf> {
+    windows_adapter::running_executable_paths()
+}
+
+#[cfg(not(windows))]
+pub(crate) fn running_executable_paths() -> Vec<std::path::PathBuf> {
+    Vec::new()
+}
+
 /// Failure reported by a ProcessRuntime adapter.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProcessRuntimeError {
@@ -581,6 +591,32 @@ mod windows_adapter {
 
         matches.sort_by_key(|identity| identity.pid);
         Ok(matches)
+    }
+
+    pub(super) fn running_executable_paths() -> Vec<PathBuf> {
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Vec::new();
+        }
+        let snapshot = OwnedHandle(snapshot);
+        let Ok(entry_size) = u32::try_from(size_of::<PROCESSENTRY32W>()) else {
+            return Vec::new();
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: entry_size,
+            ..PROCESSENTRY32W::default()
+        };
+        let mut executable_paths = Vec::new();
+        let mut has_entry = unsafe { Process32FirstW(snapshot.0, &mut entry) } != 0;
+        while has_entry {
+            if let Ok(identity) = process_identity(entry.th32ProcessID) {
+                executable_paths.push(PathBuf::from(identity.canonical_executable_path));
+            }
+            has_entry = unsafe { Process32NextW(snapshot.0, &mut entry) } != 0;
+        }
+        executable_paths.sort();
+        executable_paths.dedup();
+        executable_paths
     }
 
     pub(super) fn launch(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {

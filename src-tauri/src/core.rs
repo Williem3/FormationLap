@@ -183,7 +183,11 @@ pub struct FormationLapCore {
 
 impl FormationLapCore {
     pub fn open(storage_root: impl AsRef<std::path::Path>) -> Result<Self, CoreError> {
-        Self::open_with_runtime(storage_root, WindowsProcessRuntime::new())
+        Self::open_with_runtime_and_discovery_sources(
+            storage_root,
+            WindowsProcessRuntime::new(),
+            TargetedDiscoverySources::windows_defaults(),
+        )
     }
 
     pub fn open_with_discovery_sources(

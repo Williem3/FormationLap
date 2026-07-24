@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Audit M2 exit criteria and capture UI evidence |
+| M2 | `blocked` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Open the M2 preview in a fresh in-app Browser tab and capture manual UI evidence |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,7 +34,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 remains in progress after the profile-management slice:
+M2 is blocked after the profile-management slice:
 
 - Delivered: `CreateProfile` assigns a stable identifier, atomically persists
   one versioned Racing Profile with exactly one Primary Sim; blank or
@@ -67,8 +67,10 @@ M2 remains in progress after the profile-management slice:
   legacy interrupted write leaves a temporary marker. If a live Racing Profile
   replacement is invalid JSON or contains invalid names, ProfileLibrary
   validates and restores its bounded last-valid backup before exposing state.
-- Next behavior: audit every M2 exit criterion, close any evidence gap, and
-  capture the wizard and editor screenshots plus keyboard/scaling results.
+- Unblock action: open
+  `http://127.0.0.1:1420/?preview=m2-wizard` in a fresh Codex in-app Browser
+  tab. Then capture the wizard and editor screenshots plus keyboard/scaling
+  results.
 - Test seams: FormationLapCore, Tauri commands and generated contracts, and
   React behavior through NativeBridge.
 - Next file scope: M2 tests, `src/app/App.tsx`, `src/app/app.css`,
@@ -137,6 +139,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M2 | Added the first FormationLapCore profile command, stable IDs, versioned atomic JSON creation, restart loading, and generated snapshot contracts | [`M2 evidence`](evidence/M2.md): red compile failure, green restart test, frontend verification, Clippy, and four Rust tests passed | No blocker; reject blank profile and Primary Sim names before storage |
 | 2026-07-23 | Codex `/root` | M2 | Finalized the first M2 slice and added the standing agent requirement to create focused local commits after verified workspace changes | `pnpm.cmd verify`; Rust fmt, Clippy, and tests; final diff and Git status reviewed | No blocker; reject blank profile and Primary Sim names before storage |
 | 2026-07-23 | Codex `/root` | M2 | Completed the automated M2 behavior surface, including atomic profile/settings replacement and recovery of interrupted or invalid writes | [`M2 evidence`](evidence/M2.md): frontend verification, Rust fmt, Clippy, generated-contract check, capability audit, and 24 Rust tests passed | Open the documented M2 preview in a fresh in-app Browser tab; capture wizard/editor screenshots and manually verify keyboard access and 125–200% scaling |
+| 2026-07-23 | Codex `/root` | M2 | Confirmed the automated milestone surface remains complete and the development preview is healthy | Clean worktree; M2 wizard endpoint returned HTTP 200; no fresh in-app Browser tab was available on the third consecutive goal turn | Blocked on the documented manual UI evidence; open the M2 wizard preview in a fresh in-app Browser tab |
 
 ## Handoff entry template
 

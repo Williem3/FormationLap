@@ -10,6 +10,14 @@ export function createM8PreviewBridge(theme: ThemePreference) {
       startWithWindows: false,
       theme,
       reduceMotion: false,
+      automaticUpdateChecks: true,
+      updateChannel: "stable",
+    },
+    updates: {
+      formationLap: { kind: "unknown", reason: "Not checked yet." },
+      applications: [],
+      lastAutomaticCheckUnixSeconds: null,
+      resultDeferred: false,
     },
     profiles: [
       {

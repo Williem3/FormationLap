@@ -1,6 +1,7 @@
 use crate::diagnostics::DiagnosticLog;
 use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
 use crate::game_launch_diagnostics::GameLaunchDiagnostics;
+use crate::update_advisor::UpdateAdvisor;
 use crate::{
     AppSnapshot, ApplicationProcessSnapshot, DevelopmentPrivilegeBroker, ElevatedOperation,
     ElevatedOperationResult, PrivilegeBroker, PrivilegeBrokerError, ProcessIdentity,
@@ -86,6 +87,14 @@ pub enum AppCommand {
         settings: crate::DesktopSettings,
     },
     ExportDiagnostics,
+    PrepareUpdateCheck {
+        trigger: crate::UpdateCheckTrigger,
+        now_unix_seconds: u64,
+    },
+    CompleteUpdateCheck {
+        result: crate::UpdateCheckResult,
+    },
+    PrepareFormationLapInstall,
     RefreshProcesses,
 }
 
@@ -116,6 +125,9 @@ impl AppCommand {
             Self::RequestQuit { .. } => "desktop.quit",
             Self::UpdateSettings { .. } => "settings.update",
             Self::ExportDiagnostics => "diagnostics.export",
+            Self::PrepareUpdateCheck { .. } => "updates.prepare_check",
+            Self::CompleteUpdateCheck { .. } => "updates.complete_check",
+            Self::PrepareFormationLapInstall => "updates.prepare_install",
             Self::RefreshProcesses => "process.refresh",
         }
     }
@@ -186,6 +198,13 @@ pub enum CommandOutcome {
     DiagnosticsExported {
         diagnostics: crate::DiagnosticExport,
     },
+    UpdateCheckPrepared {
+        decision: crate::UpdateCheckDecision,
+    },
+    UpdateCheckCompleted,
+    FormationLapInstallPrepared {
+        decision: crate::FormationLapInstallDecision,
+    },
     ProcessesRefreshed,
 }
 
@@ -203,6 +222,7 @@ pub enum CoreError {
     ProcessRuntime(ProcessRuntimeError),
     PrivilegeBroker(PrivilegeBrokerError),
     DiscoveryCatalog(DiscoveryCatalogError),
+    InvalidUpdateCheck(String),
     InvalidSessionTransition {
         current: crate::SessionState,
         command: &'static str,
@@ -245,6 +265,9 @@ impl fmt::Display for CoreError {
                 write!(formatter, "privileged operation failed: {error}")
             }
             Self::DiscoveryCatalog(error) => write!(formatter, "catalog discovery failed: {error}"),
+            Self::InvalidUpdateCheck(message) => {
+                write!(formatter, "update check is invalid: {message}")
+            }
             Self::InvalidSessionTransition { current, command } => {
                 write!(
                     formatter,
@@ -283,6 +306,7 @@ impl Error for CoreError {
             Self::InvalidGameLaunchDiagnostic(error) => Some(error),
             Self::InvalidProfileName(_)
             | Self::InvalidLaunchRecipe(_)
+            | Self::InvalidUpdateCheck(_)
             | Self::ProfileNotFound(_)
             | Self::ApplicationNotFound(_)
             | Self::InvalidSessionTransition { .. }
@@ -344,6 +368,7 @@ pub struct FormationLapCore {
     session_journal: SessionJournal,
     discovery_catalog: DiscoveryCatalog,
     game_launch_diagnostics: GameLaunchDiagnostics,
+    update_advisor: UpdateAdvisor,
     session: crate::SessionSnapshot,
 }
 
@@ -463,9 +488,12 @@ impl FormationLapCore {
                 session_journal.clear()?;
             }
         }
+        let settings_store = SettingsStore::open(storage_root)?;
+        let update_advisor =
+            UpdateAdvisor::new(settings_store.last_automatic_update_check_unix_seconds());
         Ok(Self {
             profile_library,
-            settings_store: SettingsStore::open(storage_root)?,
+            settings_store,
             diagnostic_log: DiagnosticLog::open(storage_root)?,
             process_runtime: Box::new(process_runtime),
             privilege_broker: Box::new(privilege_broker),
@@ -480,6 +508,7 @@ impl FormationLapCore {
             session_journal,
             discovery_catalog: DiscoveryCatalog::bundled_with_sources(discovery_sources)?,
             game_launch_diagnostics: GameLaunchDiagnostics::open(storage_root)?,
+            update_advisor,
             session,
         })
     }
@@ -493,6 +522,10 @@ impl FormationLapCore {
             .and_then(|profile_id| self.profile_library.profile(profile_id))
             .or_else(|| self.profile_library.selected_profile());
         snapshot.settings = self.settings_store.desktop().clone();
+        snapshot.updates = self.update_advisor.snapshot(
+            self.settings_store
+                .last_automatic_update_check_unix_seconds(),
+        );
         snapshot.application_processes = self.application_processes.values().cloned().collect();
         snapshot.session = self.session.clone();
         snapshot
@@ -500,9 +533,18 @@ impl FormationLapCore {
 
     pub fn execute(&mut self, command: AppCommand) -> Result<CommandOutcome, CoreError> {
         let diagnostic_label = command.diagnostic_label();
-        let record_success = !matches!(command, AppCommand::RefreshProcesses);
+        let record_success = !matches!(
+            &command,
+            AppCommand::RefreshProcesses
+                | AppCommand::PrepareUpdateCheck {
+                    trigger: crate::UpdateCheckTrigger::Automatic,
+                    ..
+                }
+        );
         match self.execute_inner(command) {
             Ok(outcome) => {
+                self.update_advisor
+                    .release_deferred_if_safe(&self.session.state);
                 if let Err(error) = self.sync_session_journal() {
                     let _ = self.diagnostic_log.record(diagnostic_label, "failed");
                     return Err(error);
@@ -947,6 +989,70 @@ impl FormationLapCore {
                     telemetry_upload: false,
                 };
                 Ok(CommandOutcome::DiagnosticsExported { diagnostics })
+            }
+            AppCommand::PrepareUpdateCheck {
+                trigger,
+                now_unix_seconds,
+            } => {
+                let automatic = trigger == crate::UpdateCheckTrigger::Automatic;
+                let mut decision = self.update_advisor.prepare_check(
+                    trigger,
+                    now_unix_seconds,
+                    &self.session.state,
+                    self.settings_store.desktop(),
+                    self.settings_store
+                        .last_automatic_update_check_unix_seconds(),
+                );
+                if let crate::UpdateCheckDecision::Planned(plan) = &mut decision
+                    && let Some(profile) = self.snapshot().selected_profile
+                {
+                    plan.applications = profile
+                        .supporting_applications
+                        .iter()
+                        .map(|supporting| {
+                            let application = &supporting.application;
+                            crate::ApplicationUpdateTarget {
+                                application_id: application.id.clone(),
+                                name: application.name.clone(),
+                                executable_path: match &application.launch_recipe.source {
+                                    crate::LaunchSource::DirectExecutable { executable_path }
+                                        if !application.path_needs_repair =>
+                                    {
+                                        Some(executable_path.clone())
+                                    }
+                                    _ => None,
+                                },
+                                provider: self
+                                    .discovery_catalog
+                                    .update_provider_for_name(&application.name),
+                            }
+                        })
+                        .collect();
+                }
+                if automatic
+                    && matches!(decision, crate::UpdateCheckDecision::Planned(_))
+                    && let Err(error) = self
+                        .settings_store
+                        .record_automatic_update_check(now_unix_seconds)
+                {
+                    if let crate::UpdateCheckDecision::Planned(plan) = &decision {
+                        self.update_advisor.cancel_check(&plan.request_id);
+                    }
+                    return Err(error);
+                }
+                Ok(CommandOutcome::UpdateCheckPrepared { decision })
+            }
+            AppCommand::CompleteUpdateCheck { result } => {
+                self.update_advisor
+                    .complete_check(result, &self.session.state)
+                    .map_err(CoreError::InvalidUpdateCheck)?;
+                Ok(CommandOutcome::UpdateCheckCompleted)
+            }
+            AppCommand::PrepareFormationLapInstall => {
+                let decision = self
+                    .update_advisor
+                    .prepare_formation_lap_install(&self.session.state);
+                Ok(CommandOutcome::FormationLapInstallPrepared { decision })
             }
             AppCommand::RefreshProcesses => {
                 let application_ids = self

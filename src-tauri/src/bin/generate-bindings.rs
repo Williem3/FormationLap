@@ -1,18 +1,19 @@
 use formation_lap_lib::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
-    ApplicationTargetPayload, CatalogPrimarySim, CatalogSupportingApplication,
-    CatalogUpdateProvider, CloseSessionSettings, CommandError, CompatibilityRank,
-    ConsoleVisibility, CreateProfilePayload, DesktopSettings, DiagnosticEntry, DiagnosticExport,
-    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
-    DiscoverySnapshot, DuplicateProfilePayload, ExitApplicationPayload,
-    ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget, ImportProfilePayload,
-    LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity, ProcessOutput,
-    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary,
-    QuitDisposition, QuitPayload, RacingProfile, RestartApplicationPayload, SaveProfilePayload,
-    SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
-    SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
-    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation,
-    ThemePreference, UpdateSettingsPayload, VrLaunchMode,
+    ApplicationTargetPayload, ApplicationUpdateSnapshot, CatalogPrimarySim,
+    CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CommandError,
+    CompatibilityRank, ConsoleVisibility, CreateProfilePayload, DesktopSettings, DiagnosticEntry,
+    DiagnosticExport, DiscoveredInstallation, DiscoveredPrimarySim,
+    DiscoveredSupportingApplication, DiscoverySnapshot, DuplicateProfilePayload,
+    ExitApplicationPayload, ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget,
+    ImportProfilePayload, LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity,
+    ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload,
+    ProfileSummary, QuitDisposition, QuitPayload, RacingProfile, RestartApplicationPayload,
+    SaveProfilePayload, SessionApplicationRole, SessionApplicationSnapshot,
+    SessionApplicationState, SessionEvent, SessionEventKind, SessionSnapshot, SessionState,
+    SessionSummary, ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
+    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateSettingsPayload,
+    UpdateSnapshot, UpdateStatus, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -52,9 +53,13 @@ fn render_bindings() -> String {
         SessionApplicationSnapshot::decl(&config),
         SessionSnapshot::decl(&config),
         ThemePreference::decl(&config),
+        UpdateChannel::decl(&config),
         DesktopSettings::decl(&config),
         DiagnosticEntry::decl(&config),
         DiagnosticExport::decl(&config),
+        UpdateStatus::decl(&config),
+        ApplicationUpdateSnapshot::decl(&config),
+        UpdateSnapshot::decl(&config),
         AppSnapshot::decl(&config),
         ApplicationIcon::decl(&config),
         DiscoveredInstallation::decl(&config),
@@ -166,6 +171,14 @@ export function requestQuit(payload: QuitPayload): Promise<AppSnapshot> {{
 
 export function updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("update_settings", {{ payload }});
+}}
+
+export function checkUpdates(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("check_updates");
+}}
+
+export function installFormationLapUpdate(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("install_formation_lap_update");
 }}
 
 export function exportDiagnostics(): Promise<DiagnosticExport> {{

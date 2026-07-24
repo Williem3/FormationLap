@@ -1271,7 +1271,8 @@ button:disabled {
 }
 
 .recovery-offer,
-.session-summary {
+.session-summary,
+.update-notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1284,7 +1285,9 @@ button:disabled {
 }
 
 .recovery-offer strong,
-.recovery-offer span {
+.recovery-offer span,
+.update-notice strong,
+.update-notice span {
   display: block;
 }
 
@@ -1297,6 +1300,30 @@ button:disabled {
   color: var(--muted);
   font-size: 11px;
   line-height: 16px;
+}
+
+.update-notice {
+  max-width: 1280px;
+  width: calc(100% - var(--workspace-gutter) - var(--workspace-gutter));
+  margin: 20px auto 0;
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.update-notice strong {
+  font-size: 13px;
+}
+
+.update-notice span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.update-notice-deferred {
+  border-color: color-mix(in srgb, var(--warm) 42%, var(--border));
+  background: color-mix(in srgb, var(--warm) 7%, var(--surface));
 }
 
 .recovery-actions {
@@ -1350,6 +1377,27 @@ button:disabled {
 .application-copy strong,
 .application-copy small {
   display: block;
+}
+
+.application-copy .update-state {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  text-transform: none;
+}
+
+.update-state .status-glyph {
+  width: 8px;
+  height: 8px;
+}
+
+.update-state-updateAvailable {
+  color: var(--warm) !important;
+}
+
+.update-state-current {
+  color: var(--running) !important;
 }
 
 .application-copy strong {

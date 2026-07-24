@@ -231,7 +231,19 @@ export function createM4PreviewBridge(
   const snapshot: AppSnapshot = {
     applicationName: "Formation Lap",
     foundationStatus: "ready",
-    settings: { startWithWindows: false, theme: "system", reduceMotion: false },
+    settings: {
+      startWithWindows: false,
+      theme: "system",
+      reduceMotion: false,
+      automaticUpdateChecks: true,
+      updateChannel: "stable",
+    },
+    updates: {
+      formationLap: { kind: "unknown", reason: "Not checked yet." },
+      applications: [],
+      lastAutomaticCheckUnixSeconds: null,
+      resultDeferred: false,
+    },
     profiles: [
       {
         id: "profile-endurance",

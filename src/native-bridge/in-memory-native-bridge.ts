@@ -389,6 +389,14 @@ export class InMemoryNativeBridge implements NativeBridge {
     return this.getAppSnapshot();
   }
 
+  checkUpdates(): Promise<AppSnapshot> {
+    return this.getAppSnapshot();
+  }
+
+  installFormationLapUpdate(): Promise<AppSnapshot> {
+    return this.getAppSnapshot();
+  }
+
   exportDiagnostics(): Promise<DiagnosticExport> {
     return Promise.resolve({
       schemaVersion: 1,

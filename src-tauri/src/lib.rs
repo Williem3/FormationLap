@@ -9,12 +9,15 @@ mod diagnostics;
 mod discovery_catalog;
 mod game_launch_diagnostics;
 mod launch_recipe;
+mod native_updater;
 mod privilege_broker;
 mod privilege_protocol;
 mod process_runtime;
 mod profile_library;
 mod session_journal;
 mod settings;
+mod update_advisor;
+mod update_providers;
 
 pub use commands::{
     ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
@@ -29,16 +32,18 @@ pub use commands::{
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
-    CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings,
-    CompatibilityRank, ConsoleVisibility, DesktopSettings, DiagnosticEntry, DiagnosticExport,
-    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
-    DiscoverySnapshot, GameLaunchDiagnostic, GameLaunchTarget, LaunchRecipe, LaunchSource,
-    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
-    ProfileSummary, QuitAction, QuitDisposition, RacingProfile, SessionApplicationRole,
-    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
-    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SteamLaunchSelector,
-    SupportingApplication, SupportingApplicationRecommendation, ThemePreference, VrLaunchMode,
-    WindowCloseAction,
+    ApplicationUpdateSnapshot, ApplicationUpdateTarget, CatalogPrimarySim,
+    CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CompatibilityRank,
+    ConsoleVisibility, DesktopSettings, DiagnosticEntry, DiagnosticExport, DiscoveredInstallation,
+    DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot,
+    FormationLapInstallDecision, GameLaunchDiagnostic, GameLaunchTarget, LaunchRecipe,
+    LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
+    ProfileApplication, ProfileSummary, QuitAction, QuitDisposition, RacingProfile,
+    SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
+    SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
+    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation,
+    ThemePreference, UpdateChannel, UpdateCheckDecision, UpdateCheckPlan, UpdateCheckResult,
+    UpdateCheckTrigger, UpdateSnapshot, UpdateStatus, VrLaunchMode, WindowCloseAction,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{
@@ -46,6 +51,7 @@ pub use discovery_catalog::{
     WindowsKnownLocation, WindowsKnownLocationRoot, WindowsRunningProcess,
     validate_catalog_documents,
 };
+pub(crate) use native_updater::FormationLapUpdater;
 pub use privilege_broker::{
     DevelopmentPrivilegeBroker, PrivilegeBroker, PrivilegeBrokerError, WindowsPrivilegeBroker,
     run_elevated_helper,
@@ -68,6 +74,7 @@ use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+pub(crate) use update_providers::{DirectUpdateProviderRuntime, UpdateProviderRunner};
 
 fn navigation_is_allowed(url: &Url) -> bool {
     match (url.scheme(), url.host_str()) {
@@ -181,6 +188,8 @@ fn build_tray(
     std::thread::Builder::new()
         .name("formation-lap-tray-status".to_owned())
         .spawn(move || {
+            let mut last_update_attempt =
+                std::time::Instant::now() - std::time::Duration::from_secs(60);
             while let Ok(snapshot) = status_commands.refresh_processes() {
                 let (status_text, session_action_text, session_action_enabled) =
                     tray_status(&snapshot.session);
@@ -189,6 +198,21 @@ fn build_tray(
                 let _ = session_action_item.set_enabled(session_action_enabled);
                 if let Some(tray) = app_handle.tray_by_id("formation-lap-tray") {
                     let _ = tray.set_tooltip(Some(format!("Formation Lap — {status_text}")));
+                }
+                if last_update_attempt.elapsed() >= std::time::Duration::from_secs(60) {
+                    last_update_attempt = std::time::Instant::now();
+                    let update_app = app_handle.clone();
+                    let update_commands = status_commands.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let updater = update_app.state::<FormationLapUpdater>();
+                        let _ = commands::perform_update_check(
+                            &update_app,
+                            &update_commands,
+                            updater.inner(),
+                            UpdateCheckTrigger::Automatic,
+                        )
+                        .await;
+                    });
                 }
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -209,6 +233,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(navigation_guard)
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let storage_root = app.path().app_config_dir()?;
             let commands = NativeCommandHost::open(storage_root)
@@ -218,8 +243,9 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(error.message))?
                 .settings;
             let _ = desktop_host::set_start_with_windows(settings.start_with_windows);
+            app.manage(commands.clone());
+            app.manage(FormationLapUpdater::from_compile_time());
             let tray = build_tray(app, commands.clone())?;
-            app.manage(commands);
             app.manage(tray);
             if desktop_host::started_minimized()
                 && let Some(window) = app.get_webview_window("main")
@@ -265,7 +291,9 @@ pub fn run() {
             commands::accept_recovery,
             commands::dismiss_recovery,
             commands::discover_applications,
-            commands::recommend_applications
+            commands::recommend_applications,
+            commands::check_updates,
+            commands::install_formation_lap_update
         ])
         .run(tauri::generate_context!())
         .expect("Formation Lap failed to start");

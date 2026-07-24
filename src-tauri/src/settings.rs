@@ -15,6 +15,8 @@ struct SettingsDocument {
     selected_profile_id: Option<String>,
     #[serde(default)]
     desktop: crate::DesktopSettings,
+    #[serde(default)]
+    last_automatic_update_check_unix_seconds: Option<u64>,
 }
 
 pub(crate) struct SettingsStore {
@@ -62,6 +64,7 @@ impl SettingsStore {
                 schema_version: SETTINGS_SCHEMA_VERSION,
                 selected_profile_id: None,
                 desktop: crate::DesktopSettings::default(),
+                last_automatic_update_check_unix_seconds: None,
             }
         };
 
@@ -80,6 +83,10 @@ impl SettingsStore {
         &self.document.desktop
     }
 
+    pub(crate) fn last_automatic_update_check_unix_seconds(&self) -> Option<u64> {
+        self.document.last_automatic_update_check_unix_seconds
+    }
+
     pub(crate) fn select_profile(&mut self, profile_id: String) -> Result<(), CoreError> {
         let mut document = self.document.clone();
         document.selected_profile_id = Some(profile_id);
@@ -92,6 +99,15 @@ impl SettingsStore {
     ) -> Result<(), CoreError> {
         let mut document = self.document.clone();
         document.desktop = desktop;
+        self.persist(document)
+    }
+
+    pub(crate) fn record_automatic_update_check(
+        &mut self,
+        unix_seconds: u64,
+    ) -> Result<(), CoreError> {
+        let mut document = self.document.clone();
+        document.last_automatic_update_check_unix_seconds = Some(unix_seconds);
         self.persist(document)
     }
 

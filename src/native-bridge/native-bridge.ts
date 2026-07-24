@@ -41,6 +41,8 @@ export interface NativeBridge {
   requestQuit(payload: QuitPayload): Promise<AppSnapshot>;
   listenForQuitRequest(listener: () => void): Promise<() => void>;
   updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot>;
+  checkUpdates(): Promise<AppSnapshot>;
+  installFormationLapUpdate(): Promise<AppSnapshot>;
   exportDiagnostics(): Promise<DiagnosticExport>;
   acceptRecovery(): Promise<AppSnapshot>;
   dismissRecovery(): Promise<AppSnapshot>;

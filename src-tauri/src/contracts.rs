@@ -352,7 +352,17 @@ pub enum CompatibilityRank {
 pub enum CatalogUpdateProvider {
     #[serde(rename = "githubReleases")]
     #[ts(rename = "githubReleases")]
-    GitHubReleases { repository: String },
+    GitHubReleases {
+        repository: String,
+    },
+    Winget {
+        #[serde(rename = "packageId")]
+        #[ts(rename = "packageId")]
+        package_id: String,
+    },
+    OfficialPage {
+        url: String,
+    },
 }
 
 /// One compatibility-ranked suggestion for a selected Primary Sim.
@@ -432,13 +442,33 @@ pub enum ThemePreference {
 }
 
 /// Local desktop preferences shared by the native host and React.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct DesktopSettings {
     pub start_with_windows: bool,
     pub theme: ThemePreference,
     pub reduce_motion: bool,
+    #[serde(default = "default_automatic_update_checks")]
+    pub automatic_update_checks: bool,
+    #[serde(default)]
+    pub update_channel: UpdateChannel,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            start_with_windows: false,
+            theme: ThemePreference::System,
+            reduce_motion: false,
+            automatic_update_checks: true,
+            update_channel: UpdateChannel::Stable,
+        }
+    }
+}
+
+const fn default_automatic_update_checks() -> bool {
+    true
 }
 
 /// One sanitized entry from Formation Lap's bounded local diagnostic log.
@@ -466,6 +496,121 @@ pub struct DiagnosticExport {
     pub configured_application_count: usize,
     pub recent_events: Vec<DiagnosticEntry>,
     pub telemetry_upload: bool,
+}
+
+/// Signed Formation Lap release channel selected by the user.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
+}
+
+/// Why an update check was requested.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UpdateCheckTrigger {
+    Automatic,
+    Manual,
+}
+
+/// Comparable update knowledge. Unknown is explicit and never guessed.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum UpdateStatus {
+    Current {
+        #[serde(rename = "currentVersion")]
+        #[ts(rename = "currentVersion")]
+        current_version: String,
+    },
+    UpdateAvailable {
+        #[serde(rename = "currentVersion")]
+        #[ts(rename = "currentVersion")]
+        current_version: String,
+        #[serde(rename = "latestVersion")]
+        #[ts(rename = "latestVersion")]
+        latest_version: String,
+    },
+    Unknown {
+        reason: String,
+    },
+}
+
+impl Default for UpdateStatus {
+    fn default() -> Self {
+        Self::Unknown {
+            reason: "Not checked yet.".to_owned(),
+        }
+    }
+}
+
+/// Notification-only update knowledge for one configured application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ApplicationUpdateSnapshot {
+    pub application_id: String,
+    pub name: String,
+    pub status: UpdateStatus,
+    pub information_url: Option<String>,
+}
+
+/// Update advice rendered by React from authoritative native state.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct UpdateSnapshot {
+    pub formation_lap: UpdateStatus,
+    pub applications: Vec<ApplicationUpdateSnapshot>,
+    #[ts(type = "number | null")]
+    pub last_automatic_check_unix_seconds: Option<u64>,
+    pub result_deferred: bool,
+}
+
+/// Direct-provider work that may begin after core policy approves a check.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpdateCheckPlan {
+    pub request_id: String,
+    pub channel: UpdateChannel,
+    pub trigger: UpdateCheckTrigger,
+    pub applications: Vec<ApplicationUpdateTarget>,
+}
+
+/// One configured application whose direct provider may be checked.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ApplicationUpdateTarget {
+    pub application_id: String,
+    pub name: String,
+    pub executable_path: Option<String>,
+    pub provider: Option<CatalogUpdateProvider>,
+}
+
+/// Provider results returned to core after direct checks complete.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpdateCheckResult {
+    pub request_id: String,
+    pub formation_lap: UpdateStatus,
+    pub applications: Vec<ApplicationUpdateSnapshot>,
+}
+
+/// Core decision made before any update network activity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UpdateCheckDecision {
+    Planned(UpdateCheckPlan),
+    Disabled,
+    NotDue,
+    Deferred,
+    InProgress,
+}
+
+/// Core decision made before the signed Formation Lap updater may install.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FormationLapInstallDecision {
+    Ready { latest_version: String },
+    NoUpdate,
+    Deferred,
 }
 
 /// Placement of one application in a Session's immutable Startup Sequence.
@@ -551,6 +696,7 @@ pub struct AppSnapshot {
     pub application_name: String,
     pub foundation_status: String,
     pub settings: DesktopSettings,
+    pub updates: UpdateSnapshot,
     pub profiles: Vec<ProfileSummary>,
     pub selected_profile: Option<RacingProfile>,
     pub application_processes: Vec<ApplicationProcessSnapshot>,
@@ -563,6 +709,7 @@ impl AppSnapshot {
             application_name: "Formation Lap".to_owned(),
             foundation_status: "ready".to_owned(),
             settings: DesktopSettings::default(),
+            updates: UpdateSnapshot::default(),
             profiles: Vec::new(),
             selected_profile: None,
             application_processes: Vec::new(),

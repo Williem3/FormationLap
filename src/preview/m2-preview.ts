@@ -7,7 +7,19 @@ type M2Preview = "m2-wizard" | "m2-editor";
 const editorSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
-  settings: { startWithWindows: false, theme: "system", reduceMotion: false },
+  settings: {
+    startWithWindows: false,
+    theme: "system",
+    reduceMotion: false,
+    automaticUpdateChecks: true,
+    updateChannel: "stable",
+  },
+  updates: {
+    formationLap: { kind: "unknown", reason: "Not checked yet." },
+    applications: [],
+    lastAutomaticCheckUnixSeconds: null,
+    resultDeferred: false,
+  },
   session: idleSessionSnapshot(),
   applicationProcesses: [],
   profiles: [
@@ -101,6 +113,14 @@ export function createM2PreviewBridge(
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],

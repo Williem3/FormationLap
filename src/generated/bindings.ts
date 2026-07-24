@@ -57,13 +57,21 @@ export type SessionSnapshot = { state: SessionState, activeProfileId: string | n
 
 export type ThemePreference = "system" | "light" | "dark";
 
-export type DesktopSettings = { startWithWindows: boolean, theme: ThemePreference, reduceMotion: boolean, };
+export type UpdateChannel = "stable" | "beta";
+
+export type DesktopSettings = { startWithWindows: boolean, theme: ThemePreference, reduceMotion: boolean, automaticUpdateChecks: boolean, updateChannel: UpdateChannel, };
 
 export type DiagnosticEntry = { timestampUnixSeconds: number, event: string, outcome: string, };
 
 export type DiagnosticExport = { schemaVersion: number, applicationVersion: string, platform: string, settings: DesktopSettings, sessionState: SessionState, profileCount: number, configuredApplicationCount: number, recentEvents: Array<DiagnosticEntry>, telemetryUpload: boolean, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
+export type UpdateStatus = { "kind": "current", currentVersion: string, } | { "kind": "updateAvailable", currentVersion: string, latestVersion: string, } | { "kind": "unknown", reason: string, };
+
+export type ApplicationUpdateSnapshot = { applicationId: string, name: string, status: UpdateStatus, informationUrl: string | null, };
+
+export type UpdateSnapshot = { formationLap: UpdateStatus, applications: Array<ApplicationUpdateSnapshot>, lastAutomaticCheckUnixSeconds: number | null, resultDeferred: boolean, };
+
+export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, updates: UpdateSnapshot, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
 
 export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
 
@@ -81,7 +89,7 @@ export type DiscoverySnapshot = { primarySims: Array<CatalogPrimarySim>, support
 
 export type CompatibilityRank = "recommended" | "compatible";
 
-export type CatalogUpdateProvider = { "kind": "githubReleases", repository: string, };
+export type CatalogUpdateProvider = { "kind": "githubReleases", repository: string, } | { "kind": "winget", packageId: string, } | { "kind": "officialPage", url: string, };
 
 export type SupportingApplicationRecommendation = { id: string, name: string, rank: CompatibilityRank, updateProvider: CatalogUpdateProvider | null, };
 
@@ -187,6 +195,14 @@ export function requestQuit(payload: QuitPayload): Promise<AppSnapshot> {
 
 export function updateSettings(payload: UpdateSettingsPayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("update_settings", { payload });
+}
+
+export function checkUpdates(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("check_updates");
+}
+
+export function installFormationLapUpdate(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("install_formation_lap_update");
 }
 
 export function exportDiagnostics(): Promise<DiagnosticExport> {

@@ -16,7 +16,11 @@
           "primarySimId": "le-mans-ultimate",
           "rank": "compatible"
         }
-      ]
+      ],
+      "updateProvider": {
+        "kind": "officialPage",
+        "url": "https://www.simhubdash.com/download-2/"
+      }
     },
     {
       "id": "crew-chief",
@@ -24,7 +28,11 @@
     },
     {
       "id": "trading-paints",
-      "name": "Trading Paints"
+      "name": "Trading Paints",
+      "updateProvider": {
+        "kind": "winget",
+        "packageId": "Rhinode.TradingPaints"
+      }
     },
     {
       "id": "garage-61",

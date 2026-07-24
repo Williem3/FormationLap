@@ -7,6 +7,7 @@ import {
 } from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
 import type {
+  ApplicationUpdateSnapshot,
   ApplicationProcessSnapshot,
   AppSnapshot,
   DesktopSettings,
@@ -23,6 +24,7 @@ import type {
   SessionApplicationSnapshot,
   SupportingApplication,
   SupportingApplicationRecommendation,
+  UpdateSnapshot,
 } from "../generated/bindings";
 import type { NativeBridge } from "../native-bridge/native-bridge";
 import {
@@ -73,7 +75,9 @@ export function App({ bridge }: AppProps) {
   const [state, setState] = useState<SnapshotState>({ kind: "loading" });
   const [view, setView] = useState<WorkspaceView>(() =>
     import.meta.env.DEV &&
-    new URLSearchParams(window.location.search).get("preview") === "m8-settings"
+    ["m8-settings", "m9-settings"].includes(
+      new URLSearchParams(window.location.search).get("preview") ?? "",
+    )
       ? "settings"
       : "dashboard",
   );
@@ -758,6 +762,36 @@ export function App({ bridge }: AppProps) {
     }
   };
 
+  const checkUpdates = async () => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.checkUpdates();
+      setState({ kind: "ready", snapshot: nextSnapshot });
+    } catch {
+      setFormError(
+        "Formation Lap could not complete the trusted update checks.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const installFormationLapUpdate = async () => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.installFormationLapUpdate();
+      setState({ kind: "ready", snapshot: nextSnapshot });
+    } catch {
+      setFormError(
+        "Formation Lap rejected the update or the Session is not idle.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const openDiagnostics = async () => {
     setView("diagnostics");
     setIsDiagnosticsLoading(true);
@@ -914,9 +948,12 @@ export function App({ bridge }: AppProps) {
         {view === "settings" && state.kind === "ready" ? (
           <SettingsScreen
             settings={state.snapshot.settings}
+            updates={state.snapshot.updates}
+            sessionState={state.snapshot.session.state}
             isSaving={isSaving}
             error={formError}
             onChange={(settings) => void updateDesktopSettings(settings)}
+            onCheckUpdates={() => void checkUpdates()}
             onOpenDiagnostics={() => void openDiagnostics()}
             onQuit={() => {
               rememberDialogTrigger();
@@ -979,6 +1016,7 @@ export function App({ bridge }: AppProps) {
             selectedProfile={selectedProfile}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
+            updates={snapshot?.updates ?? null}
             isBusy={isSaving}
             gameLaunchDiagnostic={gameLaunchDiagnostic}
             onCreateProfile={openNewProfile}
@@ -1010,6 +1048,7 @@ export function App({ bridge }: AppProps) {
             onCloseSession={() => void runSessionAction("close")}
             onAcceptRecovery={() => void runSessionAction("acceptRecovery")}
             onDismissRecovery={() => void runSessionAction("dismissRecovery")}
+            onInstallFormationLapUpdate={() => void installFormationLapUpdate()}
           />
         )}
       </main>
@@ -1396,18 +1435,35 @@ function ModalDialog({
 
 interface SettingsScreenProps {
   settings: DesktopSettings;
+  updates: UpdateSnapshot;
+  sessionState: AppSnapshot["session"]["state"];
   isSaving: boolean;
   error: string | null;
   onChange(settings: DesktopSettings): void;
+  onCheckUpdates(): void;
   onOpenDiagnostics(): void;
   onQuit(): void;
 }
 
+function updateStatusLabel(status: UpdateSnapshot["formationLap"]): string {
+  switch (status.kind) {
+    case "current":
+      return `Current · ${status.currentVersion}`;
+    case "updateAvailable":
+      return `Update available · ${status.latestVersion}`;
+    case "unknown":
+      return "Unknown";
+  }
+}
+
 function SettingsScreen({
   settings,
+  updates,
+  sessionState,
   isSaving,
   error,
   onChange,
+  onCheckUpdates,
   onOpenDiagnostics,
   onQuit,
 }: SettingsScreenProps) {
@@ -1512,15 +1568,75 @@ function SettingsScreen({
             <p className="eyebrow">Release channel</p>
             <h2 id="update-settings">Updates</h2>
           </div>
-          <div className="settings-row">
+          <label className="settings-row">
             <span>
-              <strong>Stable signed releases</strong>
+              <strong>Automatic daily checks</strong>
               <small>
-                Formation Lap will install only verified first-party updates.
+                Check trusted providers at most once per day. Disable this
+                without losing Check now.
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              aria-label="Automatic daily checks"
+              checked={settings.automaticUpdateChecks}
+              disabled={isSaving}
+              onChange={(event) =>
+                update({
+                  automaticUpdateChecks: event.currentTarget.checked,
+                })
+              }
+            />
+          </label>
+          <div className="settings-row settings-row-stacked">
+            <span>
+              <strong>Signed release channel</strong>
+              <small>
+                Formation Lap installs only verified first-party updates.
                 Third-party applications remain notification-only.
               </small>
             </span>
-            <span className="settings-value">Stable</span>
+            <div
+              className="theme-options"
+              role="group"
+              aria-label="Signed release channel"
+            >
+              {(["stable", "beta"] as const).map((channel) => (
+                <button
+                  key={channel}
+                  type="button"
+                  className={
+                    settings.updateChannel === channel
+                      ? "theme-option-active"
+                      : ""
+                  }
+                  aria-pressed={settings.updateChannel === channel}
+                  disabled={isSaving}
+                  onClick={() => update({ updateChannel: channel })}
+                >
+                  {channel.charAt(0).toUpperCase()}
+                  {channel.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="settings-row">
+            <span>
+              <strong>{updateStatusLabel(updates.formationLap)}</strong>
+              <small>
+                {sessionState === "idle"
+                  ? "Checks go directly to the curated provider origins."
+                  : "Checks resume when the Session is idle."}
+              </small>
+            </span>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isSaving || sessionState !== "idle"}
+              onClick={onCheckUpdates}
+            >
+              Check now
+            </button>
           </div>
         </section>
 
@@ -2862,6 +2978,7 @@ interface DashboardProps {
   selectedProfile: AppSnapshot["selectedProfile"];
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
+  updates: UpdateSnapshot | null;
   isBusy: boolean;
   gameLaunchDiagnostic: GameLaunchDiagnostic | null;
   onCreateProfile(): void;
@@ -2890,6 +3007,7 @@ interface DashboardProps {
   onCloseSession(): void;
   onAcceptRecovery(): void;
   onDismissRecovery(): void;
+  onInstallFormationLapUpdate(): void;
 }
 
 function Dashboard({
@@ -2898,6 +3016,7 @@ function Dashboard({
   selectedProfile,
   applicationProcesses,
   session,
+  updates,
   isBusy,
   gameLaunchDiagnostic,
   onCreateProfile,
@@ -2917,6 +3036,7 @@ function Dashboard({
   onCloseSession,
   onAcceptRecovery,
   onDismissRecovery,
+  onInstallFormationLapUpdate,
 }: DashboardProps) {
   const pageTitle = selectedProfile?.name ?? applicationName;
   const sessionState = session?.state ?? "idle";
@@ -3011,6 +3131,38 @@ function Dashboard({
           </button>
         </div>
       </header>
+
+      {updates?.resultDeferred && sessionState !== "idle" && (
+        <section className="update-notice update-notice-deferred" role="status">
+          <div>
+            <p className="eyebrow">Race-safe update check</p>
+            <strong>Update advice will appear after this Session</strong>
+          </div>
+          <span>Network results stay quiet while the Primary Sim runs.</span>
+        </section>
+      )}
+
+      {updates?.formationLap.kind === "updateAvailable" && (
+        <section className="update-notice" role="status">
+          <div>
+            <p className="eyebrow">Verified Formation Lap release</p>
+            <strong>
+              Formation Lap {updates.formationLap.latestVersion} is available
+            </strong>
+            <span>
+              Current {updates.formationLap.currentVersion} · signed installer
+            </span>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isBusy || sessionState !== "idle"}
+            onClick={onInstallFormationLapUpdate}
+          >
+            Install verified update
+          </button>
+        </section>
+      )}
 
       {state.kind === "loading" && (
         <section className="foundation-card" aria-labelledby="foundation-title">
@@ -3182,6 +3334,9 @@ function Dashboard({
                     process={applicationProcesses.find(
                       (candidate) => candidate.applicationId === application.id,
                     )}
+                    update={updates?.applications.find(
+                      (candidate) => candidate.applicationId === application.id,
+                    )}
                     isBusy={lifecycleControlsLocked}
                     onStart={onStartApplication}
                     onExit={onExitApplication}
@@ -3205,6 +3360,7 @@ function Dashboard({
                 (candidate) =>
                   candidate.applicationId === selectedProfile.primarySim.id,
               )}
+              update={undefined}
               isBusy={lifecycleControlsLocked}
               isPrimary
               onStart={onStartApplication}
@@ -3345,6 +3501,7 @@ interface ApplicationLifecycleRowProps {
   classification: string;
   icon: ReactNode;
   process: ApplicationProcessSnapshot | undefined;
+  update: ApplicationUpdateSnapshot | undefined;
   isBusy: boolean;
   isPrimary?: boolean;
   onStart(application: ProfileApplication): void;
@@ -3368,6 +3525,7 @@ function ApplicationLifecycleRow({
   classification,
   icon,
   process,
+  update,
   isBusy,
   isPrimary = false,
   onStart,
@@ -3402,6 +3560,19 @@ function ApplicationLifecycleRow({
             ? "Executable path needs repair"
             : sourceLabel}
         </small>
+        {update && (
+          <small
+            className={`update-state update-state-${update.status.kind}`}
+            title={
+              update.status.kind === "unknown"
+                ? update.status.reason
+                : undefined
+            }
+          >
+            <span className="status-glyph" aria-hidden="true" />
+            {updateStatusLabel(update.status)}
+          </small>
+        )}
       </span>
       <span className="classification-label">{classification}</span>
       <span

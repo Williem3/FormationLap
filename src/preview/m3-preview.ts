@@ -94,7 +94,19 @@ const leMansUltimate = {
 const dashboardSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
-  settings: { startWithWindows: false, theme: "system", reduceMotion: false },
+  settings: {
+    startWithWindows: false,
+    theme: "system",
+    reduceMotion: false,
+    automaticUpdateChecks: true,
+    updateChannel: "stable",
+  },
+  updates: {
+    formationLap: { kind: "unknown", reason: "Not checked yet." },
+    applications: [],
+    lastAutomaticCheckUnixSeconds: null,
+    resultDeferred: false,
+  },
   session: idleSessionSnapshot(),
   applicationProcesses: [
     {
@@ -167,6 +179,10 @@ const dashboardSnapshot: AppSnapshot = {
   },
 };
 
+export function createM3PreviewSnapshot(): AppSnapshot {
+  return structuredClone(dashboardSnapshot);
+}
+
 export function createM3PreviewBridge(): InMemoryNativeBridge {
-  return new InMemoryNativeBridge(dashboardSnapshot);
+  return new InMemoryNativeBridge(createM3PreviewSnapshot());
 }

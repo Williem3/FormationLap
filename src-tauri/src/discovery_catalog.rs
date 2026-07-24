@@ -313,6 +313,9 @@ pub enum DiscoveryCatalogError {
         application_index: usize,
         rule_index: usize,
     },
+    InvalidUpdateProvider {
+        application_index: usize,
+    },
 }
 
 impl fmt::Display for DiscoveryCatalogError {
@@ -376,6 +379,10 @@ impl fmt::Display for DiscoveryCatalogError {
                 formatter,
                 "unknown compatibility sim id '{sim_id}' at applications[{application_index}].compatibility[{rule_index}].primarySimId"
             ),
+            Self::InvalidUpdateProvider { application_index } => write!(
+                formatter,
+                "invalid update provider at applications[{application_index}].updateProvider"
+            ),
         }
     }
 }
@@ -393,7 +400,8 @@ impl Error for DiscoveryCatalogError {
             | Self::MissingSteamLaunchRecipes { .. }
             | Self::InvalidCatalogMonitoredProcess { .. }
             | Self::DuplicateVrLaunchMode { .. }
-            | Self::UnknownCompatibilitySim { .. } => None,
+            | Self::UnknownCompatibilitySim { .. }
+            | Self::InvalidUpdateProvider { .. } => None,
         }
     }
 }
@@ -606,6 +614,17 @@ impl DiscoveryCatalog {
             .collect::<Vec<_>>();
         recommendations.sort_by_key(|recommendation| recommendation.rank.clone());
         recommendations
+    }
+
+    pub(crate) fn update_provider_for_name(
+        &self,
+        application_name: &str,
+    ) -> Option<CatalogUpdateProvider> {
+        let application = self
+            .supporting_applications
+            .iter()
+            .find(|application| application.name.eq_ignore_ascii_case(application_name))?;
+        self.update_providers.get(&application.id).cloned()
     }
 
     pub(crate) fn resolve_primary_launch_recipe(
@@ -1340,12 +1359,56 @@ fn parse_and_validate_catalog_documents(
                 });
             }
         }
+        if let Some(provider) = &application.update_provider {
+            validate_update_provider(provider, application_index)?;
+        }
     }
 
     Ok(ValidatedCatalogDocuments {
         sims: document.sims,
         supporting_applications: application_document.applications,
     })
+}
+
+fn validate_update_provider(
+    provider: &CatalogUpdateProvider,
+    application_index: usize,
+) -> Result<(), DiscoveryCatalogError> {
+    let valid = match provider {
+        CatalogUpdateProvider::GitHubReleases { repository } => {
+            let mut parts = repository.split('/');
+            let owner = parts.next().unwrap_or_default();
+            let name = parts.next().unwrap_or_default();
+            !owner.is_empty()
+                && !name.is_empty()
+                && parts.next().is_none()
+                && owner.chars().all(is_safe_provider_identifier_character)
+                && name.chars().all(is_safe_provider_identifier_character)
+        }
+        CatalogUpdateProvider::Winget { package_id } => {
+            !package_id.is_empty()
+                && package_id
+                    .chars()
+                    .all(is_safe_provider_identifier_character)
+        }
+        CatalogUpdateProvider::OfficialPage { url } => tauri::Url::parse(url).is_ok_and(|url| {
+            url.scheme() == "https"
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.host_str().is_some()
+        }),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(DiscoveryCatalogError::InvalidUpdateProvider { application_index })
+    }
+}
+
+fn is_safe_provider_identifier_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
 }
 
 fn validate_catalog_monitored_process(

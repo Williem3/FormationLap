@@ -43,6 +43,13 @@ async function resolveNativeBridge(): Promise<NativeBridge> {
         : "light";
     return createM8PreviewBridge(theme);
   }
+  if (
+    import.meta.env.DEV &&
+    (preview === "m9-dashboard" || preview === "m9-settings")
+  ) {
+    const { createM9PreviewBridge } = await import("./preview/m9-preview");
+    return createM9PreviewBridge();
+  }
 
   return new TauriNativeBridge();
 }

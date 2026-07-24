@@ -1,8 +1,9 @@
 use crate::{
     AppCommand, AppSnapshot, CommandOutcome, CoreError, DesktopSettings, DiagnosticExport,
-    DiscoverySnapshot, FormationLapCore, GameLaunchDiagnostic, QuitAction, QuitDisposition,
-    RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
-    WindowCloseAction,
+    DirectUpdateProviderRuntime, DiscoverySnapshot, FormationLapCore, FormationLapInstallDecision,
+    FormationLapUpdater, GameLaunchDiagnostic, QuitAction, QuitDisposition, RacingProfile,
+    SupportingApplicationRecommendation, TargetedDiscoverySources, UpdateCheckDecision,
+    UpdateCheckResult, UpdateCheckTrigger, UpdateProviderRunner, UpdateStatus, WindowCloseAction,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::mpsc, thread};
@@ -165,6 +166,11 @@ impl From<CoreError> for CommandError {
                 "invalid_session_transition",
                 error.to_string(),
                 Some("Wait for the current Session action to finish."),
+            ),
+            CoreError::InvalidUpdateCheck(_) => (
+                "invalid_update_check",
+                error.to_string(),
+                Some("Start a fresh update check and try again."),
             ),
             CoreError::Storage(_) => (
                 "storage_failed",
@@ -484,6 +490,55 @@ impl NativeCommandHost {
         }
     }
 
+    pub fn prepare_update_check(
+        &self,
+        trigger: UpdateCheckTrigger,
+    ) -> Result<UpdateCheckDecision, CommandError> {
+        let now_unix_seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| CommandError {
+                code: "invalid_system_clock".to_owned(),
+                message: "Formation Lap could not read the system clock.".to_owned(),
+                recovery: Some("Correct the Windows clock and try again.".to_owned()),
+                diagnostic_id: None,
+            })?
+            .as_secs();
+        match self
+            .execute_command(AppCommand::PrepareUpdateCheck {
+                trigger,
+                now_unix_seconds,
+            })?
+            .0
+        {
+            CommandOutcome::UpdateCheckPrepared { decision } => Ok(decision),
+            _ => Err(Self::unexpected_outcome(
+                "Formation Lap could not prepare the update check.",
+            )),
+        }
+    }
+
+    pub fn complete_update_check(
+        &self,
+        result: UpdateCheckResult,
+    ) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::CompleteUpdateCheck { result })
+            .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn prepare_formation_lap_install(
+        &self,
+    ) -> Result<FormationLapInstallDecision, CommandError> {
+        match self
+            .execute_command(AppCommand::PrepareFormationLapInstall)?
+            .0
+        {
+            CommandOutcome::FormationLapInstallPrepared { decision } => Ok(decision),
+            _ => Err(Self::unexpected_outcome(
+                "Formation Lap could not prepare the signed update.",
+            )),
+        }
+    }
+
     pub fn accept_recovery(&self) -> Result<AppSnapshot, CommandError> {
         self.execute_command(AppCommand::AcceptRecovery)
             .map(|(_, snapshot)| snapshot)
@@ -728,6 +783,105 @@ pub fn export_diagnostics(
     commands: tauri::State<'_, NativeCommandHost>,
 ) -> Result<DiagnosticExport, CommandError> {
     commands.export_diagnostics()
+}
+
+pub(crate) async fn perform_update_check(
+    app: &tauri::AppHandle,
+    commands: &NativeCommandHost,
+    updater: &FormationLapUpdater,
+    trigger: UpdateCheckTrigger,
+) -> Result<AppSnapshot, CommandError> {
+    let decision = commands.prepare_update_check(trigger)?;
+    let UpdateCheckDecision::Planned(plan) = decision else {
+        return commands.get_app_snapshot();
+    };
+    let provider_plan = plan.clone();
+    let provider_results = tauri::async_runtime::spawn_blocking(move || {
+        DirectUpdateProviderRuntime::new()
+            .map(|runtime| UpdateProviderRunner::new(runtime).check(&provider_plan))
+            .unwrap_or_else(|_| {
+                provider_plan
+                    .applications
+                    .iter()
+                    .map(|target| crate::ApplicationUpdateSnapshot {
+                        application_id: target.application_id.clone(),
+                        name: target.name.clone(),
+                        status: UpdateStatus::Unknown {
+                            reason: "The direct update providers could not start.".to_owned(),
+                        },
+                        information_url: None,
+                    })
+                    .collect()
+            })
+    });
+    let formation_lap = updater
+        .check(app, plan.channel)
+        .await
+        .unwrap_or_else(|reason| UpdateStatus::Unknown { reason });
+    let applications = provider_results.await.map_err(|_| CommandError {
+        code: "update_provider_failed".to_owned(),
+        message: "Formation Lap could not finish the direct provider checks.".to_owned(),
+        recovery: Some("Try the update check again later.".to_owned()),
+        diagnostic_id: None,
+    })?;
+    commands.complete_update_check(UpdateCheckResult {
+        request_id: plan.request_id,
+        formation_lap,
+        applications,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn check_updates(
+    app: tauri::AppHandle,
+    commands: tauri::State<'_, NativeCommandHost>,
+    updater: tauri::State<'_, FormationLapUpdater>,
+) -> Result<AppSnapshot, CommandError> {
+    perform_update_check(
+        &app,
+        commands.inner(),
+        updater.inner(),
+        UpdateCheckTrigger::Manual,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn install_formation_lap_update(
+    app: tauri::AppHandle,
+    commands: tauri::State<'_, NativeCommandHost>,
+    updater: tauri::State<'_, FormationLapUpdater>,
+) -> Result<AppSnapshot, CommandError> {
+    match commands.prepare_formation_lap_install()? {
+        FormationLapInstallDecision::Ready { latest_version } => {
+            let channel = commands.get_app_snapshot()?.settings.update_channel;
+            updater
+                .install(&app, channel, &latest_version)
+                .await
+                .map_err(|message| CommandError {
+                    code: "signed_update_rejected".to_owned(),
+                    message,
+                    recovery: Some(
+                        "Run a fresh update check or install an official signed release."
+                            .to_owned(),
+                    ),
+                    diagnostic_id: None,
+                })?;
+            commands.get_app_snapshot()
+        }
+        FormationLapInstallDecision::Deferred => Err(CommandError {
+            code: "race_safe_update_deferred".to_owned(),
+            message: "The signed update will wait until the Session is idle.".to_owned(),
+            recovery: Some("Close the Session, then install the update.".to_owned()),
+            diagnostic_id: None,
+        }),
+        FormationLapInstallDecision::NoUpdate => Err(CommandError {
+            code: "no_signed_update".to_owned(),
+            message: "No checked Formation Lap update is ready to install.".to_owned(),
+            recovery: Some("Run Check now first.".to_owned()),
+            diagnostic_id: None,
+        }),
+    }
 }
 
 #[tauri::command]

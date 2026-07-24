@@ -1,6 +1,7 @@
 import {
   acceptRecovery,
   cancelStartup,
+  checkUpdates,
   closeSession,
   createProfile,
   deleteProfile,
@@ -13,6 +14,7 @@ import {
   forceStopApplication,
   getAppSnapshot,
   importProfile,
+  installFormationLapUpdate,
   refreshProcesses,
   recommendApplications,
   requestQuit,
@@ -50,6 +52,8 @@ export class TauriNativeBridge implements NativeBridge {
     return listen("formation-lap://quit-requested", listener);
   }
   updateSettings = updateSettings;
+  checkUpdates = checkUpdates;
+  installFormationLapUpdate = installFormationLapUpdate;
   exportDiagnostics = exportDiagnostics;
   acceptRecovery = acceptRecovery;
   dismissRecovery = dismissRecovery;

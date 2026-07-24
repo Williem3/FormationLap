@@ -40,7 +40,19 @@ function lifecycleSnapshot(): AppSnapshot {
   return {
     applicationName: "Formation Lap",
     foundationStatus: "ready",
-    settings: { startWithWindows: false, theme: "system", reduceMotion: false },
+    settings: {
+      startWithWindows: false,
+      theme: "system",
+      reduceMotion: false,
+      automaticUpdateChecks: true,
+      updateChannel: "stable",
+    },
+    updates: {
+      formationLap: { kind: "unknown", reason: "Not checked yet." },
+      applications: [],
+      lastAutomaticCheckUnixSeconds: null,
+      resultDeferred: false,
+    },
     session: idleSessionSnapshot(),
     applicationProcesses: [],
     profiles: [
@@ -335,6 +347,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -366,6 +386,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -389,6 +417,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -497,6 +533,14 @@ describe("Formation Lap shell", () => {
           startWithWindows: false,
           theme: "system",
           reduceMotion: false,
+          automaticUpdateChecks: true,
+          updateChannel: "stable",
+        },
+        updates: {
+          formationLap: { kind: "unknown", reason: "Not checked yet." },
+          applications: [],
+          lastAutomaticCheckUnixSeconds: null,
+          resultDeferred: false,
         },
         session: idleSessionSnapshot(),
         applicationProcesses: [],
@@ -555,6 +599,14 @@ describe("Formation Lap shell", () => {
           startWithWindows: false,
           theme: "system",
           reduceMotion: false,
+          automaticUpdateChecks: true,
+          updateChannel: "stable",
+        },
+        updates: {
+          formationLap: { kind: "unknown", reason: "Not checked yet." },
+          applications: [],
+          lastAutomaticCheckUnixSeconds: null,
+          resultDeferred: false,
         },
         session: idleSessionSnapshot(),
         applicationProcesses: [],
@@ -688,6 +740,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -732,6 +792,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -798,6 +866,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -869,6 +945,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -939,6 +1023,14 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
       },
       session: idleSessionSnapshot(),
       applicationProcesses: [],
@@ -1044,11 +1136,100 @@ describe("Formation Lap shell", () => {
         startWithWindows: true,
         theme: "dark",
         reduceMotion: true,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
       });
     });
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.reduceMotion).toBe("true");
     expect(screen.getByText(/Racing Profiles never auto-start/)).toBeVisible();
+  });
+
+  it("configures automatic checks and the signed Stable or Beta channel", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    await user.click(screen.getByLabelText("Automatic daily checks"));
+    await user.click(screen.getByRole("button", { name: "Beta" }));
+
+    await waitFor(async () => {
+      const settings = (await bridge.getAppSnapshot()).settings;
+      expect(settings.automaticUpdateChecks).toBe(false);
+      expect(settings.updateChannel).toBe("beta");
+    });
+    expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
+    expect(screen.getByText(/verified first-party updates/)).toBeVisible();
+  });
+
+  it("renders Formation Lap and Supporting Application update advice without a third-party install action", async () => {
+    const snapshot = lifecycleSnapshot();
+    const supportingApplication = {
+      ...snapshot.selectedProfile!.primarySim,
+      id: "lmuffb-profile-id",
+      name: "LMUFFB",
+    };
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: supportingApplication,
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ];
+    snapshot.updates = {
+      formationLap: {
+        kind: "updateAvailable",
+        currentVersion: "0.1.0",
+        latestVersion: "1.0.0",
+      },
+      applications: [
+        {
+          applicationId: "lmuffb-profile-id",
+          name: "LMUFFB",
+          status: {
+            kind: "updateAvailable",
+            currentVersion: "1.4.0",
+            latestVersion: "1.5.0",
+          },
+          informationUrl:
+            "https://github.com/coasting-nc/LMUFFB/releases/tag/v1.5.0",
+        },
+      ],
+      lastAutomaticCheckUnixSeconds: 1_000_000,
+      resultDeferred: false,
+    };
+
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    expect(
+      await screen.findByText("Formation Lap 1.0.0 is available"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Install verified update" }),
+    ).toBeVisible();
+    expect(screen.getByText("Update available · 1.5.0")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Install LMUFFB/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("makes race-safe update deferral visible while a Session is active", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.session.state = "active";
+    snapshot.session.activeProfileId = snapshot.selectedProfile!.id;
+    snapshot.updates.resultDeferred = true;
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    expect(
+      await screen.findByText(/Update advice will appear after this Session/),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+    expect(
+      screen.getByText(/Checks resume when the Session is idle/),
+    ).toBeVisible();
   });
 
   it("shows a sanitized local diagnostic export with no upload path", async () => {

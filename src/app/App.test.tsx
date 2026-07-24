@@ -1,10 +1,197 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "./App";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
 import { describe, expect, it } from "vitest";
 import userEvent from "@testing-library/user-event";
+import type {
+  ApplicationProcessSnapshot,
+  AppSnapshot,
+} from "../generated/bindings";
+
+function lifecycleSnapshot(): AppSnapshot {
+  const primarySim = {
+    id: "sim-lifecycle",
+    name: "Healthy fixture",
+    launchRecipe: {
+      source: {
+        kind: "directExecutable" as const,
+        executablePath: "C:\\Fixtures\\healthy.exe",
+      },
+      arguments: [],
+      workingDirectory: "C:\\Fixtures",
+      monitoredProcess: null,
+      consoleVisibility: "hidden" as const,
+      elevated: false,
+      startupTimeoutSeconds: 3,
+      postStartDelayMilliseconds: 0,
+      shutdownStrategy: { kind: "closeWindows" as const },
+    },
+    pathNeedsRepair: false,
+  };
+  return {
+    applicationName: "Formation Lap",
+    foundationStatus: "ready",
+    applicationProcesses: [],
+    profiles: [
+      {
+        id: "profile-lifecycle",
+        name: "Fixture profile",
+        primarySimName: primarySim.name,
+      },
+    ],
+    selectedProfile: {
+      id: "profile-lifecycle",
+      name: "Fixture profile",
+      primarySim,
+      supportingApplications: [],
+      vrEnabled: false,
+      preferredVrLaunchMode: null,
+      closeSession: { stopSteamVr: false },
+    },
+  };
+}
+
+function processSnapshot(
+  overrides: Partial<ApplicationProcessSnapshot> = {},
+): ApplicationProcessSnapshot {
+  return {
+    applicationId: "sim-lifecycle",
+    status: "running",
+    ownership: "sessionOwned",
+    identity: {
+      pid: 4242,
+      creationTime: "133822233344455566",
+      canonicalExecutablePath: "C:\\Fixtures\\healthy.exe",
+    },
+    output: null,
+    ...overrides,
+  };
+}
 
 describe("Formation Lap shell", () => {
+  it("starts one configured application and renders authoritative lifecycle state", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Start Healthy fixture" }),
+    );
+
+    expect(
+      await screen.findByRole("status", {
+        name: "Healthy fixture: Starting",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Exit Healthy fixture" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Restart Healthy fixture" }),
+    ).toBeEnabled();
+  });
+
+  it("requires explicit confirmation before exiting a Pre-existing Process", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [
+      processSnapshot({
+        status: "runningPreExisting",
+        ownership: "preExisting",
+      }),
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Exit Healthy fixture" }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Control a Pre-existing Process?",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/current Session does not own/)).toBeVisible();
+
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Exit Healthy fixture",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("status", {
+        name: "Healthy fixture: Stopped",
+      }),
+    ).toBeVisible();
+  });
+
+  it("warns about unsaved work before force termination", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [
+      processSnapshot({
+        status: "stopping",
+      }),
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Force stop Healthy fixture",
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Force stop Healthy fixture?",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/may lose unsaved work/)).toBeVisible();
+
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Force stop Healthy fixture",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("status", {
+        name: "Healthy fixture: Stopped",
+      }),
+    ).toBeVisible();
+  });
+
+  it("shows bounded local console output and truncation state", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [
+      processSnapshot({
+        output: {
+          stdout: "fixture ready\n",
+          stderr: "diagnostic tail\n",
+          truncated: true,
+        },
+      }),
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "View output" }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Healthy fixture output" }),
+    ).toBeVisible();
+    expect(screen.getByText(/fixture ready/)).toHaveTextContent(
+      "diagnostic tail",
+    );
+    expect(screen.getByText(/Earlier output was discarded/)).toBeVisible();
+  });
+
   it("renders the native snapshot through NativeBridge", async () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",

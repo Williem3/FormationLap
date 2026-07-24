@@ -1,9 +1,13 @@
 import type {
   AppSnapshot,
+  ApplicationTargetPayload,
   CreateProfilePayload,
   DuplicateProfilePayload,
+  ExitApplicationPayload,
+  ForceStopApplicationPayload,
   ImportProfilePayload,
   ProfileIdPayload,
+  RestartApplicationPayload,
   SaveProfilePayload,
 } from "../generated/bindings";
 
@@ -16,4 +20,11 @@ export interface NativeBridge {
   deleteProfile(payload: ProfileIdPayload): Promise<AppSnapshot>;
   exportProfile(payload: ProfileIdPayload): Promise<string>;
   importProfile(payload: ImportProfilePayload): Promise<AppSnapshot>;
+  startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot>;
+  refreshProcesses(): Promise<AppSnapshot>;
+  exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot>;
+  forceStopApplication(
+    payload: ForceStopApplicationPayload,
+  ): Promise<AppSnapshot>;
+  restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot>;
 }

@@ -130,6 +130,67 @@ fn direct_launch_preserves_arguments_working_directory_and_stable_identity() {
 }
 
 #[test]
+fn virtual_desktop_switcher_compatible_recipe_runs_as_an_ordinary_application() {
+    let temporary = TempDirectory::new();
+    let fixture_source = PathBuf::from(env!(
+        "CARGO_BIN_EXE_formation-lap-process-fixture",
+        "process fixture should be built with the process-fixtures feature"
+    ));
+    let executable_path = temporary.path().join("VirtualDesktopSwitcher.exe");
+    fs::copy(fixture_source, &executable_path)
+        .expect("VirtualDesktopSwitcher-compatible fixture should be copied");
+    let report_path = temporary
+        .path()
+        .join("virtual desktop switcher report.json");
+    let expected_arguments = vec!["--monitor".to_owned(), "primary sim".to_owned()];
+    let recipe = LaunchRecipe {
+        source: LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        },
+        arguments: [
+            vec![
+                "--report".to_owned(),
+                report_path.to_string_lossy().into_owned(),
+                "--lifetime-ms".to_owned(),
+                "5000".to_owned(),
+                "--output-bytes".to_owned(),
+                "128".to_owned(),
+            ],
+            expected_arguments.clone(),
+        ]
+        .concat(),
+        working_directory: Some(temporary.path().to_string_lossy().into_owned()),
+        monitored_process: None,
+        console_visibility: ConsoleVisibility::Hidden,
+        elevated: false,
+        startup_timeout_seconds: 30,
+        post_start_delay_milliseconds: 0,
+        shutdown_strategy: ShutdownStrategy::ForceOnly,
+    };
+    let mut runtime = WindowsProcessRuntime::new();
+
+    let identity = runtime
+        .launch(&recipe)
+        .expect("VirtualDesktopSwitcher-compatible recipe should launch");
+    wait_for_file(&report_path);
+    let report: Value =
+        serde_json::from_slice(&fs::read(&report_path).expect("report should be readable"))
+            .expect("report should be valid JSON");
+    assert_eq!(
+        report["arguments"],
+        serde_json::to_value(expected_arguments).expect("arguments should serialize")
+    );
+    let output = runtime
+        .read_output(&identity)
+        .expect("hidden console output should be captured");
+    assert!(output.stdout.ends_with("STDOUT-END\n"));
+    assert!(output.stderr.ends_with("STDERR-END\n"));
+    runtime
+        .force_stop(&identity)
+        .expect("demonstration fixture should be cleaned up");
+}
+
+#[test]
 fn launcher_style_launch_returns_the_monitored_process_identity() {
     let temporary = TempDirectory::new();
     let report_path = temporary.path().join("monitored report.json");

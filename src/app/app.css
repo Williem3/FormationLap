@@ -814,6 +814,95 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.formation-rail {
+  position: relative;
+  display: flex;
+  gap: 0;
+  margin: 22px 0 0;
+  padding: 18px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--canvas) 72%, var(--surface));
+  list-style: none;
+}
+
+.formation-rail::before {
+  position: absolute;
+  top: 35px;
+  right: 36px;
+  left: 36px;
+  height: 2px;
+  background: var(--border);
+  content: "";
+}
+
+.rail-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 132px;
+  flex: 1;
+  gap: 9px;
+  justify-items: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.rail-index {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.rail-node strong,
+.rail-node small {
+  display: block;
+}
+
+.rail-node strong {
+  max-width: 128px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-node small {
+  margin-top: 2px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.rail-node-starting .rail-index,
+.rail-node-running .rail-index {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rail-node-runningPreExisting .rail-index,
+.rail-node-notResponding .rail-index {
+  border-color: var(--warm);
+  color: var(--warm);
+}
+
+.rail-node-failed .rail-index {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .vr-toggle {
   display: inline-flex;
   gap: 8px;
@@ -844,6 +933,14 @@ button:disabled {
   margin-top: 8px;
 }
 
+.lifecycle-row {
+  display: grid;
+  grid-template-columns:
+    36px minmax(132px, 1fr) auto minmax(120px, auto)
+    minmax(148px, auto);
+  gap: 12px;
+}
+
 .application-copy {
   min-width: 0;
 }
@@ -867,10 +964,75 @@ button:disabled {
 }
 
 .status-label {
-  margin-left: auto;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-self: start;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
+}
+
+.status-glyph {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.status-starting,
+.status-running {
+  color: var(--accent);
+}
+
+.status-running .status-glyph {
+  border-color: var(--running);
+  background: var(--running);
+  color: var(--running);
+}
+
+.status-runningPreExisting,
+.status-notResponding {
+  color: var(--warm);
+}
+
+.status-stopping {
+  color: var(--accent);
+}
+
+.status-failed {
+  color: var(--danger);
+}
+
+.classification-label {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.application-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.compact-action {
+  min-width: 62px;
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.output-button {
+  white-space: nowrap;
 }
 
 .game-row {
@@ -884,6 +1046,25 @@ button:disabled {
 
 .profile-guidance {
   margin-top: 20px;
+}
+
+.console-dialog {
+  width: min(760px, 100%);
+}
+
+.console-output {
+  max-height: 320px;
+  margin: 18px 0 0;
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 17px;
+  white-space: pre-wrap;
 }
 
 .header-actions {

@@ -7,6 +7,7 @@ import {
 } from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
 import type {
+  ApplicationProcessSnapshot,
   AppSnapshot,
   LaunchSource,
   ProfileApplication,
@@ -35,6 +36,11 @@ type SnapshotState =
 
 type WorkspaceView = "dashboard" | "new-profile" | "edit-profile";
 type PrimarySimSource = "direct" | "steam";
+type PendingProcessAction = {
+  kind: "exit" | "restart" | "force";
+  application: ProfileApplication;
+  process: ApplicationProcessSnapshot;
+};
 
 export function App({ bridge }: AppProps) {
   const [state, setState] = useState<SnapshotState>({ kind: "loading" });
@@ -54,6 +60,10 @@ export function App({ bridge }: AppProps) {
   const [importDocument, setImportDocument] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingProcessAction, setPendingProcessAction] =
+    useState<PendingProcessAction | null>(null);
+  const [outputApplication, setOutputApplication] =
+    useState<ProfileApplication | null>(null);
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const newProfileButton = useRef<HTMLButtonElement | null>(null);
   const wasDialogOpen = useRef(false);
@@ -83,7 +93,54 @@ export function App({ bridge }: AppProps) {
   const selectedProfile = snapshot?.selectedProfile ?? null;
   const applicationName = snapshot?.applicationName ?? "Formation Lap";
   const isDialogOpen =
-    isDuplicateOpen || isDeleteOpen || isExportOpen || isImportOpen;
+    isDuplicateOpen ||
+    isDeleteOpen ||
+    isExportOpen ||
+    isImportOpen ||
+    pendingProcessAction !== null ||
+    outputApplication !== null;
+
+  const activeProcessKey =
+    snapshot?.applicationProcesses
+      .filter((process) => process.identity !== null)
+      .map((process) => `${process.applicationId}:${process.status}`)
+      .join("|") ?? "";
+
+  useEffect(() => {
+    if (activeProcessKey.length === 0) {
+      return;
+    }
+    let active = true;
+    let refreshing = false;
+    const timer = window.setInterval(() => {
+      if (refreshing) {
+        return;
+      }
+      refreshing = true;
+      void bridge
+        .refreshProcesses()
+        .then((nextSnapshot) => {
+          if (active) {
+            setState({ kind: "ready", snapshot: nextSnapshot });
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setFormError(
+              "Formation Lap could not refresh local application status.",
+            );
+          }
+        })
+        .finally(() => {
+          refreshing = false;
+        });
+    }, 3_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [activeProcessKey, bridge]);
 
   useEffect(() => {
     if (wasDialogOpen.current && !isDialogOpen) {
@@ -290,6 +347,154 @@ export function App({ bridge }: AppProps) {
     }
   };
 
+  const startApplication = async (application: ProfileApplication) => {
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.startApplication({
+        profileId: selectedProfile.id,
+        applicationId: application.id,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+    } catch {
+      setFormError(
+        `${application.name} could not start. Check its Launch Recipe and try again.`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const exitApplication = async (
+    application: ProfileApplication,
+    preExistingConfirmed: boolean,
+  ) => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.exitApplication({
+        applicationId: application.id,
+        preExistingConfirmed,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      const nextProcess = nextSnapshot.applicationProcesses.find(
+        (process) => process.applicationId === application.id,
+      );
+      if (nextProcess?.status === "stopping") {
+        rememberDialogTrigger();
+        setPendingProcessAction({
+          kind: "force",
+          application,
+          process: nextProcess,
+        });
+      }
+    } catch {
+      setFormError(
+        `${application.name} did not stop. Review its shutdown strategy and try again.`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const restartApplication = async (
+    application: ProfileApplication,
+    preExistingConfirmed: boolean,
+  ) => {
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.restartApplication({
+        profileId: selectedProfile.id,
+        applicationId: application.id,
+        preExistingConfirmed,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      const nextProcess = nextSnapshot.applicationProcesses.find(
+        (process) => process.applicationId === application.id,
+      );
+      if (nextProcess?.status === "stopping") {
+        rememberDialogTrigger();
+        setPendingProcessAction({
+          kind: "force",
+          application,
+          process: nextProcess,
+        });
+      }
+    } catch {
+      setFormError(
+        `${application.name} could not restart. Check its Launch Recipe and try again.`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const forceStopApplication = async (
+    application: ProfileApplication,
+    processSnapshot: ApplicationProcessSnapshot,
+  ) => {
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.forceStopApplication({
+        applicationId: application.id,
+        preExistingConfirmed: processSnapshot.ownership === "preExisting",
+        forceConfirmed: true,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setPendingProcessAction(null);
+    } catch {
+      setFormError(
+        `${application.name} could not be force stopped. Try again or close it directly.`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const requestProcessAction = (
+    kind: PendingProcessAction["kind"],
+    application: ProfileApplication,
+    processSnapshot: ApplicationProcessSnapshot,
+  ) => {
+    rememberDialogTrigger();
+    if (kind === "force" || processSnapshot.ownership === "preExisting") {
+      setPendingProcessAction({
+        kind,
+        application,
+        process: processSnapshot,
+      });
+      return;
+    }
+    if (kind === "exit") {
+      void exitApplication(application, false);
+    } else {
+      void restartApplication(application, false);
+    }
+  };
+
+  const confirmProcessAction = () => {
+    if (!pendingProcessAction) {
+      return;
+    }
+    const { kind, application, process } = pendingProcessAction;
+    setPendingProcessAction(null);
+    if (kind === "exit") {
+      void exitApplication(application, true);
+    } else if (kind === "restart") {
+      void restartApplication(application, true);
+    } else {
+      void forceStopApplication(application, process);
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary">
@@ -422,6 +627,8 @@ export function App({ bridge }: AppProps) {
             state={state}
             applicationName={applicationName}
             selectedProfile={selectedProfile}
+            applicationProcesses={snapshot?.applicationProcesses ?? []}
+            isBusy={isSaving}
             onCreateProfile={openNewProfile}
             onDeleteProfile={() => {
               rememberDialogTrigger();
@@ -431,9 +638,114 @@ export function App({ bridge }: AppProps) {
             onDuplicateProfile={openDuplicateProfile}
             onEditProfile={openProfileEditor}
             onExportProfile={() => void exportProfile()}
+            onStartApplication={(application) =>
+              void startApplication(application)
+            }
+            onExitApplication={(application, processSnapshot) =>
+              requestProcessAction("exit", application, processSnapshot)
+            }
+            onRestartApplication={(application, processSnapshot) =>
+              requestProcessAction("restart", application, processSnapshot)
+            }
+            onForceStopApplication={(application, processSnapshot) =>
+              requestProcessAction("force", application, processSnapshot)
+            }
+            onViewOutput={setOutputApplication}
           />
         )}
       </main>
+
+      {pendingProcessAction && (
+        <ModalDialog
+          labelledBy="process-confirmation-title"
+          onClose={() => setPendingProcessAction(null)}
+        >
+          <p className="eyebrow">
+            {pendingProcessAction.kind === "force"
+              ? "Force termination"
+              : "Ownership confirmation"}
+          </p>
+          <h2 id="process-confirmation-title">
+            {pendingProcessAction.kind === "force"
+              ? `Force stop ${pendingProcessAction.application.name}?`
+              : `${pendingProcessAction.kind === "restart" ? "Restart" : "Control"} a Pre-existing Process?`}
+          </h2>
+          <p>
+            {pendingProcessAction.kind === "force"
+              ? `Graceful shutdown did not complete. Force stopping ${pendingProcessAction.application.name} may lose unsaved work.`
+              : `${pendingProcessAction.application.name} was already running before Formation Lap observed it. This explicit action will control a Process that the current Session does not own.`}
+          </p>
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setPendingProcessAction(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={
+                pendingProcessAction.kind === "force"
+                  ? "danger-button"
+                  : "primary-button"
+              }
+              disabled={isSaving}
+              onClick={confirmProcessAction}
+            >
+              {pendingProcessAction.kind === "force"
+                ? `Force stop ${pendingProcessAction.application.name}`
+                : `${pendingProcessAction.kind === "restart" ? "Restart" : "Exit"} ${pendingProcessAction.application.name}`}
+            </button>
+          </div>
+        </ModalDialog>
+      )}
+
+      {outputApplication &&
+        (() => {
+          const processOutput = snapshot?.applicationProcesses.find(
+            (process) => process.applicationId === outputApplication.id,
+          )?.output;
+          return (
+            <ModalDialog
+              className="console-dialog"
+              labelledBy="console-output-title"
+              onClose={() => setOutputApplication(null)}
+            >
+              <p className="eyebrow">Bounded local output</p>
+              <h2 id="console-output-title">{outputApplication.name} output</h2>
+              <p>
+                Formation Lap keeps only the most recent local stdout and stderr
+                tail.
+              </p>
+              <pre className="console-output">
+                {processOutput
+                  ? [
+                      processOutput.stdout,
+                      processOutput.stderr,
+                      processOutput.truncated
+                        ? "\n[Earlier output was discarded.]"
+                        : "",
+                    ].join("")
+                  : "No captured output."}
+              </pre>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => setOutputApplication(null)}
+                >
+                  Close output
+                </button>
+              </div>
+            </ModalDialog>
+          );
+        })()}
 
       {isDuplicateOpen && selectedProfile && (
         <ModalDialog
@@ -1478,22 +1790,45 @@ interface DashboardProps {
   state: SnapshotState;
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
+  applicationProcesses: ApplicationProcessSnapshot[];
+  isBusy: boolean;
   onCreateProfile(): void;
   onDeleteProfile(): void;
   onDuplicateProfile(): void;
   onEditProfile(): void;
   onExportProfile(): void;
+  onStartApplication(application: ProfileApplication): void;
+  onExitApplication(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onRestartApplication(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onForceStopApplication(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onViewOutput(application: ProfileApplication): void;
 }
 
 function Dashboard({
   state,
   applicationName,
   selectedProfile,
+  applicationProcesses,
+  isBusy,
   onCreateProfile,
   onDeleteProfile,
   onDuplicateProfile,
   onEditProfile,
   onExportProfile,
+  onStartApplication,
+  onExitApplication,
+  onRestartApplication,
+  onForceStopApplication,
+  onViewOutput,
 }: DashboardProps) {
   const pageTitle = selectedProfile?.name ?? applicationName;
 
@@ -1607,7 +1942,7 @@ function Dashboard({
           <div className="profile-dashboard-heading">
             <div>
               <p className="eyebrow">Startup sequence</p>
-              <h2 id="sequence-title">Ready to configure</h2>
+              <h2 id="sequence-title">Local application control</h2>
             </div>
             <label className="vr-toggle">
               <input
@@ -1618,6 +1953,16 @@ function Dashboard({
               <span>VR</span>
             </label>
           </div>
+
+          <FormationRail
+            applications={[
+              ...selectedProfile.supportingApplications.map(
+                (supporting) => supporting.application,
+              ),
+              selectedProfile.primarySim,
+            ]}
+            applicationProcesses={applicationProcesses}
+          />
 
           <div className="application-list">
             {selectedProfile.supportingApplications.length === 0 ? (
@@ -1631,16 +1976,21 @@ function Dashboard({
             ) : (
               selectedProfile.supportingApplications.map(
                 ({ application, requirement }) => (
-                  <div className="application-row" key={application.id}>
-                    <span className="application-icon">
-                      <PulseIcon />
-                    </span>
-                    <span className="application-copy">
-                      <strong>{application.name}</strong>
-                      <small>{requirement}</small>
-                    </span>
-                    <span className="status-label">○ Stopped</span>
-                  </div>
+                  <ApplicationLifecycleRow
+                    key={application.id}
+                    application={application}
+                    classification={requirement}
+                    icon={<PulseIcon />}
+                    process={applicationProcesses.find(
+                      (candidate) => candidate.applicationId === application.id,
+                    )}
+                    isBusy={isBusy}
+                    onStart={onStartApplication}
+                    onExit={onExitApplication}
+                    onRestart={onRestartApplication}
+                    onForceStop={onForceStopApplication}
+                    onViewOutput={onViewOutput}
+                  />
                 ),
               )
             )}
@@ -1649,24 +1999,26 @@ function Dashboard({
               <span />
               <small>Primary Sim · launches last</small>
             </div>
-            <div className="application-row game-row">
-              <span className="application-icon game-icon">
-                <FlagIcon />
-              </span>
-              <span className="application-copy">
-                <strong>{selectedProfile.primarySim.name}</strong>
-                <small>
-                  {selectedProfile.primarySim.pathNeedsRepair
-                    ? "Executable path needs repair"
-                    : "Launch Recipe ready"}
-                </small>
-              </span>
-              <span className="status-label">○ Stopped</span>
-            </div>
+            <ApplicationLifecycleRow
+              application={selectedProfile.primarySim}
+              classification="Primary Sim"
+              icon={<FlagIcon />}
+              process={applicationProcesses.find(
+                (candidate) =>
+                  candidate.applicationId === selectedProfile.primarySim.id,
+              )}
+              isBusy={isBusy}
+              isPrimary
+              onStart={onStartApplication}
+              onExit={onExitApplication}
+              onRestart={onRestartApplication}
+              onForceStop={onForceStopApplication}
+              onViewOutput={onViewOutput}
+            />
           </div>
           <p id="start-session-requirement" className="profile-guidance">
-            Edit this profile to add Supporting Applications and repair launch
-            details before starting a Session.
+            Start, observe, exit, or restart one configured local application.
+            Session sequencing arrives in the next milestone.
           </p>
         </section>
       )}
@@ -1683,9 +2035,181 @@ function Dashboard({
             <small>No Session active</small>
           </span>
         </div>
-        <span className="utility-data">M2 · LOCAL</span>
+        <span className="utility-data">M3 · LOCAL</span>
       </footer>
     </>
+  );
+}
+
+const processStatusLabels: Record<
+  ApplicationProcessSnapshot["status"],
+  string
+> = {
+  starting: "Starting",
+  running: "Running",
+  runningPreExisting: "Running (pre-existing)",
+  notResponding: "Not Responding",
+  stopping: "Stopping",
+  stopped: "Stopped",
+  failed: "Failed",
+};
+
+function FormationRail({
+  applications,
+  applicationProcesses,
+}: {
+  applications: ProfileApplication[];
+  applicationProcesses: ApplicationProcessSnapshot[];
+}) {
+  return (
+    <ol className="formation-rail" aria-label="Configured startup order">
+      {applications.map((application, index) => {
+        const process = applicationProcesses.find(
+          (candidate) => candidate.applicationId === application.id,
+        );
+        const status = process?.status ?? "stopped";
+        return (
+          <li className={`rail-node rail-node-${status}`} key={application.id}>
+            <span className="rail-index" aria-hidden="true">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span>
+              <strong>{application.name}</strong>
+              <small>{processStatusLabels[status]}</small>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+interface ApplicationLifecycleRowProps {
+  application: ProfileApplication;
+  classification: string;
+  icon: ReactNode;
+  process: ApplicationProcessSnapshot | undefined;
+  isBusy: boolean;
+  isPrimary?: boolean;
+  onStart(application: ProfileApplication): void;
+  onExit(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onRestart(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onForceStop(
+    application: ProfileApplication,
+    process: ApplicationProcessSnapshot,
+  ): void;
+  onViewOutput(application: ProfileApplication): void;
+}
+
+function ApplicationLifecycleRow({
+  application,
+  classification,
+  icon,
+  process,
+  isBusy,
+  isPrimary = false,
+  onStart,
+  onExit,
+  onRestart,
+  onForceStop,
+  onViewOutput,
+}: ApplicationLifecycleRowProps) {
+  const status = process?.status ?? "stopped";
+  const isActive =
+    process?.identity !== null && process?.identity !== undefined;
+  const sourceLabel =
+    application.launchRecipe.source.kind === "directExecutable"
+      ? `${application.launchRecipe.consoleVisibility} console`
+      : `Steam ${application.launchRecipe.source.appId}`;
+
+  return (
+    <article
+      className={`application-row lifecycle-row ${isPrimary ? "game-row" : ""}`}
+      data-status={status}
+    >
+      <span
+        className={`application-icon ${isPrimary ? "game-icon" : ""}`}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="application-copy">
+        <strong>{application.name}</strong>
+        <small>
+          {application.pathNeedsRepair
+            ? "Executable path needs repair"
+            : sourceLabel}
+        </small>
+      </span>
+      <span className="classification-label">{classification}</span>
+      <span
+        className={`status-label status-${status}`}
+        role="status"
+        aria-label={`${application.name}: ${processStatusLabels[status]}`}
+      >
+        <span className="status-glyph" aria-hidden="true" />
+        {processStatusLabels[status]}
+      </span>
+      <span className="application-actions">
+        {process?.output && (
+          <button
+            type="button"
+            className="tertiary-button output-button"
+            onClick={() => onViewOutput(application)}
+          >
+            View output
+          </button>
+        )}
+        {!isActive ? (
+          <button
+            type="button"
+            className="secondary-button compact-action"
+            disabled={isBusy || application.pathNeedsRepair}
+            onClick={() => onStart(application)}
+            aria-label={`Start ${application.name}`}
+          >
+            Start
+          </button>
+        ) : status === "stopping" ? (
+          <button
+            type="button"
+            className="danger-button compact-action"
+            disabled={isBusy}
+            onClick={() => onForceStop(application, process)}
+            aria-label={`Force stop ${application.name}`}
+          >
+            Force stop
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="secondary-button compact-action"
+              disabled={isBusy}
+              onClick={() => onExit(application, process)}
+              aria-label={`Exit ${application.name}`}
+            >
+              Exit
+            </button>
+            <button
+              type="button"
+              className="secondary-button compact-action"
+              disabled={isBusy}
+              onClick={() => onRestart(application, process)}
+              aria-label={`Restart ${application.name}`}
+            >
+              Restart
+            </button>
+          </>
+        )}
+      </span>
+    </article>
   );
 }
 

@@ -1,14 +1,18 @@
 import type {
   ApplicationRequirement,
+  ApplicationTargetPayload,
   AppSnapshot,
   CloseSessionSettings,
   CreateProfilePayload,
   DuplicateProfilePayload,
+  ExitApplicationPayload,
+  ForceStopApplicationPayload,
   ImportProfilePayload,
   LaunchRecipe,
   ProfileIdPayload,
   ProfileSummary,
   RacingProfile,
+  RestartApplicationPayload,
   SaveProfilePayload,
   VrLaunchMode,
 } from "../generated/bindings";
@@ -37,6 +41,7 @@ interface PortableRacingProfile {
 
 export class InMemoryNativeBridge implements NativeBridge {
   #nextId = 1;
+  #nextProcessId = 10_000;
   #profilesById = new Map<string, RacingProfile>();
   #snapshot: AppSnapshot;
 
@@ -55,6 +60,108 @@ export class InMemoryNativeBridge implements NativeBridge {
 
   getAppSnapshot(): Promise<AppSnapshot> {
     return Promise.resolve(structuredClone(this.#snapshot));
+  }
+
+  startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {
+    const profile = this.#profilesById.get(payload.profileId);
+    const application = profile
+      ? [
+          profile.primarySim,
+          ...profile.supportingApplications.map(
+            (supporting) => supporting.application,
+          ),
+        ].find((candidate) => candidate.id === payload.applicationId)
+      : undefined;
+    if (!application) {
+      return Promise.reject(new Error("Configured application was not found"));
+    }
+    const existing = this.#snapshot.applicationProcesses.find(
+      (process) => process.applicationId === payload.applicationId,
+    );
+    if (existing?.identity) {
+      return this.getAppSnapshot();
+    }
+    this.#snapshot.applicationProcesses = [
+      ...this.#snapshot.applicationProcesses.filter(
+        (process) => process.applicationId !== payload.applicationId,
+      ),
+      {
+        applicationId: payload.applicationId,
+        status: "starting",
+        ownership: "sessionOwned",
+        identity: {
+          pid: this.#nextProcessId++,
+          creationTime: String(Date.now()),
+          canonicalExecutablePath:
+            application.launchRecipe.source.kind === "directExecutable"
+              ? application.launchRecipe.source.executablePath
+              : `steam://${application.launchRecipe.source.appId}`,
+        },
+        output: null,
+      },
+    ];
+    return this.getAppSnapshot();
+  }
+
+  refreshProcesses(): Promise<AppSnapshot> {
+    for (const process of this.#snapshot.applicationProcesses) {
+      if (process.status === "starting") {
+        process.status = "running";
+      }
+    }
+    return this.getAppSnapshot();
+  }
+
+  exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot> {
+    const process = this.#snapshot.applicationProcesses.find(
+      (candidate) => candidate.applicationId === payload.applicationId,
+    );
+    if (
+      !process ||
+      (process.ownership === "preExisting" && !payload.preExistingConfirmed)
+    ) {
+      return this.getAppSnapshot();
+    }
+    process.status = "stopped";
+    process.ownership = null;
+    process.identity = null;
+    return this.getAppSnapshot();
+  }
+
+  forceStopApplication(
+    payload: ForceStopApplicationPayload,
+  ): Promise<AppSnapshot> {
+    const process = this.#snapshot.applicationProcesses.find(
+      (candidate) => candidate.applicationId === payload.applicationId,
+    );
+    if (
+      !process ||
+      !payload.forceConfirmed ||
+      (process.ownership === "preExisting" && !payload.preExistingConfirmed)
+    ) {
+      return this.getAppSnapshot();
+    }
+    process.status = "stopped";
+    process.ownership = null;
+    process.identity = null;
+    return this.getAppSnapshot();
+  }
+
+  async restartApplication(
+    payload: RestartApplicationPayload,
+  ): Promise<AppSnapshot> {
+    const process = this.#snapshot.applicationProcesses.find(
+      (candidate) => candidate.applicationId === payload.applicationId,
+    );
+    if (process?.ownership === "preExisting" && !payload.preExistingConfirmed) {
+      return this.getAppSnapshot();
+    }
+    if (process) {
+      process.status = "stopped";
+      process.ownership = null;
+      process.identity = null;
+    }
+    return this.startApplication(payload);
   }
 
   createProfile(payload: CreateProfilePayload): Promise<AppSnapshot> {

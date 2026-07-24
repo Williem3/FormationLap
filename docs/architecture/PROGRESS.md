@@ -64,7 +64,9 @@ M2 remains in progress after the profile-management slice:
   native-owned application identities and recomputes missing-path diagnostics
   instead of trusting those frontend fields. Profile selection settings use
   the same atomic replacement and recover their last valid backup when a
-  legacy interrupted write leaves a temporary marker.
+  legacy interrupted write leaves a temporary marker. If a live Racing Profile
+  replacement is invalid JSON or contains invalid names, ProfileLibrary
+  validates and restores its bounded last-valid backup before exposing state.
 - Next behavior: audit every M2 exit criterion, close any evidence gap, and
   capture the wizard and editor screenshots plus keyboard/scaling results.
 - Test seams: FormationLapCore, Tauri commands and generated contracts, and

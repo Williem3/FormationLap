@@ -148,14 +148,7 @@ impl ProfileLibrary {
                 continue;
             }
 
-            let mut document: RacingProfileDocument = serde_json::from_slice(&fs::read(&path)?)?;
-            if !matches!(
-                document.schema_version,
-                LEGACY_PROFILE_SCHEMA_VERSION | PROFILE_SCHEMA_VERSION
-            ) {
-                return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
-            }
-            validate_profile_names(&document.name, &document.primary_sim.name)?;
+            let mut document = Self::load_live_document(&path, &backups_directory)?;
             if document.schema_version == LEGACY_PROFILE_SCHEMA_VERSION {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
                 Self::persist_migration(&path, &backups_directory, &document)?;
@@ -174,6 +167,41 @@ impl ProfileLibrary {
             profiles_directory,
             profiles,
         })
+    }
+
+    fn load_document(path: &Path) -> Result<RacingProfileDocument, CoreError> {
+        let document: RacingProfileDocument = serde_json::from_slice(&fs::read(path)?)?;
+        if !matches!(
+            document.schema_version,
+            LEGACY_PROFILE_SCHEMA_VERSION | PROFILE_SCHEMA_VERSION
+        ) {
+            return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
+        }
+        validate_profile_names(&document.name, &document.primary_sim.name)?;
+
+        Ok(document)
+    }
+
+    fn load_live_document(
+        path: &Path,
+        backups_directory: &Path,
+    ) -> Result<RacingProfileDocument, CoreError> {
+        match Self::load_document(path) {
+            Ok(document) => Ok(document),
+            Err(CoreError::InvalidProfileDocument(_)) | Err(CoreError::InvalidProfileName(_)) => {
+                let file_name = path
+                    .file_name()
+                    .ok_or_else(|| std::io::Error::other("profile path has no file name"))?;
+                let backup = backups_directory.join(file_name);
+                let document = Self::load_document(&backup)?;
+
+                fs::remove_file(path)?;
+                fs::rename(backup, path)?;
+
+                Ok(document)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     fn recover_interrupted_replacements(
@@ -201,14 +229,7 @@ impl ProfileLibrary {
             if !backup.exists() {
                 continue;
             }
-            let document: RacingProfileDocument = serde_json::from_slice(&fs::read(&backup)?)?;
-            if !matches!(
-                document.schema_version,
-                LEGACY_PROFILE_SCHEMA_VERSION | PROFILE_SCHEMA_VERSION
-            ) {
-                return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
-            }
-            validate_profile_names(&document.name, &document.primary_sim.name)?;
+            Self::load_document(&backup)?;
 
             fs::remove_file(temporary)?;
             fs::rename(backup, destination)?;

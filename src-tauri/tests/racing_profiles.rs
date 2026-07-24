@@ -609,6 +609,52 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
 }
 
 #[test]
+fn invalid_profile_replacement_recovers_the_last_valid_document() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Last valid".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut edited = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected");
+    edited.name = "Invalid replacement".to_owned();
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(edited),
+    })
+    .expect("editing should retain the last valid document as a backup");
+    drop(core);
+
+    let live_document = storage
+        .path()
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
+    fs::write(&live_document, b"{ invalid replacement")
+        .expect("fixture should corrupt only the live replacement");
+
+    let recovered =
+        FormationLapCore::open(storage.path()).expect("the last valid profile should recover");
+
+    assert_eq!(
+        recovered.snapshot().profiles,
+        vec![ProfileSummary {
+            id: profile_id,
+            name: "Last valid".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        }]
+    );
+}
+
+#[test]
 fn schema_one_profile_is_migrated_without_losing_identity() {
     let storage = TempStorage::new();
     let profiles = storage.path().join("profiles");

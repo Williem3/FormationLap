@@ -134,11 +134,59 @@ export class InMemoryNativeBridge implements NativeBridge {
     return this.getAppSnapshot();
   }
 
-  refreshProcesses(): Promise<AppSnapshot> {
+  async refreshProcesses(): Promise<AppSnapshot> {
     for (const process of this.#snapshot.applicationProcesses) {
       if (process.status === "starting") {
         process.status = "running";
       }
+    }
+    if (this.#snapshot.session.state === "starting") {
+      for (const application of this.#snapshot.session.applications) {
+        const process = this.#snapshot.applicationProcesses.find(
+          (candidate) => candidate.applicationId === application.applicationId,
+        );
+        if (process?.status === "running") {
+          application.state = "running";
+        }
+      }
+      const next = this.#snapshot.session.applications.find(
+        (application) => application.state === "pending",
+      );
+      if (next && this.#snapshot.session.activeProfileId) {
+        await this.startApplication({
+          profileId: this.#snapshot.session.activeProfileId,
+          applicationId: next.applicationId,
+        });
+        next.state = "starting";
+      } else if (
+        this.#snapshot.session.applications.every(
+          (application) =>
+            application.state === "running" ||
+            application.state === "runningPreExisting" ||
+            application.state === "failed",
+        )
+      ) {
+        this.#snapshot.session.state = "active";
+      }
+    } else if (
+      this.#snapshot.session.state === "cancelling" ||
+      this.#snapshot.session.state === "closing"
+    ) {
+      for (const application of this.#snapshot.session.applications) {
+        const process = this.#snapshot.applicationProcesses.find(
+          (candidate) => candidate.applicationId === application.applicationId,
+        );
+        if (process?.ownership === "sessionOwned") {
+          process.status = "stopped";
+          process.ownership = null;
+          process.identity = null;
+          application.state = "stopped";
+        } else if (process?.ownership === "preExisting") {
+          application.state = "detached";
+        }
+      }
+      this.#snapshot.session.state = "idle";
+      this.#snapshot.session.activeProfileId = null;
     }
     return this.getAppSnapshot();
   }
@@ -193,6 +241,90 @@ export class InMemoryNativeBridge implements NativeBridge {
       process.identity = null;
     }
     return this.startApplication(payload);
+  }
+
+  async startSession(payload: ProfileIdPayload): Promise<AppSnapshot> {
+    if (this.#snapshot.session.state !== "idle") {
+      return Promise.reject(
+        new Error("a Session action is already in progress"),
+      );
+    }
+    const profile = this.#profilesById.get(payload.profileId);
+    if (!profile) {
+      return Promise.reject(new Error("Racing Profile was not found"));
+    }
+    this.#snapshot.session = {
+      state: "starting",
+      activeProfileId: profile.id,
+      applications: [
+        ...profile.supportingApplications.map((supporting) => ({
+          applicationId: supporting.application.id,
+          name: supporting.application.name,
+          role: "supporting" as const,
+          requirement: supporting.requirement,
+          state: "pending" as const,
+        })),
+        {
+          applicationId: profile.primarySim.id,
+          name: profile.primarySim.name,
+          role: "primarySim",
+          requirement: null,
+          state: "pending",
+        },
+      ],
+      summary: null,
+    };
+    const first = this.#snapshot.session.applications[0];
+    if (first) {
+      await this.startApplication({
+        profileId: profile.id,
+        applicationId: first.applicationId,
+      });
+      first.state = "starting";
+    }
+    return this.getAppSnapshot();
+  }
+
+  cancelStartup(): Promise<AppSnapshot> {
+    if (this.#snapshot.session.state !== "starting") {
+      return Promise.reject(new Error("Startup is not active"));
+    }
+    this.#snapshot.session.state = "cancelling";
+    return this.getAppSnapshot();
+  }
+
+  closeSession(): Promise<AppSnapshot> {
+    if (this.#snapshot.session.state !== "active") {
+      return Promise.reject(new Error("Session is not active"));
+    }
+    this.#snapshot.session.state = "closing";
+    const primary = this.#snapshot.session.applications.find(
+      (application) => application.role === "primarySim",
+    );
+    if (primary?.state === "running") {
+      primary.state = "stopping";
+    }
+    return this.getAppSnapshot();
+  }
+
+  acceptRecovery(): Promise<AppSnapshot> {
+    if (this.#snapshot.session.state !== "recoveryAvailable") {
+      return Promise.reject(new Error("Recovery is not available"));
+    }
+    this.#snapshot.session.state = "active";
+    return this.getAppSnapshot();
+  }
+
+  dismissRecovery(): Promise<AppSnapshot> {
+    if (this.#snapshot.session.state !== "recoveryAvailable") {
+      return Promise.reject(new Error("Recovery is not available"));
+    }
+    this.#snapshot.session.state = "idle";
+    this.#snapshot.session.activeProfileId = null;
+    for (const application of this.#snapshot.session.applications) {
+      application.state = "detached";
+    }
+    return this.getAppSnapshot();
   }
 
   createProfile(payload: CreateProfilePayload): Promise<AppSnapshot> {

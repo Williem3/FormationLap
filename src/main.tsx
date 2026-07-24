@@ -25,6 +25,12 @@ async function resolveNativeBridge(): Promise<NativeBridge> {
     const { createM3PreviewBridge } = await import("./preview/m3-preview");
     return createM3PreviewBridge();
   }
+  if (import.meta.env.DEV && preview === "m4-session") {
+    const { createM4PreviewBridge } = await import("./preview/m4-preview");
+    const previewState =
+      new URLSearchParams(window.location.search).get("state") ?? "prestart";
+    return createM4PreviewBridge(previewState);
+  }
   if (import.meta.env.DEV && preview === "m5-wizard") {
     const { createM5PreviewBridge } = await import("./preview/m5-preview");
     return createM5PreviewBridge();

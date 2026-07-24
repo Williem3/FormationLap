@@ -7,7 +7,9 @@ use formation_lap_lib::{
     ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, LaunchRecipe,
     LaunchSource, PrimarySimIdPayload, ProcessIdentity, ProcessOutput, ProcessOwnership,
     ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
-    RestartApplicationPayload, SaveProfilePayload, ShutdownStrategy, SupportingApplication,
+    RestartApplicationPayload, SaveProfilePayload, SessionApplicationRole,
+    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
+    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SupportingApplication,
     SupportingApplicationRecommendation, VrLaunchMode,
 };
 use std::{
@@ -36,6 +38,14 @@ fn render_bindings() -> String {
         ProcessStatus::decl(&config),
         ProcessOutput::decl(&config),
         ApplicationProcessSnapshot::decl(&config),
+        SessionState::decl(&config),
+        SessionApplicationRole::decl(&config),
+        SessionApplicationState::decl(&config),
+        SessionEventKind::decl(&config),
+        SessionEvent::decl(&config),
+        SessionSummary::decl(&config),
+        SessionApplicationSnapshot::decl(&config),
+        SessionSnapshot::decl(&config),
         AppSnapshot::decl(&config),
         ApplicationIcon::decl(&config),
         DiscoveredInstallation::decl(&config),
@@ -120,6 +130,26 @@ export function forceStopApplication(payload: ForceStopApplicationPayload): Prom
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("restart_application", {{ payload }});
+}}
+
+export function startSession(payload: ProfileIdPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("start_session", {{ payload }});
+}}
+
+export function cancelStartup(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("cancel_startup");
+}}
+
+export function closeSession(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("close_session");
+}}
+
+export function acceptRecovery(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("accept_recovery");
+}}
+
+export function dismissRecovery(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("dismiss_recovery");
 }}
 
 export function discoverApplications(): Promise<DiscoverySnapshot> {{

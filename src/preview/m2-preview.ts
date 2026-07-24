@@ -1,11 +1,13 @@
 import type { AppSnapshot } from "../generated/bindings";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
+import { idleSessionSnapshot } from "../session/session-snapshot";
 
 type M2Preview = "m2-wizard" | "m2-editor";
 
 const editorSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  session: idleSessionSnapshot(),
   applicationProcesses: [],
   profiles: [
     {
@@ -94,6 +96,7 @@ export function createM2PreviewBridge(
     return new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,

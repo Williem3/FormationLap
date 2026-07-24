@@ -16,6 +16,7 @@ import type {
   LaunchSource,
   ProfileApplication,
   RacingProfile,
+  SessionApplicationSnapshot,
   SupportingApplication,
   SupportingApplicationRecommendation,
 } from "../generated/bindings";
@@ -504,6 +505,33 @@ export function App({ bridge }: AppProps) {
     }
   };
 
+  const runSessionAction = async (
+    action: "start" | "cancel" | "close" | "acceptRecovery" | "dismissRecovery",
+  ) => {
+    if (action === "start" && !selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot =
+        action === "start"
+          ? await bridge.startSession({ profileId: selectedProfile!.id })
+          : action === "cancel"
+            ? await bridge.cancelStartup()
+            : action === "close"
+              ? await bridge.closeSession()
+              : action === "acceptRecovery"
+                ? await bridge.acceptRecovery()
+                : await bridge.dismissRecovery();
+      setState({ kind: "ready", snapshot: nextSnapshot });
+    } catch {
+      setFormError("Formation Lap could not complete the Session action.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const exitApplication = async (
     application: ProfileApplication,
     preExistingConfirmed: boolean,
@@ -777,6 +805,7 @@ export function App({ bridge }: AppProps) {
             applicationName={applicationName}
             selectedProfile={selectedProfile}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
+            session={snapshot?.session ?? null}
             isBusy={isSaving}
             onCreateProfile={openNewProfile}
             onDeleteProfile={() => {
@@ -800,6 +829,11 @@ export function App({ bridge }: AppProps) {
               requestProcessAction("force", application, processSnapshot)
             }
             onViewOutput={setOutputApplication}
+            onStartSession={() => void runSessionAction("start")}
+            onCancelStartup={() => void runSessionAction("cancel")}
+            onCloseSession={() => void runSessionAction("close")}
+            onAcceptRecovery={() => void runSessionAction("acceptRecovery")}
+            onDismissRecovery={() => void runSessionAction("dismissRecovery")}
           />
         )}
       </main>
@@ -2263,6 +2297,7 @@ interface DashboardProps {
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
   applicationProcesses: ApplicationProcessSnapshot[];
+  session: AppSnapshot["session"] | null;
   isBusy: boolean;
   onCreateProfile(): void;
   onDeleteProfile(): void;
@@ -2283,6 +2318,11 @@ interface DashboardProps {
     process: ApplicationProcessSnapshot,
   ): void;
   onViewOutput(application: ProfileApplication): void;
+  onStartSession(): void;
+  onCancelStartup(): void;
+  onCloseSession(): void;
+  onAcceptRecovery(): void;
+  onDismissRecovery(): void;
 }
 
 function Dashboard({
@@ -2290,6 +2330,7 @@ function Dashboard({
   applicationName,
   selectedProfile,
   applicationProcesses,
+  session,
   isBusy,
   onCreateProfile,
   onDeleteProfile,
@@ -2301,8 +2342,18 @@ function Dashboard({
   onRestartApplication,
   onForceStopApplication,
   onViewOutput,
+  onStartSession,
+  onCancelStartup,
+  onCloseSession,
+  onAcceptRecovery,
+  onDismissRecovery,
 }: DashboardProps) {
   const pageTitle = selectedProfile?.name ?? applicationName;
+  const sessionState = session?.state ?? "idle";
+  const profileIsLocked =
+    sessionState !== "idle" && session?.activeProfileId === selectedProfile?.id;
+  const lifecycleControlsLocked =
+    !["idle", "active"].includes(sessionState) || isBusy;
 
   return (
     <>
@@ -2332,6 +2383,7 @@ function Dashboard({
             <button
               type="button"
               className="secondary-button"
+              disabled={profileIsLocked}
               onClick={onEditProfile}
             >
               Edit profile
@@ -2350,6 +2402,7 @@ function Dashboard({
             <button
               type="button"
               className="secondary-button danger-text"
+              disabled={profileIsLocked}
               onClick={onDeleteProfile}
             >
               Delete profile
@@ -2358,10 +2411,33 @@ function Dashboard({
           <button
             type="button"
             className="primary-button"
-            disabled
+            disabled={
+              isBusy ||
+              !selectedProfile ||
+              sessionState === "cancelling" ||
+              sessionState === "closing" ||
+              sessionState === "recoveryAvailable"
+            }
             aria-describedby="start-session-requirement"
+            onClick={
+              sessionState === "starting"
+                ? onCancelStartup
+                : sessionState === "active"
+                  ? onCloseSession
+                  : onStartSession
+            }
           >
-            Start session
+            {sessionState === "starting"
+              ? "Cancel startup"
+              : sessionState === "active"
+                ? "Close session"
+                : sessionState === "cancelling"
+                  ? "Cancelling startup…"
+                  : sessionState === "closing"
+                    ? "Closing session…"
+                    : sessionState === "recoveryAvailable"
+                      ? "Recovery available"
+                      : "Start session"}
           </button>
         </div>
       </header>
@@ -2411,6 +2487,35 @@ function Dashboard({
 
       {state.kind === "ready" && selectedProfile && (
         <section className="profile-dashboard" aria-labelledby="sequence-title">
+          {sessionState === "recoveryAvailable" && (
+            <div className="recovery-offer" role="status">
+              <div>
+                <strong>Previous Session found</strong>
+                <span>
+                  Resume monitoring only after Formation Lap verifies the local
+                  Processes.
+                </span>
+              </div>
+              <div className="recovery-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={isBusy}
+                  onClick={onDismissRecovery}
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isBusy}
+                  onClick={onAcceptRecovery}
+                >
+                  Resume monitoring
+                </button>
+              </div>
+            </div>
+          )}
           <div className="profile-dashboard-heading">
             <div>
               <p className="eyebrow">Startup sequence</p>
@@ -2434,6 +2539,7 @@ function Dashboard({
               selectedProfile.primarySim,
             ]}
             applicationProcesses={applicationProcesses}
+            sessionApplications={session?.applications ?? []}
           />
 
           <div className="application-list">
@@ -2456,7 +2562,7 @@ function Dashboard({
                     process={applicationProcesses.find(
                       (candidate) => candidate.applicationId === application.id,
                     )}
-                    isBusy={isBusy}
+                    isBusy={lifecycleControlsLocked}
                     onStart={onStartApplication}
                     onExit={onExitApplication}
                     onRestart={onRestartApplication}
@@ -2479,7 +2585,7 @@ function Dashboard({
                 (candidate) =>
                   candidate.applicationId === selectedProfile.primarySim.id,
               )}
-              isBusy={isBusy}
+              isBusy={lifecycleControlsLocked}
               isPrimary
               onStart={onStartApplication}
               onExit={onExitApplication}
@@ -2489,9 +2595,32 @@ function Dashboard({
             />
           </div>
           <p id="start-session-requirement" className="profile-guidance">
-            Start, observe, exit, or restart one configured local application.
-            Session sequencing arrives in the next milestone.
+            Formation Lap starts Supporting Applications in this order, confirms
+            the Primary Sim last, and preserves Pre-existing Processes.
           </p>
+          {sessionState === "idle" && session?.summary && (
+            <section
+              className="session-summary"
+              aria-labelledby="session-summary-title"
+            >
+              <div>
+                <p className="eyebrow">Post-session summary</p>
+                <h3 id="session-summary-title">Session notes</h3>
+              </div>
+              <ul>
+                {session.summary.events.map((event) => (
+                  <li key={`${event.applicationId}-${event.kind}`}>
+                    <strong>{event.name}</strong>
+                    <span>
+                      {event.kind === "launchFailed"
+                        ? "Did not finish startup"
+                        : "Exited during the Session"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </section>
       )}
 
@@ -2501,13 +2630,25 @@ function Dashboard({
           <span>
             <strong>
               {selectedProfile
-                ? "Racing Profile saved"
+                ? sessionState === "active"
+                  ? "Session active"
+                  : sessionState === "starting"
+                    ? "Starting Session"
+                    : sessionState === "closing"
+                      ? "Closing Session"
+                      : "Racing Profile saved"
                 : "Secure foundation ready"}
             </strong>
-            <small>No Session active</small>
+            <small>
+              {sessionState === "idle"
+                ? "No Session active"
+                : sessionState === "active"
+                  ? "Primary Sim running · race-safe mode"
+                  : "Formation Rail follows native Session state"}
+            </small>
           </span>
         </div>
-        <span className="utility-data">M3 · LOCAL</span>
+        <span className="utility-data">M4 · LOCAL</span>
       </footer>
     </>
   );
@@ -2526,20 +2667,43 @@ const processStatusLabels: Record<
   failed: "Failed",
 };
 
+const sessionApplicationStateLabels: Record<
+  SessionApplicationSnapshot["state"],
+  string
+> = {
+  pending: "Pending",
+  starting: "Starting",
+  running: "Running",
+  runningPreExisting: "Running (pre-existing)",
+  failed: "Failed",
+  stopping: "Stopping",
+  stopped: "Stopped",
+  detached: "Detached",
+};
+
 function FormationRail({
   applications,
   applicationProcesses,
+  sessionApplications,
 }: {
   applications: ProfileApplication[];
   applicationProcesses: ApplicationProcessSnapshot[];
+  sessionApplications: SessionApplicationSnapshot[];
 }) {
   return (
-    <ol className="formation-rail" aria-label="Configured startup order">
+    <ol className="formation-rail" aria-label="Startup sequence">
       {applications.map((application, index) => {
+        const sessionApplication = sessionApplications.find(
+          (candidate) => candidate.applicationId === application.id,
+        );
         const process = applicationProcesses.find(
           (candidate) => candidate.applicationId === application.id,
         );
-        const status = process?.status ?? "stopped";
+        const state = sessionApplication?.state;
+        const status = state ?? process?.status ?? "stopped";
+        const label = state
+          ? sessionApplicationStateLabels[state]
+          : processStatusLabels[process?.status ?? "stopped"];
         return (
           <li className={`rail-node rail-node-${status}`} key={application.id}>
             <span className="rail-index" aria-hidden="true">
@@ -2547,7 +2711,7 @@ function FormationRail({
             </span>
             <span>
               <strong>{application.name}</strong>
-              <small>{processStatusLabels[status]}</small>
+              <small>{label}</small>
             </span>
           </li>
         );

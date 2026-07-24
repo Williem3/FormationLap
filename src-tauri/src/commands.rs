@@ -3,10 +3,7 @@ use crate::{
     RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    path::Path,
-    sync::{Mutex, MutexGuard},
-};
+use std::{path::Path, sync::mpsc, thread};
 use ts_rs::TS;
 
 /// Typed input accepted by the narrow create-profile command.
@@ -136,6 +133,11 @@ impl From<CoreError> for CommandError {
                 "Formation Lap could not open its bundled Curated Catalog.".to_owned(),
                 Some("Reinstall Formation Lap from an official signed release."),
             ),
+            CoreError::InvalidSessionTransition { .. } => (
+                "invalid_session_transition",
+                error.to_string(),
+                Some("Wait for the current Session action to finish."),
+            ),
             CoreError::Storage(_) => (
                 "storage_failed",
                 "Formation Lap could not update local profile storage.".to_owned(),
@@ -144,7 +146,9 @@ impl From<CoreError> for CommandError {
             CoreError::InvalidProfileDocument(_)
             | CoreError::UnsupportedProfileSchema(_)
             | CoreError::InvalidSettingsDocument(_)
-            | CoreError::UnsupportedSettingsSchema(_) => (
+            | CoreError::UnsupportedSettingsSchema(_)
+            | CoreError::InvalidSessionJournal(_)
+            | CoreError::UnsupportedSessionJournalSchema(_) => (
                 "invalid_local_state",
                 "Formation Lap found local profile data it cannot safely open.".to_owned(),
                 Some("Restore a valid backup or export diagnostics."),
@@ -160,115 +164,145 @@ impl From<CoreError> for CommandError {
     }
 }
 
-/// Owns one serialized FormationLapCore instance for all native commands.
+type WorkerResponse = Result<(CommandOutcome, AppSnapshot), CommandError>;
+
+enum NativeWorkerRequest {
+    Snapshot(mpsc::Sender<Result<AppSnapshot, CommandError>>),
+    Execute {
+        command: AppCommand,
+        response: mpsc::Sender<WorkerResponse>,
+    },
+}
+
+/// Sends every native request through one background FormationLapCore command loop.
+#[derive(Clone)]
 pub struct NativeCommandHost {
-    core: Mutex<FormationLapCore>,
+    sender: mpsc::Sender<NativeWorkerRequest>,
 }
 
 impl NativeCommandHost {
     pub fn open(storage_root: impl AsRef<Path>) -> Result<Self, CommandError> {
-        Ok(Self {
-            core: Mutex::new(FormationLapCore::open(storage_root).map_err(CommandError::from)?),
-        })
+        Self::from_core(FormationLapCore::open(storage_root).map_err(CommandError::from)?)
     }
 
     pub fn open_with_runtime(
         storage_root: impl AsRef<Path>,
         process_runtime: impl crate::ProcessRuntime + 'static,
     ) -> Result<Self, CommandError> {
-        Ok(Self {
-            core: Mutex::new(
-                FormationLapCore::open_with_runtime(storage_root, process_runtime)
-                    .map_err(CommandError::from)?,
-            ),
-        })
+        Self::from_core(
+            FormationLapCore::open_with_runtime(storage_root, process_runtime)
+                .map_err(CommandError::from)?,
+        )
     }
 
     pub fn open_with_discovery_sources(
         storage_root: impl AsRef<Path>,
         discovery_sources: TargetedDiscoverySources,
     ) -> Result<Self, CommandError> {
-        Ok(Self {
-            core: Mutex::new(
-                FormationLapCore::open_with_discovery_sources(storage_root, discovery_sources)
-                    .map_err(CommandError::from)?,
-            ),
-        })
+        Self::from_core(
+            FormationLapCore::open_with_discovery_sources(storage_root, discovery_sources)
+                .map_err(CommandError::from)?,
+        )
     }
 
-    fn core(&self) -> Result<MutexGuard<'_, FormationLapCore>, CommandError> {
-        self.core.lock().map_err(|_| CommandError {
+    fn from_core(mut core: FormationLapCore) -> Result<Self, CommandError> {
+        let (sender, receiver) = mpsc::channel();
+        thread::Builder::new()
+            .name("formation-lap-core".to_owned())
+            .spawn(move || {
+                while let Ok(request) = receiver.recv() {
+                    match request {
+                        NativeWorkerRequest::Snapshot(response) => {
+                            let _ = response.send(Ok(core.snapshot()));
+                        }
+                        NativeWorkerRequest::Execute { command, response } => {
+                            let result = core
+                                .execute(command)
+                                .map(|outcome| (outcome, core.snapshot()))
+                                .map_err(CommandError::from);
+                            let _ = response.send(result);
+                        }
+                    }
+                }
+            })
+            .map_err(|_| Self::worker_unavailable())?;
+        Ok(Self { sender })
+    }
+
+    fn worker_unavailable() -> CommandError {
+        CommandError {
             code: "core_unavailable".to_owned(),
             message: "Formation Lap could not access its authoritative state.".to_owned(),
             recovery: Some("Close and reopen Formation Lap.".to_owned()),
             diagnostic_id: None,
-        })
+        }
+    }
+
+    fn execute_command(&self, command: AppCommand) -> WorkerResponse {
+        let (response, receiver) = mpsc::channel();
+        self.sender
+            .send(NativeWorkerRequest::Execute { command, response })
+            .map_err(|_| Self::worker_unavailable())?;
+        receiver.recv().map_err(|_| Self::worker_unavailable())?
     }
 
     pub fn get_app_snapshot(&self) -> Result<AppSnapshot, CommandError> {
-        Ok(self.core()?.snapshot())
+        let (response, receiver) = mpsc::channel();
+        self.sender
+            .send(NativeWorkerRequest::Snapshot(response))
+            .map_err(|_| Self::worker_unavailable())?;
+        receiver.recv().map_err(|_| Self::worker_unavailable())?
     }
 
     pub fn create_profile(
         &self,
         payload: CreateProfilePayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::CreateProfile {
+        self.execute_command(AppCommand::CreateProfile {
             name: payload.name,
             primary_sim_name: payload.primary_sim_name,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn save_profile(&self, payload: SaveProfilePayload) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::SaveProfile {
+        self.execute_command(AppCommand::SaveProfile {
             profile: Box::new(payload.profile),
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn select_profile(&self, payload: ProfileIdPayload) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::SelectProfile {
+        self.execute_command(AppCommand::SelectProfile {
             profile_id: payload.profile_id,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn duplicate_profile(
         &self,
         payload: DuplicateProfilePayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::DuplicateProfile {
+        self.execute_command(AppCommand::DuplicateProfile {
             source_profile_id: payload.source_profile_id,
             name: payload.name,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn delete_profile(&self, payload: ProfileIdPayload) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::DeleteProfile {
+        self.execute_command(AppCommand::DeleteProfile {
             profile_id: payload.profile_id,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn export_profile(&self, payload: ProfileIdPayload) -> Result<String, CommandError> {
-        let mut core = self.core()?;
-        match core
-            .execute(AppCommand::ExportProfile {
+        match self
+            .execute_command(AppCommand::ExportProfile {
                 profile_id: payload.profile_id,
-            })
-            .map_err(CommandError::from)?
+            })?
+            .0
         {
             CommandOutcome::ProfileExported { document } => Ok(document),
             _ => Err(CommandError {
@@ -284,81 +318,92 @@ impl NativeCommandHost {
         &self,
         payload: ImportProfilePayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::ImportProfile {
+        self.execute_command(AppCommand::ImportProfile {
             document: payload.document,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn start_application(
         &self,
         payload: ApplicationTargetPayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::StartApplication {
+        self.execute_command(AppCommand::StartApplication {
             profile_id: payload.profile_id,
             application_id: payload.application_id,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn refresh_processes(&self) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::RefreshProcesses)
-            .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        self.execute_command(AppCommand::RefreshProcesses)
+            .map(|(_, snapshot)| snapshot)
     }
 
     pub fn exit_application(
         &self,
         payload: ExitApplicationPayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::ExitApplication {
+        self.execute_command(AppCommand::ExitApplication {
             application_id: payload.application_id,
             pre_existing_confirmed: payload.pre_existing_confirmed,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn force_stop_application(
         &self,
         payload: ForceStopApplicationPayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::ForceStopApplication {
+        self.execute_command(AppCommand::ForceStopApplication {
             application_id: payload.application_id,
             pre_existing_confirmed: payload.pre_existing_confirmed,
             force_confirmed: payload.force_confirmed,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
     }
 
     pub fn restart_application(
         &self,
         payload: RestartApplicationPayload,
     ) -> Result<AppSnapshot, CommandError> {
-        let mut core = self.core()?;
-        core.execute(AppCommand::RestartApplication {
+        self.execute_command(AppCommand::RestartApplication {
             profile_id: payload.profile_id,
             application_id: payload.application_id,
             pre_existing_confirmed: payload.pre_existing_confirmed,
         })
-        .map_err(CommandError::from)?;
-        Ok(core.snapshot())
+        .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn start_session(&self, payload: ProfileIdPayload) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::StartSession {
+            profile_id: payload.profile_id,
+        })
+        .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn cancel_startup(&self) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::CancelStartup)
+            .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn close_session(&self) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::CloseSession)
+            .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn accept_recovery(&self) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::AcceptRecovery)
+            .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn dismiss_recovery(&self) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::DismissRecovery)
+            .map(|(_, snapshot)| snapshot)
     }
 
     pub fn discover_applications(&self) -> Result<DiscoverySnapshot, CommandError> {
-        let mut core = self.core()?;
-        match core
-            .execute(AppCommand::DiscoverApplications)
-            .map_err(CommandError::from)?
-        {
+        match self.execute_command(AppCommand::DiscoverApplications)?.0 {
             CommandOutcome::ApplicationsDiscovered { discovery } => Ok(discovery),
             _ => Err(CommandError {
                 code: "unexpected_outcome".to_owned(),
@@ -373,12 +418,11 @@ impl NativeCommandHost {
         &self,
         payload: PrimarySimIdPayload,
     ) -> Result<Vec<SupportingApplicationRecommendation>, CommandError> {
-        let mut core = self.core()?;
-        match core
-            .execute(AppCommand::RecommendApplications {
+        match self
+            .execute_command(AppCommand::RecommendApplications {
                 primary_sim_id: payload.primary_sim_id,
-            })
-            .map_err(CommandError::from)?
+            })?
+            .0
         {
             CommandOutcome::ApplicationsRecommended { recommendations } => Ok(recommendations),
             _ => Err(CommandError {
@@ -491,6 +535,42 @@ pub fn restart_application(
     payload: RestartApplicationPayload,
 ) -> Result<AppSnapshot, CommandError> {
     commands.restart_application(payload)
+}
+
+#[tauri::command]
+pub fn start_session(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ProfileIdPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.start_session(payload)
+}
+
+#[tauri::command]
+pub fn cancel_startup(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<AppSnapshot, CommandError> {
+    commands.cancel_startup()
+}
+
+#[tauri::command]
+pub fn close_session(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<AppSnapshot, CommandError> {
+    commands.close_session()
+}
+
+#[tauri::command]
+pub fn accept_recovery(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<AppSnapshot, CommandError> {
+    commands.accept_recovery()
+}
+
+#[tauri::command]
+pub fn dismiss_recovery(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<AppSnapshot, CommandError> {
+    commands.dismiss_recovery()
 }
 
 #[tauri::command]

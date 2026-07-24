@@ -336,6 +336,95 @@ pub struct DiscoverySnapshot {
     pub installed_supporting_applications: Vec<DiscoveredSupportingApplication>,
 }
 
+/// Authoritative lifecycle state for the one possible Active Session.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum SessionState {
+    #[default]
+    Idle,
+    Starting,
+    Cancelling,
+    Active,
+    Closing,
+    RecoveryAvailable,
+}
+
+/// Placement of one application in a Session's immutable Startup Sequence.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum SessionApplicationRole {
+    Supporting,
+    PrimarySim,
+}
+
+/// Session-specific state rendered by one Formation Rail node.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum SessionApplicationState {
+    Pending,
+    Starting,
+    Running,
+    RunningPreExisting,
+    Failed,
+    Stopping,
+    Stopped,
+    Detached,
+}
+
+/// Quietly recorded Session event surfaced only after racing ends.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum SessionEventKind {
+    LaunchFailed,
+    ApplicationExited,
+}
+
+/// One noteworthy lifecycle outcome from the most recent Session.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SessionEvent {
+    pub application_id: String,
+    pub name: String,
+    pub kind: SessionEventKind,
+}
+
+/// Non-disruptive summary made available only after the Session is Idle.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub profile_id: String,
+    pub events: Vec<SessionEvent>,
+}
+
+/// One ordered node in the authoritative Session snapshot.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SessionApplicationSnapshot {
+    pub application_id: String,
+    pub name: String,
+    pub role: SessionApplicationRole,
+    pub requirement: Option<ApplicationRequirement>,
+    pub state: SessionApplicationState,
+}
+
+/// Authoritative Session state rendered by React.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SessionSnapshot {
+    pub state: SessionState,
+    pub active_profile_id: Option<String>,
+    pub applications: Vec<SessionApplicationSnapshot>,
+    pub summary: Option<SessionSummary>,
+}
+
 /// Authoritative native state rendered by React.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -346,6 +435,7 @@ pub struct AppSnapshot {
     pub profiles: Vec<ProfileSummary>,
     pub selected_profile: Option<RacingProfile>,
     pub application_processes: Vec<ApplicationProcessSnapshot>,
+    pub session: SessionSnapshot,
 }
 
 impl AppSnapshot {
@@ -356,6 +446,7 @@ impl AppSnapshot {
             profiles: Vec::new(),
             selected_profile: None,
             application_processes: Vec::new(),
+            session: SessionSnapshot::default(),
         }
     }
 }

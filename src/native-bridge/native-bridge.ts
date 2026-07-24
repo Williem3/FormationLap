@@ -30,6 +30,11 @@ export interface NativeBridge {
     payload: ForceStopApplicationPayload,
   ): Promise<AppSnapshot>;
   restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot>;
+  startSession(payload: ProfileIdPayload): Promise<AppSnapshot>;
+  cancelStartup(): Promise<AppSnapshot>;
+  closeSession(): Promise<AppSnapshot>;
+  acceptRecovery(): Promise<AppSnapshot>;
+  dismissRecovery(): Promise<AppSnapshot>;
   discoverApplications(): Promise<DiscoverySnapshot>;
   recommendApplications(
     payload: PrimarySimIdPayload,

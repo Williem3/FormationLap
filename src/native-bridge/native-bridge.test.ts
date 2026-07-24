@@ -4,6 +4,7 @@ import type {
   SupportingApplicationRecommendation,
 } from "../generated/bindings";
 import { InMemoryNativeBridge } from "./in-memory-native-bridge";
+import { idleSessionSnapshot } from "../session/session-snapshot";
 import { describe, expect, it } from "vitest";
 
 describe("InMemoryNativeBridge", () => {
@@ -11,6 +12,7 @@ describe("InMemoryNativeBridge", () => {
     const snapshot: AppSnapshot = {
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
@@ -24,6 +26,7 @@ describe("InMemoryNativeBridge", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
@@ -71,6 +74,7 @@ describe("InMemoryNativeBridge", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],
         selectedProfile: null,

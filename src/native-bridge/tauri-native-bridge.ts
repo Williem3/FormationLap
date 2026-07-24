@@ -1,6 +1,10 @@
 import {
+  acceptRecovery,
+  cancelStartup,
+  closeSession,
   createProfile,
   deleteProfile,
+  dismissRecovery,
   discoverApplications,
   duplicateProfile,
   exitApplication,
@@ -14,6 +18,7 @@ import {
   saveProfile,
   selectProfile,
   startApplication,
+  startSession,
 } from "../generated/bindings";
 import type { NativeBridge } from "./native-bridge";
 
@@ -31,6 +36,11 @@ export class TauriNativeBridge implements NativeBridge {
   exitApplication = exitApplication;
   forceStopApplication = forceStopApplication;
   restartApplication = restartApplication;
+  startSession = startSession;
+  cancelStartup = cancelStartup;
+  closeSession = closeSession;
+  acceptRecovery = acceptRecovery;
+  dismissRecovery = dismissRecovery;
   discoverApplications = discoverApplications;
   recommendApplications = recommendApplications;
 }

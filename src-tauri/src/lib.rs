@@ -7,16 +7,18 @@ mod core;
 mod discovery_catalog;
 mod process_runtime;
 mod profile_library;
+mod session_journal;
 mod settings;
 
 pub use commands::{
     ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
     ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, NativeCommandHost,
     PrimarySimIdPayload, ProfileIdPayload, RestartApplicationPayload, SaveProfilePayload,
-    create_profile, delete_profile, discover_applications, duplicate_profile, exit_application,
-    export_profile, force_stop_application, get_app_snapshot, import_profile,
-    recommend_applications, refresh_processes, restart_application, save_profile, select_profile,
-    start_application,
+    accept_recovery, cancel_startup, close_session, create_profile, delete_profile,
+    discover_applications, dismiss_recovery, duplicate_profile, exit_application, export_profile,
+    force_stop_application, get_app_snapshot, import_profile, recommend_applications,
+    refresh_processes, restart_application, save_profile, select_profile, start_application,
+    start_session,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
@@ -24,8 +26,10 @@ pub use contracts::{
     CompatibilityRank, ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
     DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
     ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
-    ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
-    SupportingApplicationRecommendation, VrLaunchMode,
+    ProfileSummary, RacingProfile, SessionApplicationRole, SessionApplicationSnapshot,
+    SessionApplicationState, SessionEvent, SessionEventKind, SessionSnapshot, SessionState,
+    SessionSummary, ShutdownStrategy, SupportingApplication, SupportingApplicationRecommendation,
+    VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{
@@ -80,6 +84,11 @@ pub fn run() {
             commands::exit_application,
             commands::force_stop_application,
             commands::restart_application,
+            commands::start_session,
+            commands::cancel_startup,
+            commands::close_session,
+            commands::accept_recovery,
+            commands::dismiss_recovery,
             commands::discover_applications,
             commands::recommend_applications
         ])

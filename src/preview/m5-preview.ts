@@ -4,10 +4,12 @@ import type {
   SupportingApplicationRecommendation,
 } from "../generated/bindings";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
+import { idleSessionSnapshot } from "../session/session-snapshot";
 
 const emptySnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  session: idleSessionSnapshot(),
   applicationProcesses: [],
   profiles: [],
   selectedProfile: null,

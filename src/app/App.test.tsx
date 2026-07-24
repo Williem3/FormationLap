@@ -9,6 +9,7 @@ import type {
   DiscoverySnapshot,
   SupportingApplicationRecommendation,
 } from "../generated/bindings";
+import { idleSessionSnapshot } from "../session/session-snapshot";
 
 function lifecycleSnapshot(): AppSnapshot {
   const primarySim = {
@@ -33,6 +34,7 @@ function lifecycleSnapshot(): AppSnapshot {
   return {
     applicationName: "Formation Lap",
     foundationStatus: "ready",
+    session: idleSessionSnapshot(),
     applicationProcesses: [],
     profiles: [
       {
@@ -71,6 +73,93 @@ function processSnapshot(
 }
 
 describe("Formation Lap shell", () => {
+  it("starts a Session through NativeBridge and renders its authoritative Formation Rail", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Start session" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Cancel startup" }),
+    ).toBeEnabled();
+    const rail = screen.getByRole("list", { name: "Startup sequence" });
+    expect(within(rail).getByText("Healthy fixture")).toBeVisible();
+    expect(within(rail).getByText("Starting")).toBeVisible();
+  });
+
+  it("locks the active profile and exposes Close Session without an unsolicited summary", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [processSnapshot()];
+    snapshot.session = {
+      state: "active",
+      activeProfileId: "profile-lifecycle",
+      applications: [
+        {
+          applicationId: "sim-lifecycle",
+          name: "Healthy fixture",
+          role: "primarySim",
+          requirement: null,
+          state: "running",
+        },
+      ],
+      summary: null,
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    expect(
+      await screen.findByRole("button", { name: "Close session" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Edit profile" })).toBeDisabled();
+    expect(screen.queryByText("Session notes")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close session" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Closing session…" }),
+    ).toBeDisabled();
+  });
+
+  it("uses the Session snapshot for Formation Rail state and reveals its summary only when Idle", async () => {
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [processSnapshot()];
+    snapshot.session = {
+      state: "idle",
+      activeProfileId: null,
+      applications: [
+        {
+          applicationId: "sim-lifecycle",
+          name: "Healthy fixture",
+          role: "primarySim",
+          requirement: null,
+          state: "failed",
+        },
+      ],
+      summary: {
+        profileId: "profile-lifecycle",
+        events: [
+          {
+            applicationId: "sim-lifecycle",
+            name: "Healthy fixture",
+            kind: "launchFailed",
+          },
+        ],
+      },
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    const rail = await screen.findByRole("list", {
+      name: "Startup sequence",
+    });
+    expect(within(rail).getByText("Failed")).toBeVisible();
+    expect(within(rail).queryByText("Running")).not.toBeInTheDocument();
+    expect(screen.getByText("Session notes")).toBeVisible();
+    expect(screen.getByText("Did not finish startup")).toBeVisible();
+  });
+
   it("starts one configured application and renders authoritative lifecycle state", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
@@ -198,6 +287,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
@@ -223,6 +313,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
@@ -240,6 +331,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [],
       selectedProfile: null,
@@ -342,6 +434,7 @@ describe("Formation Lap shell", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],
         selectedProfile: null,
@@ -394,6 +487,7 @@ describe("Formation Lap shell", () => {
       {
         applicationName: "Formation Lap",
         foundationStatus: "ready",
+        session: idleSessionSnapshot(),
         applicationProcesses: [],
         profiles: [],
         selectedProfile: null,
@@ -520,6 +614,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
         {
@@ -558,6 +653,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
         {
@@ -618,6 +714,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
         {
@@ -683,6 +780,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
         {
@@ -747,6 +845,7 @@ describe("Formation Lap shell", () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
       foundationStatus: "ready",
+      session: idleSessionSnapshot(),
       applicationProcesses: [],
       profiles: [
         {

@@ -1186,6 +1186,52 @@ button:disabled {
   color: var(--danger);
 }
 
+.rail-node-pending .rail-index,
+.rail-node-stopped .rail-index,
+.rail-node-detached .rail-index {
+  border-style: dashed;
+}
+
+.rail-node-stopping .rail-index {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.recovery-offer,
+.session-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--warm) 42%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warm) 7%, var(--surface));
+}
+
+.recovery-offer strong,
+.recovery-offer span {
+  display: block;
+}
+
+.recovery-offer strong {
+  font-size: 13px;
+}
+
+.recovery-offer span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.recovery-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
 .vr-toggle {
   display: inline-flex;
   gap: 8px;
@@ -1329,6 +1375,39 @@ button:disabled {
 
 .profile-guidance {
   margin-top: 20px;
+}
+
+.session-summary {
+  align-items: flex-start;
+  margin: 18px 0 0;
+  border-color: var(--border);
+  background: var(--canvas);
+}
+
+.session-summary h3 {
+  margin: 3px 0 0;
+  font-size: 15px;
+}
+
+.session-summary ul {
+  display: grid;
+  min-width: min(360px, 100%);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.session-summary li strong {
+  color: var(--ink);
 }
 
 .console-dialog {

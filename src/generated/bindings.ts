@@ -33,7 +33,23 @@ export type ProcessOutput = { stdout: string, stderr: string, truncated: boolean
 
 export type ApplicationProcessSnapshot = { applicationId: string, status: ProcessStatus, ownership: ProcessOwnership | null, identity: ProcessIdentity | null, output: ProcessOutput | null, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, };
+export type SessionState = "idle" | "starting" | "cancelling" | "active" | "closing" | "recoveryAvailable";
+
+export type SessionApplicationRole = "supporting" | "primarySim";
+
+export type SessionApplicationState = "pending" | "starting" | "running" | "runningPreExisting" | "failed" | "stopping" | "stopped" | "detached";
+
+export type SessionEventKind = "launchFailed" | "applicationExited";
+
+export type SessionEvent = { applicationId: string, name: string, kind: SessionEventKind, };
+
+export type SessionSummary = { profileId: string, events: Array<SessionEvent>, };
+
+export type SessionApplicationSnapshot = { applicationId: string, name: string, role: SessionApplicationRole, requirement: ApplicationRequirement | null, state: SessionApplicationState, };
+
+export type SessionSnapshot = { state: SessionState, activeProfileId: string | null, applications: Array<SessionApplicationSnapshot>, summary: SessionSummary | null, };
+
+export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
 
 export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
 
@@ -127,6 +143,26 @@ export function forceStopApplication(payload: ForceStopApplicationPayload): Prom
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("restart_application", { payload });
+}
+
+export function startSession(payload: ProfileIdPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("start_session", { payload });
+}
+
+export function cancelStartup(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("cancel_startup");
+}
+
+export function closeSession(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("close_session");
+}
+
+export function acceptRecovery(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("accept_recovery");
+}
+
+export function dismissRecovery(): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("dismiss_recovery");
 }
 
 export function discoverApplications(): Promise<DiscoverySnapshot> {

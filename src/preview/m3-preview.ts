@@ -1,5 +1,6 @@
 import type { AppSnapshot, ProcessIdentity } from "../generated/bindings";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
+import { idleSessionSnapshot } from "../session/session-snapshot";
 
 function identity(pid: number, executablePath: string): ProcessIdentity {
   return {
@@ -89,6 +90,7 @@ const leMansUltimate = {
 const dashboardSnapshot: AppSnapshot = {
   applicationName: "Formation Lap",
   foundationStatus: "ready",
+  session: idleSessionSnapshot(),
   applicationProcesses: [
     {
       applicationId: virtualDesktopSwitcher.id,

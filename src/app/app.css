@@ -1287,6 +1287,17 @@ button:disabled {
   }
 }
 
+@media (max-width: 1080px) {
+  .profile-wizard,
+  .profile-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-preview {
+    position: static;
+  }
+}
+
 @media (max-width: 860px) {
   .workspace {
     --workspace-gutter: 16px;
@@ -1313,18 +1324,6 @@ button:disabled {
 
   .foundation-copy {
     padding: 28px 24px;
-  }
-
-  .profile-wizard {
-    grid-template-columns: 1fr;
-  }
-
-  .wizard-preview {
-    position: static;
-  }
-
-  .profile-editor-grid {
-    grid-template-columns: 1fr;
   }
 }
 

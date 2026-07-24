@@ -23,7 +23,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
-| M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Establish direct-launch lifecycle through ProcessRuntime |
+| M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
@@ -34,20 +34,23 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M3 is in progress with its Windows direct-launch slice:
+M3 is in progress with its final Dashboard evidence slice:
 
-- Delivered: the core lifecycle tracer records Session-owned stable identity,
-  detects a matching Pre-existing Process, and suppresses duplicate launch
-  through ProcessRuntime.
-- Behavior: the Windows adapter must launch one real fixture with structured
-  arguments and working directory, then return an identity verified by PID,
-  creation time, and canonical executable path.
-- Test seam: ProcessRuntime integration test with a purpose-built local fixture;
-  no shell command construction.
-- File scope: `src-tauri/src/process_runtime.rs`, fixture binaries,
-  `src-tauri/tests/process_runtime_windows.rs`, Cargo configuration,
-  `docs/architecture/evidence/M3.md`, and this ledger.
-- Next action: write the failing real-fixture launch/identity test.
+- Delivered: the complete FormationLapCore and Windows ProcessRuntime lifecycle,
+  stable identity and PID-reuse protection, real healthy/slow/failing/launcher/
+  console/window fixtures, graceful-before-force shutdown, Pre-existing Process
+  confirmation, bounded output, five typed commands, generated contracts, and
+  Dashboard lifecycle controls.
+- Behavior: the Dashboard renders only Rust-shaped snapshot state and shows
+  Running, Running (pre-existing), Not Responding, and Failed with icon and text.
+- Test seams: FormationLapCore with ScriptedProcessRuntime, real Windows
+  ProcessRuntime integration tests, narrow Tauri commands, and React through
+  NativeBridge.
+- File scope: `src/app`, `src/native-bridge`, `src/preview/m3-preview.ts`,
+  `scripts/audit-capabilities.mjs`, `docs/architecture/evidence/M3.md`, and this
+  ledger.
+- Next action: reload `?preview=m3-dashboard`, capture the status screenshot,
+  verify scaling and interactions, then complete M3.
 
 Known environment facts:
 
@@ -112,6 +115,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M2 | Confirmed the automated milestone surface remains complete and the development preview is healthy | Clean worktree; M2 wizard endpoint returned HTTP 200; no fresh in-app Browser tab was available on the third consecutive goal turn | Blocked on the documented manual UI evidence; open the M2 wizard preview in a fresh in-app Browser tab |
 | 2026-07-23 | Codex `/root` | M2 | Captured wizard/editor screenshots and fixed the 125% overflow by stacking profile layouts before their minimum columns exceed the workspace | [`M2 evidence`](evidence/M2.md): 125% red and green dimensions, 200% no-overflow dimensions, screenshots, formatting, lint, typecheck, ten React tests, production build, contracts, and capability audit passed | Confirm the five-control native Tab traversal in the visible wizard; then complete M2 and begin M3 |
 | 2026-07-23 | Codex `/root` | M2 | Completed every profile, persistence, recovery, UI, keyboard, and scaling exit criterion | [`M2 evidence`](evidence/M2.md); user confirmed native five-control Tab traversal; worktree and evidence links reviewed | No blocker; begin M3 with a red FormationLapCore launch test through ProcessRuntime |
+| 2026-07-23 | Codex `/root` | M3 | Delivered stable process identity, the complete local lifecycle policy, 11 real Windows fixture cases, five typed commands, Dashboard controls/status/output, and the VirtualDesktopSwitcher-compatible demonstration | [`M3 evidence`](evidence/M3.md): 45 Rust tests, 14 React tests, Rust fmt/Clippy, frontend verify/build, generated contracts, and zero-permission capability audit passed | Reload the already-open `?preview=m3-dashboard` tab so screenshot/scaling review can complete M3 |
 
 ## Handoff entry template
 

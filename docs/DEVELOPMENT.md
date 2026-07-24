@@ -60,6 +60,29 @@ cargo test --manifest-path src-tauri/Cargo.toml --features process-fixtures --te
 
 All ordinary verification remains non-administrative and prompt-free.
 
+## Signed updater development
+
+Formation Lap's Stable and Beta metadata is resolved only from the official
+[`Williem3/FormationLap`](https://github.com/Williem3/FormationLap) GitHub
+repository. The release build must compile the Tauri Minisign public-key
+content as Base64:
+
+```powershell
+$env:FORMATION_LAP_UPDATE_PUBLIC_KEY = "<base64 Minisign public-key content>"
+pnpm.cmd tauri build
+```
+
+The private signing key is never stored in the repository. Release automation
+provides it through `TAURI_SIGNING_PRIVATE_KEY` and, when needed,
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A development build without the public
+key fails closed: Formation Lap reports its own update state as Unknown and
+cannot install an update.
+
+Stable resolves
+`https://github.com/Williem3/FormationLap/releases/latest/download/latest.json`.
+Beta discovers a published non-draft prerelease through the bounded GitHub API
+and accepts only one `latest.json` asset under the same repository.
+
 ## Native boundary
 
 Rust owns `AppSnapshot`. The generator in

@@ -29,18 +29,18 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M6 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M6 evidence](evidence/M6.md), [sanitized diagnostic](evidence/m6-test-game-launch.json) | Begin M7 |
 | M7 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M7 evidence](evidence/M7.md), [threat checklist](../security/M7_ELEVATED_HELPER_THREAT_CHECKLIST.md), [UAC smoke](evidence/m7-uac-smoke.json) | Begin M8 |
 | M8 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M8 evidence](evidence/M8.md), [Light Settings](evidence/m8-settings-light.jpg), [Dark Settings](evidence/m8-settings-dark.jpg), [diagnostic sample](evidence/m8-diagnostic-sample.json) | Begin M9 |
-| M9 | `not_started` | — | — | — | — | Wait for M5 and M8 |
-| M10 | `not_started` | — | — | — | — | Wait for M6 and M9 |
+| M9 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M9 evidence](evidence/M9.md), [Dashboard](evidence/m9-dashboard.jpg), [Settings](evidence/m9-settings.jpg), [network inventory](../security/M9_UPDATE_NETWORK_INVENTORY.md) | Begin M10 |
+| M10 | `not_started` | — | — | — | — | Begin release hardening |
 
 ## Current work
 
-No milestone is in progress during the M8 completion handoff.
+No implementation milestone is currently in progress.
 
-- M8 is complete with linked automated, visual, diagnostic, and native Windows
-  evidence.
-- M9 is ready because its M5 and M8 dependencies are complete.
-- Next smallest action: mark M9 in progress, then add the first signed
-  Formation Lap update-check behavior through FormationLapCore.
+- M9 is complete with its policy, direct-provider, signed-updater, capability,
+  build, and visual evidence.
+- M10 is ready because every dependency is complete.
+- Next smallest action: mark M10 in progress, audit its release inputs and
+  existing CI, then add the first failing release-artifact contract test.
 
 Known environment facts:
 
@@ -54,8 +54,8 @@ Known environment facts:
   commands when necessary.
 - The workspace drive is exFAT. pnpm uses the hoisted linker; Cargo emits
   harmless hard-link fallback warnings and copies incremental-cache files.
-- Local Git history is present. No remote is configured, so hosted CI metadata
-  is not available in this workspace.
+- Local Git history is published to
+  `https://github.com/Williem3/FormationLap.git` as `origin`.
 
 ## Blockers
 
@@ -118,6 +118,7 @@ logs.
 | 2026-07-24 | Codex `/root` | M6 | Delivered curated no-dialog Steam/direct recipes, remembered VR and overrides, Test Game Launch with local sanitized evidence and monitored-Process learning, plus ownership-aware SteamVR cleanup | [`M6 evidence`](evidence/M6.md): 84 Rust tests, 22 React tests, all-feature Clippy, production build, contracts, catalog validation, and twenty-one-command capability audit passed | No blocker; begin M7 with one-shot helper request validation |
 | 2026-07-24 | Codex `/root` | M7 | Delivered a versioned authenticated one-shot helper, canonical typed operations, single-prompt elevated startup batching with cancellation-safe reverse-order cleanup, elevated close/restart, sidecar packaging, and an explicit non-admin main manifest; hardened window observation across UAC desktop transitions | [`M7 evidence`](evidence/M7.md): 97 Rust tests, 22 React tests, Clippy, frontend/native builds, capability audit, threat checklist, and the real two-prompt [UAC smoke](evidence/m7-uac-smoke.json) passed | No blocker; begin M8 with window-close and tray lifecycle behavior |
 | 2026-07-24 | Codex `/root` | M8 | Delivered native tray/status behavior, Active close-to-tray monitoring, explicit Quit dispositions, opt-in minimized startup, single-instance enforcement, stable-identity recovery, persisted themes/reduced motion, bounded diagnostics, and settings backups | [`M8 evidence`](evidence/M8.md): 104 Rust tests, 25 React tests, Clippy, generated contracts, capability audit, production/native builds, two Settings captures, diagnostic sample, and the native tray/restart matrix passed | No blocker; begin M9 with a red Formation Lap update-check test |
+| 2026-07-24 | Codex `/root` | M9 | Delivered persisted Stable/Beta policy, daily and race-safe scheduling, direct GitHub/Winget/official-page advice, signed first-party check/install, official GitHub channel discovery, and notification-only update UI | [`M9 evidence`](evidence/M9.md): 118 Rust tests, 28 React tests, Clippy, contracts/catalog/capability audits, production/native builds, network inventory, and two update-state captures passed | No blocker; begin M10 release hardening and resolve production signing inputs before publishing a candidate |
 
 ## Handoff entry template
 

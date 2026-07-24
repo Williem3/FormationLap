@@ -188,7 +188,10 @@ applications and without interrupting an Active Session.
 - Return Current, Update Available, or Unknown.
 
 Provider adapters include GitHub Releases, Winget, and official-page links.
-Network activity is disabled while race-safe behavior applies.
+The official Formation Lap Stable feed is the latest signed release in
+`Williem3/FormationLap`; Beta uses bounded host-side prerelease discovery in
+the same repository. Network activity is disabled while race-safe behavior
+applies. Update results are exposed only after the Session returns to Idle.
 
 ### PrivilegeBroker
 
@@ -226,6 +229,7 @@ The WebView receives narrow commands such as:
 - `control_application`
 - `discover_applications`
 - `check_updates`
+- `install_formation_lap_update`
 
 Each command accepts a typed payload, validates it in Rust, and delegates to a
 deep module. Commands contain no lifecycle rules.

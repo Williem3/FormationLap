@@ -35,6 +35,26 @@ export type ApplicationProcessSnapshot = { applicationId: string, status: Proces
 
 export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, };
 
+export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
+
+export type DiscoveredInstallation = { "kind": "directExecutable", executablePath: string, } | { "kind": "steam", appId: number, install_directory: string, };
+
+export type CatalogPrimarySim = { id: string, name: string, steamAppId: number | null, };
+
+export type CatalogSupportingApplication = { id: string, name: string, };
+
+export type DiscoveredPrimarySim = { id: string, name: string, installation: DiscoveredInstallation, icon: ApplicationIcon, };
+
+export type DiscoveredSupportingApplication = { id: string, name: string, installation: DiscoveredInstallation, icon: ApplicationIcon, };
+
+export type DiscoverySnapshot = { primarySims: Array<CatalogPrimarySim>, supportingApplications: Array<CatalogSupportingApplication>, installedPrimarySims: Array<DiscoveredPrimarySim>, installedSupportingApplications: Array<DiscoveredSupportingApplication>, };
+
+export type CompatibilityRank = "recommended" | "compatible";
+
+export type CatalogUpdateProvider = { "kind": "githubReleases", repository: string, };
+
+export type SupportingApplicationRecommendation = { id: string, name: string, rank: CompatibilityRank, updateProvider: CatalogUpdateProvider | null, };
+
 export type CommandError = { code: string, message: string, recovery: string | null, diagnosticId: string | null, };
 
 export type CreateProfilePayload = { name: string, primarySimName: string, };
@@ -54,6 +74,8 @@ export type ExitApplicationPayload = { applicationId: string, preExistingConfirm
 export type ForceStopApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, forceConfirmed: boolean, };
 
 export type RestartApplicationPayload = { profileId: string, applicationId: string, preExistingConfirmed: boolean, };
+
+export type PrimarySimIdPayload = { primarySimId: string, };
 
 export function getAppSnapshot(): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("get_app_snapshot");
@@ -105,4 +127,12 @@ export function forceStopApplication(payload: ForceStopApplicationPayload): Prom
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("restart_application", { payload });
+}
+
+export function discoverApplications(): Promise<DiscoverySnapshot> {
+  return invoke<DiscoverySnapshot>("discover_applications");
+}
+
+export function recommendApplications(payload: PrimarySimIdPayload): Promise<SupportingApplicationRecommendation[]> {
+  return invoke<SupportingApplicationRecommendation[]>("recommend_applications", { payload });
 }

@@ -1,4 +1,7 @@
-use crate::{AppCommand, AppSnapshot, CommandOutcome, CoreError, FormationLapCore, RacingProfile};
+use crate::{
+    AppCommand, AppSnapshot, CommandOutcome, CoreError, DiscoverySnapshot, FormationLapCore,
+    RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     path::Path,
@@ -86,6 +89,14 @@ pub struct RestartApplicationPayload {
     pub pre_existing_confirmed: bool,
 }
 
+/// Curated Primary Sim target accepted by recommendation commands.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PrimarySimIdPayload {
+    pub primary_sim_id: String,
+}
+
 /// Structured error returned across the Rust/TypeScript seam.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -168,6 +179,18 @@ impl NativeCommandHost {
         Ok(Self {
             core: Mutex::new(
                 FormationLapCore::open_with_runtime(storage_root, process_runtime)
+                    .map_err(CommandError::from)?,
+            ),
+        })
+    }
+
+    pub fn open_with_discovery_sources(
+        storage_root: impl AsRef<Path>,
+        discovery_sources: TargetedDiscoverySources,
+    ) -> Result<Self, CommandError> {
+        Ok(Self {
+            core: Mutex::new(
+                FormationLapCore::open_with_discovery_sources(storage_root, discovery_sources)
                     .map_err(CommandError::from)?,
             ),
         })
@@ -329,6 +352,43 @@ impl NativeCommandHost {
         .map_err(CommandError::from)?;
         Ok(core.snapshot())
     }
+
+    pub fn discover_applications(&self) -> Result<DiscoverySnapshot, CommandError> {
+        let mut core = self.core()?;
+        match core
+            .execute(AppCommand::DiscoverApplications)
+            .map_err(CommandError::from)?
+        {
+            CommandOutcome::ApplicationsDiscovered { discovery } => Ok(discovery),
+            _ => Err(CommandError {
+                code: "unexpected_outcome".to_owned(),
+                message: "Formation Lap could not complete local discovery.".to_owned(),
+                recovery: Some("Try discovery again.".to_owned()),
+                diagnostic_id: None,
+            }),
+        }
+    }
+
+    pub fn recommend_applications(
+        &self,
+        payload: PrimarySimIdPayload,
+    ) -> Result<Vec<SupportingApplicationRecommendation>, CommandError> {
+        let mut core = self.core()?;
+        match core
+            .execute(AppCommand::RecommendApplications {
+                primary_sim_id: payload.primary_sim_id,
+            })
+            .map_err(CommandError::from)?
+        {
+            CommandOutcome::ApplicationsRecommended { recommendations } => Ok(recommendations),
+            _ => Err(CommandError {
+                code: "unexpected_outcome".to_owned(),
+                message: "Formation Lap could not rank application recommendations.".to_owned(),
+                recovery: Some("Select the Primary Sim again.".to_owned()),
+                diagnostic_id: None,
+            }),
+        }
+    }
 }
 
 #[tauri::command]
@@ -431,4 +491,19 @@ pub fn restart_application(
     payload: RestartApplicationPayload,
 ) -> Result<AppSnapshot, CommandError> {
     commands.restart_application(payload)
+}
+
+#[tauri::command]
+pub fn discover_applications(
+    commands: tauri::State<'_, NativeCommandHost>,
+) -> Result<DiscoverySnapshot, CommandError> {
+    commands.discover_applications()
+}
+
+#[tauri::command]
+pub fn recommend_applications(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: PrimarySimIdPayload,
+) -> Result<Vec<SupportingApplicationRecommendation>, CommandError> {
+    commands.recommend_applications(payload)
 }

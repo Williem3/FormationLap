@@ -1,6 +1,7 @@
 import {
   createProfile,
   deleteProfile,
+  discoverApplications,
   duplicateProfile,
   exitApplication,
   exportProfile,
@@ -8,6 +9,7 @@ import {
   getAppSnapshot,
   importProfile,
   refreshProcesses,
+  recommendApplications,
   restartApplication,
   saveProfile,
   selectProfile,
@@ -29,4 +31,6 @@ export class TauriNativeBridge implements NativeBridge {
   exitApplication = exitApplication;
   forceStopApplication = forceStopApplication;
   restartApplication = restartApplication;
+  discoverApplications = discoverApplications;
+  recommendApplications = recommendApplications;
 }

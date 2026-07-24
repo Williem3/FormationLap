@@ -6,9 +6,12 @@ import type {
   ExitApplicationPayload,
   ForceStopApplicationPayload,
   ImportProfilePayload,
+  DiscoverySnapshot,
+  PrimarySimIdPayload,
   ProfileIdPayload,
   RestartApplicationPayload,
   SaveProfilePayload,
+  SupportingApplicationRecommendation,
 } from "../generated/bindings";
 
 export interface NativeBridge {
@@ -27,4 +30,8 @@ export interface NativeBridge {
     payload: ForceStopApplicationPayload,
   ): Promise<AppSnapshot>;
   restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot>;
+  discoverApplications(): Promise<DiscoverySnapshot>;
+  recommendApplications(
+    payload: PrimarySimIdPayload,
+  ): Promise<SupportingApplicationRecommendation[]>;
 }

@@ -5,15 +5,18 @@ import type {
   CloseSessionSettings,
   CreateProfilePayload,
   DuplicateProfilePayload,
+  DiscoverySnapshot,
   ExitApplicationPayload,
   ForceStopApplicationPayload,
   ImportProfilePayload,
   LaunchRecipe,
   ProfileIdPayload,
   ProfileSummary,
+  PrimarySimIdPayload,
   RacingProfile,
   RestartApplicationPayload,
   SaveProfilePayload,
+  SupportingApplicationRecommendation,
   VrLaunchMode,
 } from "../generated/bindings";
 import type { NativeBridge } from "./native-bridge";
@@ -44,9 +47,25 @@ export class InMemoryNativeBridge implements NativeBridge {
   #nextProcessId = 10_000;
   #profilesById = new Map<string, RacingProfile>();
   #snapshot: AppSnapshot;
+  #discovery: DiscoverySnapshot;
+  #recommendationsBySim: Record<string, SupportingApplicationRecommendation[]>;
 
-  constructor(snapshot: AppSnapshot) {
+  constructor(
+    snapshot: AppSnapshot,
+    discovery: DiscoverySnapshot = {
+      primarySims: [],
+      supportingApplications: [],
+      installedPrimarySims: [],
+      installedSupportingApplications: [],
+    },
+    recommendationsBySim: Record<
+      string,
+      SupportingApplicationRecommendation[]
+    > = {},
+  ) {
     this.#snapshot = structuredClone(snapshot);
+    this.#discovery = structuredClone(discovery);
+    this.#recommendationsBySim = structuredClone(recommendationsBySim);
     for (const summary of this.#snapshot.profiles) {
       this.#profilesById.set(summary.id, this.#profileFromSummary(summary));
     }
@@ -60,6 +79,18 @@ export class InMemoryNativeBridge implements NativeBridge {
 
   getAppSnapshot(): Promise<AppSnapshot> {
     return Promise.resolve(structuredClone(this.#snapshot));
+  }
+
+  discoverApplications(): Promise<DiscoverySnapshot> {
+    return Promise.resolve(structuredClone(this.#discovery));
+  }
+
+  recommendApplications(
+    payload: PrimarySimIdPayload,
+  ): Promise<SupportingApplicationRecommendation[]> {
+    return Promise.resolve(
+      structuredClone(this.#recommendationsBySim[payload.primarySimId] ?? []),
+    );
   }
 
   startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {

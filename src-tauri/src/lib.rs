@@ -12,10 +12,11 @@ mod settings;
 pub use commands::{
     ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
     ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, NativeCommandHost,
-    ProfileIdPayload, RestartApplicationPayload, SaveProfilePayload, create_profile,
-    delete_profile, duplicate_profile, exit_application, export_profile, force_stop_application,
-    get_app_snapshot, import_profile, refresh_processes, restart_application, save_profile,
-    select_profile, start_application,
+    PrimarySimIdPayload, ProfileIdPayload, RestartApplicationPayload, SaveProfilePayload,
+    create_profile, delete_profile, discover_applications, duplicate_profile, exit_application,
+    export_profile, force_stop_application, get_app_snapshot, import_profile,
+    recommend_applications, refresh_processes, restart_application, save_profile, select_profile,
+    start_application,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
@@ -78,7 +79,9 @@ pub fn run() {
             commands::refresh_processes,
             commands::exit_application,
             commands::force_stop_application,
-            commands::restart_application
+            commands::restart_application,
+            commands::discover_applications,
+            commands::recommend_applications
         ])
         .run(tauri::generate_context!())
         .expect("Formation Lap failed to start");

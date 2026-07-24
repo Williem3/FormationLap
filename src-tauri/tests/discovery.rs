@@ -1,8 +1,8 @@
 use formation_lap_lib::{
     AppCommand, ApplicationIcon, CatalogUpdateProvider, CommandOutcome, CompatibilityRank,
-    DiscoveredInstallation, FormationLapCore, TargetedDiscoverySources,
-    WindowsInstalledApplication, WindowsKnownLocation, WindowsKnownLocationRoot,
-    WindowsRunningProcess,
+    DiscoveredInstallation, FormationLapCore, NativeCommandHost, PrimarySimIdPayload,
+    TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
+    WindowsKnownLocationRoot, WindowsRunningProcess,
 };
 use std::{
     fs,
@@ -673,4 +673,32 @@ fn steam_icon_resolution_uses_local_metadata_then_generic_fallback() {
         .find(|sim| sim.id == "le-mans-ultimate")
         .expect("Le Mans Ultimate should be discovered");
     assert_eq!(le_mans_ultimate.icon, ApplicationIcon::Generic);
+}
+
+#[test]
+fn native_commands_return_discovery_and_ranked_recommendation_contracts() {
+    let storage = TempStorage::new();
+    let commands = NativeCommandHost::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources::default(),
+    )
+    .expect("native command host should open with explicit discovery sources");
+
+    let discovery = commands
+        .discover_applications()
+        .expect("native discovery command should return catalog state");
+    assert_eq!(discovery.primary_sims.len(), 10);
+
+    let recommendations = commands
+        .recommend_applications(PrimarySimIdPayload {
+            primary_sim_id: "le-mans-ultimate".to_owned(),
+        })
+        .expect("native recommendation command should return ranked metadata");
+    assert_eq!(
+        recommendations
+            .iter()
+            .map(|recommendation| recommendation.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["lmuffb", "simhub"]
+    );
 }

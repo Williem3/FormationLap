@@ -1,11 +1,14 @@
 use formation_lap_lib::{
-    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, ApplicationTargetPayload,
-    CloseSessionSettings, CommandError, ConsoleVisibility, CreateProfilePayload,
-    DuplicateProfilePayload, ExitApplicationPayload, ForceStopApplicationPayload,
-    ImportProfilePayload, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput,
-    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary,
-    RacingProfile, RestartApplicationPayload, SaveProfilePayload, ShutdownStrategy,
-    SupportingApplication, VrLaunchMode,
+    AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
+    ApplicationTargetPayload, CatalogPrimarySim, CatalogSupportingApplication,
+    CatalogUpdateProvider, CloseSessionSettings, CommandError, CompatibilityRank,
+    ConsoleVisibility, CreateProfilePayload, DiscoveredInstallation, DiscoveredPrimarySim,
+    DiscoveredSupportingApplication, DiscoverySnapshot, DuplicateProfilePayload,
+    ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, LaunchRecipe,
+    LaunchSource, PrimarySimIdPayload, ProcessIdentity, ProcessOutput, ProcessOwnership,
+    ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
+    RestartApplicationPayload, SaveProfilePayload, ShutdownStrategy, SupportingApplication,
+    SupportingApplicationRecommendation, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -34,6 +37,16 @@ fn render_bindings() -> String {
         ProcessOutput::decl(&config),
         ApplicationProcessSnapshot::decl(&config),
         AppSnapshot::decl(&config),
+        ApplicationIcon::decl(&config),
+        DiscoveredInstallation::decl(&config),
+        CatalogPrimarySim::decl(&config),
+        CatalogSupportingApplication::decl(&config),
+        DiscoveredPrimarySim::decl(&config),
+        DiscoveredSupportingApplication::decl(&config),
+        DiscoverySnapshot::decl(&config),
+        CompatibilityRank::decl(&config),
+        CatalogUpdateProvider::decl(&config),
+        SupportingApplicationRecommendation::decl(&config),
         CommandError::decl(&config),
         CreateProfilePayload::decl(&config),
         SaveProfilePayload::decl(&config),
@@ -44,6 +57,7 @@ fn render_bindings() -> String {
         ExitApplicationPayload::decl(&config),
         ForceStopApplicationPayload::decl(&config),
         RestartApplicationPayload::decl(&config),
+        PrimarySimIdPayload::decl(&config),
     ]
     .into_iter()
     .map(|declaration| format!("export {declaration}"))
@@ -106,6 +120,14 @@ export function forceStopApplication(payload: ForceStopApplicationPayload): Prom
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("restart_application", {{ payload }});
+}}
+
+export function discoverApplications(): Promise<DiscoverySnapshot> {{
+  return invoke<DiscoverySnapshot>("discover_applications");
+}}
+
+export function recommendApplications(payload: PrimarySimIdPayload): Promise<SupportingApplicationRecommendation[]> {{
+  return invoke<SupportingApplicationRecommendation[]>("recommend_applications", {{ payload }});
 }}
 "#,
     )

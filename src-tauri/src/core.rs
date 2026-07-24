@@ -56,24 +56,54 @@ pub enum AppCommand {
         pre_existing_confirmed: bool,
     },
     DiscoverApplications,
+    RecommendApplications {
+        primary_sim_id: String,
+    },
     RefreshProcesses,
 }
 
 /// Observable result of a completed FormationLapCore command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandOutcome {
-    ProfileCreated { profile_id: String },
-    ProfileUpdated { profile_id: String },
-    ProfileDeleted { profile_id: String },
-    ProfileSelected { profile_id: String },
-    ProfileExported { document: String },
-    ApplicationStartRequested { application_id: String },
-    ApplicationAlreadyRunning { application_id: String },
-    ApplicationStopped { application_id: String },
-    ApplicationRestarted { application_id: String },
-    PreExistingControlConfirmationRequired { application_id: String },
-    ForceStopConfirmationRequired { application_id: String },
-    ApplicationsDiscovered { discovery: crate::DiscoverySnapshot },
+    ProfileCreated {
+        profile_id: String,
+    },
+    ProfileUpdated {
+        profile_id: String,
+    },
+    ProfileDeleted {
+        profile_id: String,
+    },
+    ProfileSelected {
+        profile_id: String,
+    },
+    ProfileExported {
+        document: String,
+    },
+    ApplicationStartRequested {
+        application_id: String,
+    },
+    ApplicationAlreadyRunning {
+        application_id: String,
+    },
+    ApplicationStopped {
+        application_id: String,
+    },
+    ApplicationRestarted {
+        application_id: String,
+    },
+    PreExistingControlConfirmationRequired {
+        application_id: String,
+    },
+    ForceStopConfirmationRequired {
+        application_id: String,
+    },
+    ApplicationsDiscovered {
+        discovery: crate::DiscoverySnapshot,
+    },
+    ApplicationsRecommended {
+        recommendations: Vec<crate::SupportingApplicationRecommendation>,
+    },
     ProcessesRefreshed,
 }
 
@@ -547,6 +577,11 @@ impl FormationLapCore {
             AppCommand::DiscoverApplications => Ok(CommandOutcome::ApplicationsDiscovered {
                 discovery: self.discovery_catalog.snapshot(),
             }),
+            AppCommand::RecommendApplications { primary_sim_id } => {
+                Ok(CommandOutcome::ApplicationsRecommended {
+                    recommendations: self.discovery_catalog.recommendations(&primary_sim_id),
+                })
+            }
         }
     }
 

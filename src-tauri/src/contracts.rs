@@ -276,6 +276,36 @@ pub struct DiscoveredSupportingApplication {
     pub installation: DiscoveredInstallation,
 }
 
+/// Curated compatibility strength between a sim and Supporting Application.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum CompatibilityRank {
+    Recommended,
+    Compatible,
+}
+
+/// Notification-only update metadata bundled with one catalog entry.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum CatalogUpdateProvider {
+    #[serde(rename = "githubReleases")]
+    #[ts(rename = "githubReleases")]
+    GitHubReleases { repository: String },
+}
+
+/// One compatibility-ranked suggestion for a selected Primary Sim.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SupportingApplicationRecommendation {
+    pub id: String,
+    pub name: String,
+    pub rank: CompatibilityRank,
+    pub update_provider: Option<CatalogUpdateProvider>,
+}
+
 /// Curated and locally discovered applications available to profile flows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

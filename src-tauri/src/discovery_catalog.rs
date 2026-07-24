@@ -1,6 +1,7 @@
 use crate::{
-    CatalogPrimarySim, CatalogSupportingApplication, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoveredSupportingApplication, DiscoverySnapshot,
+    CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CompatibilityRank,
+    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
+    DiscoverySnapshot, SupportingApplicationRecommendation,
 };
 use serde::Deserialize;
 use std::{
@@ -296,6 +297,11 @@ pub enum DiscoveryCatalogError {
         first_location: String,
         duplicate_location: String,
     },
+    UnknownCompatibilitySim {
+        sim_id: String,
+        application_index: usize,
+        rule_index: usize,
+    },
 }
 
 impl fmt::Display for DiscoveryCatalogError {
@@ -334,6 +340,14 @@ impl fmt::Display for DiscoveryCatalogError {
                 formatter,
                 "duplicate Steam App ID {app_id} at {duplicate_location}; first declared at {first_location}"
             ),
+            Self::UnknownCompatibilitySim {
+                sim_id,
+                application_index,
+                rule_index,
+            } => write!(
+                formatter,
+                "unknown compatibility sim id '{sim_id}' at applications[{application_index}].compatibility[{rule_index}].primarySimId"
+            ),
         }
     }
 }
@@ -347,7 +361,8 @@ impl Error for DiscoveryCatalogError {
             Self::UnsupportedSchema(_)
             | Self::UnsupportedSupportingApplicationSchema(_)
             | Self::DuplicateSimId { .. }
-            | Self::DuplicateSteamAppId { .. } => None,
+            | Self::DuplicateSteamAppId { .. }
+            | Self::UnknownCompatibilitySim { .. } => None,
         }
     }
 }
@@ -393,6 +408,17 @@ struct SupportingApplicationCatalogEntry {
     executable_names: Vec<String>,
     #[serde(default)]
     known_locations: Vec<KnownLocationMatcher>,
+    #[serde(default)]
+    compatibility: Vec<CompatibilityMatcher>,
+    #[serde(default)]
+    update_provider: Option<CatalogUpdateProvider>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompatibilityMatcher {
+    primary_sim_id: String,
+    rank: CompatibilityRank,
 }
 
 #[derive(Clone, Deserialize)]
@@ -408,6 +434,8 @@ pub(crate) struct DiscoveryCatalog {
     installed_app_matchers: BTreeMap<String, Vec<InstalledApplicationMatcher>>,
     supporting_executable_names: BTreeMap<String, Vec<String>>,
     supporting_known_locations: BTreeMap<String, Vec<KnownLocationMatcher>>,
+    compatibility_matchers: BTreeMap<String, Vec<CompatibilityMatcher>>,
+    update_providers: BTreeMap<String, CatalogUpdateProvider>,
     sources: TargetedDiscoverySources,
 }
 
@@ -430,10 +458,16 @@ impl DiscoveryCatalog {
             Vec::with_capacity(documents.supporting_applications.len());
         let mut supporting_executable_names = BTreeMap::new();
         let mut supporting_known_locations = BTreeMap::new();
+        let mut compatibility_matchers = BTreeMap::new();
+        let mut update_providers = BTreeMap::new();
         for application in documents.supporting_applications {
             supporting_executable_names
                 .insert(application.id.clone(), application.executable_names);
             supporting_known_locations.insert(application.id.clone(), application.known_locations);
+            compatibility_matchers.insert(application.id.clone(), application.compatibility);
+            if let Some(update_provider) = application.update_provider {
+                update_providers.insert(application.id.clone(), update_provider);
+            }
             supporting_applications.push(CatalogSupportingApplication {
                 id: application.id,
                 name: application.name,
@@ -445,6 +479,8 @@ impl DiscoveryCatalog {
             installed_app_matchers,
             supporting_executable_names,
             supporting_known_locations,
+            compatibility_matchers,
+            update_providers,
             sources,
         })
     }
@@ -475,6 +511,33 @@ impl DiscoveryCatalog {
             installed_primary_sims,
             installed_supporting_applications,
         }
+    }
+
+    pub(crate) fn recommendations(
+        &self,
+        primary_sim_id: &str,
+    ) -> Vec<SupportingApplicationRecommendation> {
+        let mut recommendations = self
+            .supporting_applications
+            .iter()
+            .filter_map(|application| {
+                let rank = self
+                    .compatibility_matchers
+                    .get(&application.id)?
+                    .iter()
+                    .find(|matcher| matcher.primary_sim_id == primary_sim_id)?
+                    .rank
+                    .clone();
+                Some(SupportingApplicationRecommendation {
+                    id: application.id.clone(),
+                    name: application.name.clone(),
+                    rank,
+                    update_provider: self.update_providers.get(&application.id).cloned(),
+                })
+            })
+            .collect::<Vec<_>>();
+        recommendations.sort_by_key(|recommendation| recommendation.rank.clone());
+        recommendations
     }
 }
 
@@ -791,6 +854,17 @@ fn parse_and_validate_catalog_documents(
                 application_document.schema_version,
             ),
         );
+    }
+    for (application_index, application) in application_document.applications.iter().enumerate() {
+        for (rule_index, matcher) in application.compatibility.iter().enumerate() {
+            if !sim_ids.contains_key(matcher.primary_sim_id.as_str()) {
+                return Err(DiscoveryCatalogError::UnknownCompatibilitySim {
+                    sim_id: matcher.primary_sim_id.clone(),
+                    application_index,
+                    rule_index,
+                });
+            }
+        }
     }
 
     Ok(ValidatedCatalogDocuments {

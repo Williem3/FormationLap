@@ -1,7 +1,7 @@
 use formation_lap_lib::{
-    AppCommand, CommandOutcome, DiscoveredInstallation, FormationLapCore, TargetedDiscoverySources,
-    WindowsInstalledApplication, WindowsKnownLocation, WindowsKnownLocationRoot,
-    WindowsRunningProcess,
+    AppCommand, CatalogUpdateProvider, CommandOutcome, CompatibilityRank, DiscoveredInstallation,
+    FormationLapCore, TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
+    WindowsKnownLocationRoot, WindowsRunningProcess,
 };
 use std::{
     fs,
@@ -211,6 +211,65 @@ fn catalog_validator_rejects_duplicate_steam_app_ids_with_an_actionable_location
     assert_eq!(
         String::from_utf8(output.stderr).expect("validator error should be UTF-8"),
         "duplicate Steam App ID 266410 at sims[1].steamAppId; first declared at sims[0].steamAppId\n"
+    );
+}
+
+#[test]
+fn catalog_validator_rejects_unknown_compatibility_sim_with_an_actionable_location() {
+    let temporary = TempStorage::new();
+    let sims_path = temporary.path().join("sims.json");
+    let applications_path = temporary.path().join("unknown-compatibility-sim.json");
+    fs::write(
+        &sims_path,
+        r#"{
+          "schemaVersion": 1,
+          "sims": [
+            { "id": "iracing", "name": "iRacing" }
+          ]
+        }"#,
+    )
+    .expect("valid sim fixture should be written");
+    fs::write(
+        &applications_path,
+        r#"{
+          "schemaVersion": 1,
+          "applications": [
+            {
+              "id": "lmuffb",
+              "name": "LMUFFB",
+              "compatibility": [
+                {
+                  "primarySimId": "le-mans-ultimate",
+                  "rank": "recommended"
+                }
+              ]
+            }
+          ]
+        }"#,
+    )
+    .expect("invalid compatibility fixture should be written");
+
+    let output = Command::new(env!(
+        "CARGO_BIN_EXE_validate-catalog",
+        "catalog validator should be available to CI"
+    ))
+    .args([
+        "--sims",
+        sims_path
+            .to_str()
+            .expect("temporary sim path should be Unicode"),
+        "--applications",
+        applications_path
+            .to_str()
+            .expect("temporary application path should be Unicode"),
+    ])
+    .output()
+    .expect("catalog validator should execute");
+
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("validator error should be UTF-8"),
+        "unknown compatibility sim id 'le-mans-ultimate' at applications[0].compatibility[0].primarySimId\n"
     );
 }
 
@@ -474,5 +533,42 @@ fn known_location_discovery_checks_only_signed_catalog_paths() {
                 .to_string_lossy()
                 .into_owned(),
         }
+    );
+}
+
+#[test]
+fn le_mans_ultimate_recommends_lmuffb_with_its_github_update_provider() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("FormationLapCore should open its catalog");
+
+    let recommendations = match core
+        .execute(AppCommand::RecommendApplications {
+            primary_sim_id: "le-mans-ultimate".to_owned(),
+        })
+        .expect("compatibility recommendations should load")
+    {
+        CommandOutcome::ApplicationsRecommended { recommendations } => recommendations,
+        other => panic!("expected application recommendations, got {other:?}"),
+    };
+
+    assert_eq!(
+        recommendations
+            .iter()
+            .map(|recommendation| (recommendation.id.as_str(), recommendation.rank.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("lmuffb", CompatibilityRank::Recommended),
+            ("simhub", CompatibilityRank::Compatible),
+        ]
+    );
+    let lmuffb = &recommendations[0];
+    assert_eq!(lmuffb.id, "lmuffb");
+    assert_eq!(lmuffb.rank, CompatibilityRank::Recommended);
+    assert_eq!(
+        lmuffb.update_provider,
+        Some(CatalogUpdateProvider::GitHubReleases {
+            repository: "coasting-nc/LMUFFB".to_owned(),
+        })
     );
 }

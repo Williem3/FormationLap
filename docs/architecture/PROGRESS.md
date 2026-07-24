@@ -25,7 +25,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
-| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add compatibility-ranked recommendations and LMUFFB's GitHub Update Provider |
+| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add local icon resolution, generic fallback, and missing-path repair |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
@@ -82,8 +82,12 @@ M5 targeted Steam discovery slice:
   and signed known-location SimHub fixtures pass; the
   [targeted discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md) documents
   every read and match scope.
-- Next action: write the red compatibility-ranking test for Le Mans Ultimate
-  and LMUFFB.
+- Delivered: typed compatibility rankings and notification-only catalog Update
+  Providers; LMUFFB is recommended before compatible SimHub for Le Mans
+  Ultimate and references `coasting-nc/LMUFFB` GitHub Releases.
+- Validation: compatibility rules must reference a bundled Primary Sim and
+  invalid references report their exact JSON location.
+- Next action: write the red local-icon resolution and generic-fallback test.
 
 Known environment facts:
 
@@ -151,6 +155,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M3 | Delivered stable process identity, the complete local lifecycle policy, 11 real Windows fixture cases, five typed commands, Dashboard controls/status/output, and the VirtualDesktopSwitcher-compatible demonstration | [`M3 evidence`](evidence/M3.md): 45 Rust tests, 14 React tests, Rust fmt/Clippy, frontend verify/build, generated contracts, and zero-permission capability audit passed | Reload the already-open `?preview=m3-dashboard` tab so screenshot/scaling review can complete M3 |
 | 2026-07-23 | Codex `/root` | M5 | Added limited Steam discovery through FormationLapCore, following declared libraries and curated App IDs while omitting stale installations | [`M5 evidence`](evidence/M5.md): 50 Rust tests and all-target/all-feature Clippy passed; the real temporary fixture covers two libraries and a missing installation | No blocker; add targeted Windows installed-app, running-process, and known-location discovery |
 | 2026-07-23 | Codex `/root` | M5 | Added bounded installed-app, running-Process, and known-location discovery with separate Steam and standalone iRacing results | [`M5 evidence`](evidence/M5.md) and the [discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md): 53 Rust tests and all-target/all-feature Clippy passed | No blocker; rank compatibility recommendations and add LMUFFB's GitHub Update Provider |
+| 2026-07-23 | Codex `/root` | M5 | Added compatibility-ranked recommendations, LMUFFB's typed GitHub Releases provider, and referential catalog validation | [`M5 evidence`](evidence/M5.md): 55 Rust tests and all-target/all-feature Clippy passed; official LMUFFB and SimHub metadata links recorded | No blocker; resolve local icons, generic fallback, and missing paths |
 
 ## Handoff entry template
 

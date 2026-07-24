@@ -19,11 +19,12 @@ pub use commands::{
 };
 pub use contracts::{
     AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CatalogPrimarySim,
-    CatalogSupportingApplication, CloseSessionSettings, ConsoleVisibility, DiscoveredInstallation,
-    DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe,
-    LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
-    ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
-    VrLaunchMode,
+    CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CompatibilityRank,
+    ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
+    DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
+    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
+    ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
+    SupportingApplicationRecommendation, VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{

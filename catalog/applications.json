@@ -10,6 +10,12 @@
           "root": "programFilesX86",
           "executableRelativePath": "SimHub/SimHubWPF.exe"
         }
+      ],
+      "compatibility": [
+        {
+          "primarySimId": "le-mans-ultimate",
+          "rank": "compatible"
+        }
       ]
     },
     {
@@ -42,7 +48,17 @@
     },
     {
       "id": "lmuffb",
-      "name": "LMUFFB"
+      "name": "LMUFFB",
+      "compatibility": [
+        {
+          "primarySimId": "le-mans-ultimate",
+          "rank": "recommended"
+        }
+      ],
+      "updateProvider": {
+        "kind": "githubReleases",
+        "repository": "coasting-nc/LMUFFB"
+      }
     }
-  ]
+      ]
 }

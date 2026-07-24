@@ -28,26 +28,19 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M5 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M5 evidence](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg) | Continue M4 |
 | M6 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M6 evidence](evidence/M6.md), [sanitized diagnostic](evidence/m6-test-game-launch.json) | Begin M7 |
 | M7 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M7 evidence](evidence/M7.md), [threat checklist](../security/M7_ELEVATED_HELPER_THREAT_CHECKLIST.md), [UAC smoke](evidence/m7-uac-smoke.json) | Begin M8 |
-| M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
+| M8 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M8 evidence](evidence/M8.md), [Light Settings](evidence/m8-settings-light.jpg), [Dark Settings](evidence/m8-settings-dark.jpg), [diagnostic sample](evidence/m8-diagnostic-sample.json) | Begin M9 |
 | M9 | `not_started` | — | — | — | — | Wait for M5 and M8 |
 | M10 | `not_started` | — | — | — | — | Wait for M6 and M9 |
 
 ## Current work
 
-M7 is complete; no implementation slice is active.
+No milestone is in progress during the M8 completion handoff.
 
-- Delivered the versioned one-shot helper, current-user-only authenticated
-  pipe, nonce and stable-identity validation, canonical typed operations,
-  batched elevated Session startup, elevated close/restart, the development
-  broker, helper sidecar packaging, and adversarial tests.
-- The main manifest is explicitly `asInvoker`; the real two-prompt Windows UAC
-  launch/close smoke passed with no helper or fixture remaining.
-- Final verification: 97 Rust tests passed with one manual UAC test ignored in
-  the ordinary suite and passed separately; 22 React tests, Clippy, formatting,
-  production frontend build, generated contracts, catalog validation,
-  capability audit, and native debug build passed.
-- Next action: begin M8 with a failing window-close/tray lifecycle test through
-  FormationLapCore and NativeBridge.
+- M8 is complete with linked automated, visual, diagnostic, and native Windows
+  evidence.
+- M9 is ready because its M5 and M8 dependencies are complete.
+- Next smallest action: mark M9 in progress, then add the first signed
+  Formation Lap update-check behavior through FormationLapCore.
 
 Known environment facts:
 
@@ -124,6 +117,7 @@ logs.
 | 2026-07-24 | Codex `/root` | M4 | Delivered serialized Session orchestration, ordered startup/cleanup, ownership-aware recovery, quiet summaries, profile locking, and an authoritative dynamic Formation Rail; serialized Windows shell icon extraction after full-suite verification exposed an API race | [`M4 evidence`](evidence/M4.md): 15 orchestration tests, all-target Rust tests/Clippy, 20 React tests, production build, capability audit, five captures, and 125%/200% measurements passed | No blocker; begin M6 with a red explicit Steam-recipe test |
 | 2026-07-24 | Codex `/root` | M6 | Delivered curated no-dialog Steam/direct recipes, remembered VR and overrides, Test Game Launch with local sanitized evidence and monitored-Process learning, plus ownership-aware SteamVR cleanup | [`M6 evidence`](evidence/M6.md): 84 Rust tests, 22 React tests, all-feature Clippy, production build, contracts, catalog validation, and twenty-one-command capability audit passed | No blocker; begin M7 with one-shot helper request validation |
 | 2026-07-24 | Codex `/root` | M7 | Delivered a versioned authenticated one-shot helper, canonical typed operations, single-prompt elevated startup batching with cancellation-safe reverse-order cleanup, elevated close/restart, sidecar packaging, and an explicit non-admin main manifest; hardened window observation across UAC desktop transitions | [`M7 evidence`](evidence/M7.md): 97 Rust tests, 22 React tests, Clippy, frontend/native builds, capability audit, threat checklist, and the real two-prompt [UAC smoke](evidence/m7-uac-smoke.json) passed | No blocker; begin M8 with window-close and tray lifecycle behavior |
+| 2026-07-24 | Codex `/root` | M8 | Delivered native tray/status behavior, Active close-to-tray monitoring, explicit Quit dispositions, opt-in minimized startup, single-instance enforcement, stable-identity recovery, persisted themes/reduced motion, bounded diagnostics, and settings backups | [`M8 evidence`](evidence/M8.md): 104 Rust tests, 25 React tests, Clippy, generated contracts, capability audit, production/native builds, two Settings captures, diagnostic sample, and the native tray/restart matrix passed | No blocker; begin M9 with a red Formation Lap update-check test |
 
 ## Handoff entry template
 

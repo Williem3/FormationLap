@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.1.0",
+  "platform": "windows",
+  "settings": {
+    "startWithWindows": false,
+    "theme": "dark",
+    "reduceMotion": true
+  },
+  "sessionState": "idle",
+  "profileCount": 1,
+  "configuredApplicationCount": 1,
+  "recentEvents": [
+    {
+      "timestampUnixSeconds": 1784913840,
+      "event": "desktop.window_close",
+      "outcome": "succeeded"
+    },
+    {
+      "timestampUnixSeconds": 1784913862,
+      "event": "recovery.dismiss",
+      "outcome": "succeeded"
+    },
+    {
+      "timestampUnixSeconds": 1784913897,
+      "event": "diagnostics.export",
+      "outcome": "succeeded"
+    }
+  ],
+  "telemetryUpload": false
+}

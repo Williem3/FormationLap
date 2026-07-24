@@ -381,3 +381,103 @@ fn complete_racing_profile_configuration_survives_restart() {
         Some(configured_profile)
     );
 }
+
+#[test]
+fn selected_racing_profile_survives_core_restart() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let first_profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Assetto Corsa".to_owned(),
+            primary_sim_name: "Assetto Corsa".to_owned(),
+        })
+        .expect("the first Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let selected_profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Le Mans Ultimate".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("the second Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    assert_ne!(first_profile_id, selected_profile_id);
+
+    let outcome = core
+        .execute(AppCommand::SelectProfile {
+            profile_id: selected_profile_id.clone(),
+        })
+        .expect("an existing Racing Profile should be selectable");
+    assert_eq!(
+        outcome,
+        CommandOutcome::ProfileSelected {
+            profile_id: selected_profile_id.clone()
+        }
+    );
+
+    drop(core);
+    let reopened = FormationLapCore::open(storage.path()).expect("profile selection should reopen");
+    assert_eq!(
+        reopened
+            .snapshot()
+            .selected_profile
+            .expect("a selected profile should remain")
+            .id,
+        selected_profile_id
+    );
+}
+
+#[test]
+fn interrupted_profile_replacement_recovers_the_last_valid_document() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Le Mans Ultimate".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    drop(core);
+
+    let live_document = storage
+        .path()
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
+    let backup_document = storage
+        .path()
+        .join("backups")
+        .join(format!("{profile_id}.json"));
+    fs::rename(&live_document, &backup_document)
+        .expect("fixture should simulate moving the last valid document to backup");
+    fs::write(
+        storage
+            .path()
+            .join("profiles")
+            .join(format!(".{profile_id}.json.tmp")),
+        b"{ interrupted",
+    )
+    .expect("fixture should leave an incomplete replacement");
+
+    let recovered =
+        FormationLapCore::open(storage.path()).expect("the last valid profile should recover");
+
+    assert_eq!(
+        recovered.snapshot().profiles,
+        vec![ProfileSummary {
+            id: profile_id,
+            name: "Le Mans Ultimate".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        }]
+    );
+}

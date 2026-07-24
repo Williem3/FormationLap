@@ -1,4 +1,4 @@
-use crate::{AppSnapshot, ProfileLibrary, RacingProfile};
+use crate::{AppSnapshot, ProfileLibrary, RacingProfile, SettingsStore};
 use std::{error::Error, fmt, io};
 
 /// User intent accepted by FormationLapCore.
@@ -23,6 +23,9 @@ pub enum AppCommand {
     SaveProfile {
         profile: Box<RacingProfile>,
     },
+    SelectProfile {
+        profile_id: String,
+    },
 }
 
 /// Observable result of a completed FormationLapCore command.
@@ -31,15 +34,18 @@ pub enum CommandOutcome {
     ProfileCreated { profile_id: String },
     ProfileUpdated { profile_id: String },
     ProfileDeleted { profile_id: String },
+    ProfileSelected { profile_id: String },
 }
 
 #[derive(Debug)]
 pub enum CoreError {
     Storage(io::Error),
     InvalidProfileDocument(serde_json::Error),
+    InvalidSettingsDocument(serde_json::Error),
     InvalidProfileName(&'static str),
     ProfileNotFound(String),
     UnsupportedProfileSchema(u32),
+    UnsupportedSettingsSchema(u32),
 }
 
 impl fmt::Display for CoreError {
@@ -48,6 +54,9 @@ impl fmt::Display for CoreError {
             Self::Storage(error) => write!(formatter, "profile storage failed: {error}"),
             Self::InvalidProfileDocument(error) => {
                 write!(formatter, "profile document is invalid: {error}")
+            }
+            Self::InvalidSettingsDocument(error) => {
+                write!(formatter, "settings document is invalid: {error}")
             }
             Self::InvalidProfileName(field) => {
                 write!(formatter, "{field} must not be blank")
@@ -61,6 +70,12 @@ impl fmt::Display for CoreError {
                     "profile schema version {version} is not supported"
                 )
             }
+            Self::UnsupportedSettingsSchema(version) => {
+                write!(
+                    formatter,
+                    "settings schema version {version} is not supported"
+                )
+            }
         }
     }
 }
@@ -70,9 +85,11 @@ impl Error for CoreError {
         match self {
             Self::Storage(error) => Some(error),
             Self::InvalidProfileDocument(error) => Some(error),
+            Self::InvalidSettingsDocument(error) => Some(error),
             Self::InvalidProfileName(_)
             | Self::ProfileNotFound(_)
-            | Self::UnsupportedProfileSchema(_) => None,
+            | Self::UnsupportedProfileSchema(_)
+            | Self::UnsupportedSettingsSchema(_) => None,
         }
     }
 }
@@ -92,19 +109,26 @@ impl From<serde_json::Error> for CoreError {
 /// Owns authoritative Racing Profile and Session state.
 pub struct FormationLapCore {
     profile_library: ProfileLibrary,
+    settings_store: SettingsStore,
 }
 
 impl FormationLapCore {
     pub fn open(storage_root: impl AsRef<std::path::Path>) -> Result<Self, CoreError> {
+        let storage_root = storage_root.as_ref();
         Ok(Self {
             profile_library: ProfileLibrary::open(storage_root)?,
+            settings_store: SettingsStore::open(storage_root)?,
         })
     }
 
     pub fn snapshot(&self) -> AppSnapshot {
         let mut snapshot = AppSnapshot::foundation();
         snapshot.profiles = self.profile_library.summaries();
-        snapshot.selected_profile = self.profile_library.selected_profile();
+        snapshot.selected_profile = self
+            .settings_store
+            .selected_profile_id()
+            .and_then(|profile_id| self.profile_library.profile(profile_id))
+            .or_else(|| self.profile_library.selected_profile());
         snapshot
     }
 
@@ -141,6 +165,13 @@ impl FormationLapCore {
                 let profile_id = profile.id.clone();
                 self.profile_library.save(*profile)?;
                 Ok(CommandOutcome::ProfileUpdated { profile_id })
+            }
+            AppCommand::SelectProfile { profile_id } => {
+                if !self.profile_library.contains(&profile_id) {
+                    return Err(CoreError::ProfileNotFound(profile_id));
+                }
+                self.settings_store.select_profile(profile_id.clone())?;
+                Ok(CommandOutcome::ProfileSelected { profile_id })
             }
         }
     }

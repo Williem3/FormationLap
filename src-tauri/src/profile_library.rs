@@ -81,6 +81,7 @@ impl ProfileLibrary {
         let backups_directory = storage_root.as_ref().join("backups");
         fs::create_dir_all(&profiles_directory)?;
         fs::create_dir_all(&backups_directory)?;
+        Self::recover_interrupted_replacements(&profiles_directory, &backups_directory)?;
 
         let mut profiles = Vec::new();
         for entry in fs::read_dir(&profiles_directory)? {
@@ -110,6 +111,44 @@ impl ProfileLibrary {
         })
     }
 
+    fn recover_interrupted_replacements(
+        profiles_directory: &Path,
+        backups_directory: &Path,
+    ) -> Result<(), CoreError> {
+        for entry in fs::read_dir(profiles_directory)? {
+            let temporary = entry?.path();
+            let Some(file_name) = temporary.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let Some(profile_id) = file_name
+                .strip_prefix('.')
+                .and_then(|name| name.strip_suffix(".json.tmp"))
+            else {
+                continue;
+            };
+            let destination = profiles_directory.join(format!("{profile_id}.json"));
+            if destination.exists() {
+                fs::remove_file(temporary)?;
+                continue;
+            }
+
+            let backup = backups_directory.join(format!("{profile_id}.json"));
+            if !backup.exists() {
+                continue;
+            }
+            let document: RacingProfileDocument = serde_json::from_slice(&fs::read(&backup)?)?;
+            if document.schema_version != PROFILE_SCHEMA_VERSION {
+                return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
+            }
+            validate_profile_names(&document.name, &document.primary_sim.name)?;
+
+            fs::remove_file(temporary)?;
+            fs::rename(backup, destination)?;
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn summaries(&self) -> Vec<ProfileSummary> {
         self.profiles
             .iter()
@@ -123,6 +162,17 @@ impl ProfileLibrary {
 
     pub(crate) fn selected_profile(&self) -> Option<RacingProfile> {
         self.profiles.first().map(RacingProfileDocument::as_profile)
+    }
+
+    pub(crate) fn contains(&self, profile_id: &str) -> bool {
+        self.profiles.iter().any(|profile| profile.id == profile_id)
+    }
+
+    pub(crate) fn profile(&self, profile_id: &str) -> Option<RacingProfile> {
+        self.profiles
+            .iter()
+            .find(|profile| profile.id == profile_id)
+            .map(RacingProfileDocument::as_profile)
     }
 
     pub(crate) fn create(

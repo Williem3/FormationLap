@@ -372,13 +372,93 @@ fn complete_racing_profile_configuration_survives_restart() {
             profile_id: profile_id.clone()
         }
     );
+    let authoritative_profile = core
+        .snapshot()
+        .selected_profile
+        .expect("saved profile should remain selected");
 
     drop(core);
     let reopened =
         FormationLapCore::open(storage.path()).expect("configured profile storage should reopen");
     assert_eq!(
         reopened.snapshot().selected_profile,
-        Some(configured_profile)
+        Some(authoritative_profile)
+    );
+}
+
+#[test]
+fn save_profile_retains_native_identity_and_recomputes_path_diagnostics() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Endurance".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let original_primary_id = core
+        .snapshot()
+        .selected_profile
+        .expect("created profile should be selected")
+        .primary_sim
+        .id;
+
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(RacingProfile {
+            id: profile_id,
+            name: "Endurance".to_owned(),
+            primary_sim: ProfileApplication {
+                id: "frontend-primary".to_owned(),
+                name: "Le Mans Ultimate".to_owned(),
+                launch_recipe: LaunchRecipe {
+                    source: LaunchSource::DirectExecutable {
+                        executable_path: "Z:\\missing\\LeMansUltimate.exe".to_owned(),
+                    },
+                    ..LaunchRecipe::default()
+                },
+                path_needs_repair: false,
+            },
+            supporting_applications: vec![SupportingApplication {
+                application: ProfileApplication {
+                    id: "frontend-supporting".to_owned(),
+                    name: "SimHub".to_owned(),
+                    launch_recipe: LaunchRecipe {
+                        source: LaunchSource::DirectExecutable {
+                            executable_path: "Z:\\missing\\SimHub.exe".to_owned(),
+                        },
+                        ..LaunchRecipe::default()
+                    },
+                    path_needs_repair: false,
+                },
+                requirement: ApplicationRequirement::Optional,
+                keep_running: true,
+            }],
+            vr_enabled: false,
+            preferred_vr_launch_mode: None,
+            close_session: CloseSessionSettings::default(),
+        }),
+    })
+    .expect("valid frontend intent should be normalized and saved");
+
+    let saved = core
+        .snapshot()
+        .selected_profile
+        .expect("saved profile should remain selected");
+    assert_eq!(saved.primary_sim.id, original_primary_id);
+    assert!(saved.primary_sim.path_needs_repair);
+    assert_ne!(
+        saved.supporting_applications[0].application.id,
+        "frontend-supporting"
+    );
+    assert!(
+        saved.supporting_applications[0]
+            .application
+            .path_needs_repair
     );
 }
 

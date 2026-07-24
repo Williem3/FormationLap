@@ -4,6 +4,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -518,7 +519,7 @@ impl ProfileLibrary {
         Ok(())
     }
 
-    pub(crate) fn save(&mut self, profile: RacingProfile) -> Result<(), CoreError> {
+    pub(crate) fn save(&mut self, mut profile: RacingProfile) -> Result<(), CoreError> {
         validate_profile_names(&profile.name, &profile.primary_sim.name)?;
         for supporting_application in &profile.supporting_applications {
             if supporting_application.application.name.trim().is_empty() {
@@ -531,6 +532,29 @@ impl ProfileLibrary {
             .iter()
             .position(|stored| stored.id == profile.id)
             .ok_or_else(|| CoreError::ProfileNotFound(profile.id.clone()))?;
+        let stored_profile = &self.profiles[profile_index];
+        profile.primary_sim.id = stored_profile.primary_sim.id.clone();
+        profile.primary_sim.path_needs_repair =
+            Self::path_needs_repair(&profile.primary_sim.launch_recipe);
+
+        let existing_supporting_ids = stored_profile
+            .supporting_applications
+            .iter()
+            .map(|supporting| supporting.application.id.clone())
+            .collect::<HashSet<_>>();
+        let mut retained_supporting_ids = HashSet::new();
+        for supporting in &mut profile.supporting_applications {
+            let incoming_id = &supporting.application.id;
+            if !existing_supporting_ids.contains(incoming_id)
+                || !retained_supporting_ids.insert(incoming_id.clone())
+            {
+                supporting.application.id = Uuid::new_v4().to_string();
+                retained_supporting_ids.insert(supporting.application.id.clone());
+            }
+            supporting.application.path_needs_repair =
+                Self::path_needs_repair(&supporting.application.launch_recipe);
+        }
+
         let profile = RacingProfileDocument::from(profile);
         let profile_id = profile.id.clone();
         let destination = self.profiles_directory.join(format!("{profile_id}.json"));

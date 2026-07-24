@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "sims": [
+    {
+      "id": "iracing",
+      "name": "iRacing",
+      "steamAppId": 266410
+    },
+    {
+      "id": "assetto-corsa",
+      "name": "Assetto Corsa",
+      "steamAppId": 244210
+    },
+    {
+      "id": "assetto-corsa-competizione",
+      "name": "Assetto Corsa Competizione",
+      "steamAppId": 805550
+    },
+    {
+      "id": "assetto-corsa-evo",
+      "name": "Assetto Corsa EVO",
+      "steamAppId": 3058630
+    },
+    {
+      "id": "automobilista-2",
+      "name": "Automobilista 2",
+      "steamAppId": 1066890
+    },
+    {
+      "id": "rfactor-2",
+      "name": "rFactor 2",
+      "steamAppId": 365960
+    },
+    {
+      "id": "le-mans-ultimate",
+      "name": "Le Mans Ultimate",
+      "steamAppId": 2399420
+    },
+    {
+      "id": "raceroom",
+      "name": "RaceRoom Racing Experience",
+      "steamAppId": 211500
+    },
+    {
+      "id": "ea-sports-wrc",
+      "name": "EA SPORTS WRC",
+      "steamAppId": 1849250
+    },
+    {
+      "id": "dirt-rally-2",
+      "name": "DiRT Rally 2.0",
+      "steamAppId": 690790
+    }
+  ]
+}

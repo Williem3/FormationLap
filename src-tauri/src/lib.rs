@@ -4,6 +4,7 @@ mod atomic_file;
 mod commands;
 mod contracts;
 mod core;
+mod discovery_catalog;
 mod process_runtime;
 mod profile_library;
 mod settings;
@@ -17,12 +18,14 @@ pub use commands::{
     select_profile, start_application,
 };
 pub use contracts::{
-    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CloseSessionSettings,
-    ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput,
-    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileSummary, RacingProfile,
-    ShutdownStrategy, SupportingApplication, VrLaunchMode,
+    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CatalogPrimarySim,
+    CatalogSupportingApplication, CloseSessionSettings, ConsoleVisibility, DiscoverySnapshot,
+    LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
+    ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
+    VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
+pub use discovery_catalog::{DiscoveryCatalogError, validate_catalog_documents};
 pub use process_runtime::{
     GracefulStopResult, ProcessObservation, ProcessResponsiveness, ProcessRuntime,
     ProcessRuntimeError, WindowsProcessRuntime,

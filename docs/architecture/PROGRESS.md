@@ -25,7 +25,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
-| M5 | `not_started` | — | — | — | — | Wait for M2 |
+| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Discover curated sims across multiple targeted Steam libraries |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
@@ -34,7 +34,10 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M3 is in progress with its final Dashboard evidence slice:
+M3 and M5 are active with non-overlapping scopes while M3 awaits its manual
+browser evidence.
+
+M3 final Dashboard evidence slice:
 
 - Delivered: the complete FormationLapCore and Windows ProcessRuntime lifecycle,
   stable identity and PID-reuse protection, real healthy/slow/failing/launcher/
@@ -51,6 +54,24 @@ M3 is in progress with its final Dashboard evidence slice:
   ledger.
 - Next action: reload `?preview=m3-dashboard`, capture the status screenshot,
   verify scaling and interactions, then complete M3.
+
+M5 targeted Steam discovery slice:
+
+- Delivered: versioned bundled catalogs contain the exact ten Primary Sims and
+  nine Supporting Applications; reviewed Steam IDs are unique; the actionable
+  validator is part of `pnpm verify`.
+- Behavior: FormationLapCore discovers installed curated sims from every Steam
+  library declared by `libraryfolders.vdf`, parses their app manifests, and
+  omits catalog entries whose installations are missing.
+- Test seam: FormationLapCore with real temporary Steam filesystem fixtures;
+  no filesystem mock and no full-drive scan.
+- File scope: `catalog/`, `src-tauri/src/discovery_catalog.rs`,
+  FormationLapCore discovery contracts/commands/tests, generated bindings,
+  discovery-specific React/NativeBridge files, `docs/architecture/evidence/M5.md`,
+  and this ledger.
+- Isolation: M3 owns only its pending Dashboard screenshot/evidence update; M5
+  does not change M3 lifecycle policy or screenshot artifacts.
+- Next action: write the red multiple-Steam-library discovery fixture test.
 
 Known environment facts:
 

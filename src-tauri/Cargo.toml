@@ -36,6 +36,12 @@ required-features = ["process-fixtures"]
 test = false
 bench = false
 
+[[bin]]
+name = "validate-catalog"
+path = "src/bin/validate-catalog.rs"
+test = false
+bench = false
+
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
 

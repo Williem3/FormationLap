@@ -218,6 +218,35 @@ pub struct ApplicationProcessSnapshot {
     pub output: Option<ProcessOutput>,
 }
 
+/// One reviewed Primary Sim from the bundled Curated Catalog.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct CatalogPrimarySim {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub steam_app_id: Option<u32>,
+}
+
+/// One reviewed Supporting Application from the bundled Curated Catalog.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct CatalogSupportingApplication {
+    pub id: String,
+    pub name: String,
+}
+
+/// Curated and locally discovered applications available to profile flows.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoverySnapshot {
+    pub primary_sims: Vec<CatalogPrimarySim>,
+    pub supporting_applications: Vec<CatalogSupportingApplication>,
+}
+
 /// Authoritative native state rendered by React.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]

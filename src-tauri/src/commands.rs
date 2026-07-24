@@ -120,6 +120,11 @@ impl From<CoreError> for CommandError {
                 error.to_string(),
                 Some("Check the application path and try again."),
             ),
+            CoreError::DiscoveryCatalog(_) => (
+                "invalid_curated_catalog",
+                "Formation Lap could not open its bundled Curated Catalog.".to_owned(),
+                Some("Reinstall Formation Lap from an official signed release."),
+            ),
             CoreError::Storage(_) => (
                 "storage_failed",
                 "Formation Lap could not update local profile storage.".to_owned(),

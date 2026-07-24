@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "applications": [
+    {
+      "id": "simhub",
+      "name": "SimHub"
+    },
+    {
+      "id": "crew-chief",
+      "name": "Crew Chief"
+    },
+    {
+      "id": "trading-paints",
+      "name": "Trading Paints"
+    },
+    {
+      "id": "garage-61",
+      "name": "Garage 61"
+    },
+    {
+      "id": "racelab",
+      "name": "RaceLab"
+    },
+    {
+      "id": "ioverlay",
+      "name": "iOverlay"
+    },
+    {
+      "id": "go-fast",
+      "name": "Go Fast"
+    },
+    {
+      "id": "steamvr",
+      "name": "SteamVR"
+    },
+    {
+      "id": "lmuffb",
+      "name": "LMUFFB"
+    }
+  ]
+}

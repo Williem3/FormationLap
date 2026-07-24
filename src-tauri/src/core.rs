@@ -1,3 +1,4 @@
+use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError};
 use crate::{
     AppSnapshot, ApplicationProcessSnapshot, ProcessObservation, ProcessOwnership,
     ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
@@ -54,6 +55,7 @@ pub enum AppCommand {
         application_id: String,
         pre_existing_confirmed: bool,
     },
+    DiscoverApplications,
     RefreshProcesses,
 }
 
@@ -71,6 +73,7 @@ pub enum CommandOutcome {
     ApplicationRestarted { application_id: String },
     PreExistingControlConfirmationRequired { application_id: String },
     ForceStopConfirmationRequired { application_id: String },
+    ApplicationsDiscovered { discovery: crate::DiscoverySnapshot },
     ProcessesRefreshed,
 }
 
@@ -83,6 +86,7 @@ pub enum CoreError {
     ProfileNotFound(String),
     ApplicationNotFound(String),
     ProcessRuntime(ProcessRuntimeError),
+    DiscoveryCatalog(DiscoveryCatalogError),
     UnsupportedProfileSchema(u32),
     UnsupportedSettingsSchema(u32),
 }
@@ -107,6 +111,7 @@ impl fmt::Display for CoreError {
                 write!(formatter, "application {application_id} was not found")
             }
             Self::ProcessRuntime(error) => write!(formatter, "process runtime failed: {error}"),
+            Self::DiscoveryCatalog(error) => write!(formatter, "catalog discovery failed: {error}"),
             Self::UnsupportedProfileSchema(version) => {
                 write!(
                     formatter,
@@ -135,6 +140,7 @@ impl Error for CoreError {
             | Self::UnsupportedProfileSchema(_)
             | Self::UnsupportedSettingsSchema(_) => None,
             Self::ProcessRuntime(error) => Some(error),
+            Self::DiscoveryCatalog(error) => Some(error),
         }
     }
 }
@@ -157,6 +163,12 @@ impl From<ProcessRuntimeError> for CoreError {
     }
 }
 
+impl From<DiscoveryCatalogError> for CoreError {
+    fn from(error: DiscoveryCatalogError) -> Self {
+        Self::DiscoveryCatalog(error)
+    }
+}
+
 /// Owns authoritative Racing Profile and Session state.
 pub struct FormationLapCore {
     profile_library: ProfileLibrary,
@@ -166,6 +178,7 @@ pub struct FormationLapCore {
     failed_responsiveness_checks: BTreeMap<String, u8>,
     application_recipes: BTreeMap<String, crate::LaunchRecipe>,
     pending_restarts: BTreeMap<String, crate::LaunchRecipe>,
+    discovery_catalog: DiscoveryCatalog,
 }
 
 impl FormationLapCore {
@@ -186,6 +199,7 @@ impl FormationLapCore {
             failed_responsiveness_checks: BTreeMap::new(),
             application_recipes: BTreeMap::new(),
             pending_restarts: BTreeMap::new(),
+            discovery_catalog: DiscoveryCatalog::bundled()?,
         })
     }
 
@@ -503,6 +517,9 @@ impl FormationLapCore {
                 }
                 Ok(CommandOutcome::ProcessesRefreshed)
             }
+            AppCommand::DiscoverApplications => Ok(CommandOutcome::ApplicationsDiscovered {
+                discovery: self.discovery_catalog.snapshot(),
+            }),
         }
     }
 

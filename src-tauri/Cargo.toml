@@ -1,0 +1,21 @@
+[package]
+name = "formation-lap"
+version = "0.1.0"
+description = "Formation Lap prepares, monitors, and closes sim-racing sessions."
+authors = ["Formation Lap contributors"]
+edition = "2024"
+license = "MIT"
+rust-version = "1.97.1"
+default-run = "formation-lap"
+
+[lib]
+name = "formation_lap_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "=1.0.228", features = ["derive"] }
+tauri = { version = "=2.11.5", features = [] }
+ts-rs = { version = "=12.0.1", features = ["serde-compat"] }

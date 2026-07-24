@@ -14,6 +14,73 @@ const PROFILE_SCHEMA_VERSION: u32 = 2;
 const LEGACY_PROFILE_SCHEMA_VERSION: u32 = 1;
 const PORTABLE_PROFILE_SCHEMA_VERSION: u32 = 1;
 
+#[cfg(windows)]
+fn replace_profile_file(
+    destination: &Path,
+    temporary: &Path,
+    backup: &Path,
+) -> Result<(), CoreError> {
+    use std::{iter, os::windows::ffi::OsStrExt, ptr};
+    use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
+
+    if backup.exists() {
+        fs::remove_file(backup)?;
+    }
+
+    let destination_wide = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let temporary_wide = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let backup_wide = backup
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+
+    // SAFETY: Each pointer references a live, NUL-terminated UTF-16 buffer for
+    // the duration of the call. The two reserved pointer parameters are null.
+    let replaced = unsafe {
+        ReplaceFileW(
+            destination_wide.as_ptr(),
+            temporary_wide.as_ptr(),
+            backup_wide.as_ptr(),
+            0,
+            ptr::null(),
+            ptr::null(),
+        )
+    };
+    if replaced == 0 {
+        let error = std::io::Error::last_os_error();
+        let _ = fs::remove_file(temporary);
+        return Err(error.into());
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_profile_file(
+    destination: &Path,
+    temporary: &Path,
+    backup: &Path,
+) -> Result<(), CoreError> {
+    if backup.exists() {
+        fs::remove_file(backup)?;
+    }
+    fs::rename(destination, backup)?;
+    if let Err(error) = fs::rename(temporary, destination) {
+        let _ = fs::rename(backup, destination);
+        return Err(error.into());
+    }
+    Ok(())
+}
+
 fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
     if name.trim().is_empty() {
         return Err(CoreError::InvalidProfileName("Racing Profile name"));
@@ -237,14 +304,7 @@ impl ProfileLibrary {
         file.sync_all()?;
         drop(file);
 
-        if backup.exists() {
-            fs::remove_file(&backup)?;
-        }
-        fs::rename(destination, &backup)?;
-        if let Err(error) = fs::rename(&temporary, destination) {
-            let _ = fs::rename(&backup, destination);
-            return Err(error.into());
-        }
+        replace_profile_file(destination, &temporary, &backup)?;
 
         Ok(())
     }
@@ -446,14 +506,7 @@ impl ProfileLibrary {
         file.sync_all()?;
         drop(file);
 
-        if backup.exists() {
-            fs::remove_file(&backup)?;
-        }
-        fs::rename(&destination, &backup)?;
-        if let Err(error) = fs::rename(&temporary, &destination) {
-            let _ = fs::rename(&backup, &destination);
-            return Err(error.into());
-        }
+        replace_profile_file(&destination, &temporary, &backup)?;
 
         self.profiles[profile_index] = profile;
         self.profiles.sort_by(|left, right| {
@@ -496,14 +549,7 @@ impl ProfileLibrary {
         file.sync_all()?;
         drop(file);
 
-        if backup.exists() {
-            fs::remove_file(&backup)?;
-        }
-        fs::rename(&destination, &backup)?;
-        if let Err(error) = fs::rename(&temporary, &destination) {
-            let _ = fs::rename(&backup, &destination);
-            return Err(error.into());
-        }
+        replace_profile_file(&destination, &temporary, &backup)?;
 
         self.profiles[profile_index] = profile;
         self.profiles.sort_by(|left, right| {

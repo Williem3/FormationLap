@@ -1,19 +1,28 @@
 [package]
 name = "formation-lap"
-version = "0.1.0"
+version = "1.0.0"
 description = "Formation Lap prepares, monitors, and closes sim-racing sessions."
 authors = ["Formation Lap contributors"]
 edition = "2024"
 license = "MIT"
 rust-version = "1.97.1"
 default-run = "formation-lap"
+autobins = false
 
 [features]
+development-tools = []
+elevated-helper = []
 process-fixtures = []
 
 [lib]
 name = "formation_lap_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "formation-lap"
+path = "src/main.rs"
+test = false
+bench = false
 
 [[bin]]
 name = "formation-lap-process-fixture"
@@ -37,14 +46,23 @@ test = false
 bench = false
 
 [[bin]]
+name = "generate-bindings"
+path = "src/bin/generate-bindings.rs"
+required-features = ["development-tools"]
+test = false
+bench = false
+
+[[bin]]
 name = "validate-catalog"
 path = "src/bin/validate-catalog.rs"
+required-features = ["development-tools"]
 test = false
 bench = false
 
 [[bin]]
 name = "formation-lap-elevated-helper"
 path = "src/bin/elevated-helper.rs"
+required-features = ["elevated-helper"]
 test = false
 bench = false
 

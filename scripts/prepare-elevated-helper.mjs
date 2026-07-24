@@ -15,6 +15,8 @@ const cargoArguments = [
   "build",
   "--manifest-path",
   manifestPath,
+  "--features",
+  "elevated-helper",
   "--bin",
   "formation-lap-elevated-helper",
 ];

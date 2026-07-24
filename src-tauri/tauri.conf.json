@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Formation Lap",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.formationlap.desktop",
   "build": {
     "beforeDevCommand": "pnpm.cmd dev",
@@ -30,10 +30,27 @@
       "devCsp": "default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost http://localhost:1420 http://127.0.0.1:1420 ws://localhost:1420 ws://127.0.0.1:1420"
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
+    "publisher": "Formation Lap contributors",
+    "homepage": "https://github.com/Williem3/FormationLap",
+    "copyright": "Copyright (c) 2026 Formation Lap contributors",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "category": "Utility",
+    "shortDescription": "Prepare, monitor, and close sim-racing sessions.",
+    "longDescription": "Formation Lap is a local-first Windows utility that launches, monitors, and closes the applications used for a sim-racing Session.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,7 +59,11 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "startMenuFolder": "Formation Lap",
+        "compression": "lzma"
       }
     }
   }

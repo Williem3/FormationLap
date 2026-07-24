@@ -10,16 +10,16 @@ permissions:
 
 jobs:
   verify:
-    name: Windows foundation
+    name: Windows version-one gate
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10.33.0
           run_install: false
@@ -42,6 +42,26 @@ jobs:
         shell: pwsh
         run: pnpm verify
 
+      - name: Audit production frontend dependencies
+        shell: pwsh
+        run: pnpm audit --audit-level high --prod
+
+      - name: Install pinned RustSec audit tool
+        shell: pwsh
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Audit locked Rust dependencies
+        shell: pwsh
+        run: cargo audit --file src-tauri/Cargo.lock
+
+      - name: Enforce dependency license policy
+        shell: pwsh
+        run: >-
+          node scripts/release/generate-license-report.mjs
+          --root .
+          --output "$env:RUNNER_TEMP\THIRD-PARTY-LICENSES.json"
+          --notices "$env:RUNNER_TEMP\THIRD-PARTY-NOTICES.txt"
+
       - name: Check Rust formatting
         shell: pwsh
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
@@ -52,8 +72,20 @@ jobs:
 
       - name: Test Rust
         shell: pwsh
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
 
       - name: Build native debug application
         shell: pwsh
         run: pnpm tauri build --debug --no-bundle
+
+  dependency-review:
+    name: Dependency change review
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high

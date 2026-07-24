@@ -1,7 +1,7 @@
 {
   "name": "formation-lap",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -14,17 +14,20 @@
     "helper:prepare": "node scripts/prepare-elevated-helper.mjs",
     "helper:prepare:debug": "node scripts/prepare-elevated-helper.mjs --debug",
     "tauri": "node scripts/run-tauri.mjs",
-    "format": "prettier --check package.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts eslint.config.js index.html src scripts .github src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.sidecar.conf.json README.md docs/DEVELOPMENT.md docs/security",
-    "format:write": "prettier --write package.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts eslint.config.js index.html src scripts .github src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.sidecar.conf.json README.md docs/DEVELOPMENT.md docs/security",
+    "format": "prettier --check package.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts eslint.config.js index.html src scripts tests .github src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.sidecar.conf.json src-tauri/tauri.release-bundle.conf.json README.md SECURITY.md PRIVACY.md CONTRIBUTING.md THIRD-PARTY-NOTICES.md docs",
+    "format:write": "prettier --write package.json tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts eslint.config.js index.html src scripts tests .github src-tauri/capabilities src-tauri/tauri.conf.json src-tauri/tauri.sidecar.conf.json src-tauri/tauri.release-bundle.conf.json README.md SECURITY.md PRIVACY.md CONTRIBUTING.md THIRD-PARTY-NOTICES.md docs",
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "contracts:generate": "cargo run --manifest-path src-tauri/Cargo.toml --bin generate-bindings -- --write",
-    "contracts:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin generate-bindings -- --check",
-    "catalog:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin validate-catalog -- --sims catalog/sims.json --applications catalog/applications.json",
+    "test:accessibility": "node --test tests/accessibility/*.test.mjs",
+    "test:release": "node --test tests/release/*.test.mjs",
+    "contracts:generate": "cargo run --manifest-path src-tauri/Cargo.toml --features development-tools --bin generate-bindings -- --write",
+    "contracts:check": "cargo run --manifest-path src-tauri/Cargo.toml --features development-tools --bin generate-bindings -- --check",
+    "catalog:check": "cargo run --manifest-path src-tauri/Cargo.toml --features development-tools --bin validate-catalog -- --sims catalog/sims.json --applications catalog/applications.json",
     "security:audit": "node scripts/audit-capabilities.mjs",
-    "verify": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm contracts:check && pnpm catalog:check && pnpm security:audit"
+    "release:version:check": "node scripts/release/verify-release-version.mjs --root .",
+    "verify": "pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm test:accessibility && pnpm test:release && pnpm release:version:check && pnpm contracts:check && pnpm catalog:check && pnpm security:audit"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",

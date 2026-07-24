@@ -1,0 +1,280 @@
+name: Signed Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to rebuild and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Sign and publish Windows release
+    runs-on: windows-2025
+    timeout-minutes: 90
+    environment: release
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve and verify the release tag
+        id: release
+        shell: pwsh
+        env:
+          REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ($env:REQUESTED_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Release tag is not a supported v-prefixed SemVer."
+          }
+          $tagCommit = git rev-list -n 1 $env:REQUESTED_TAG
+          $headCommit = git rev-parse HEAD
+          if ($tagCommit -ne $headCommit) {
+            throw "Checked-out commit does not match the requested release tag."
+          }
+          $version = $env:REQUESTED_TAG.Substring(1)
+          "tag=$env:REQUESTED_TAG" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: rustup toolchain install 1.97.1-x86_64-pc-windows-msvc --profile minimal --component rustfmt,clippy
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify synchronized release version
+        shell: pwsh
+        run: >-
+          node scripts/release/verify-release-version.mjs
+          --root .
+          --tag "${{ steps.release.outputs.tag }}"
+
+      - name: Run all repository gates
+        shell: pwsh
+        run: |
+          pnpm verify
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml --all-targets --all-features
+          pnpm audit --audit-level high --prod
+
+      - name: Install pinned RustSec audit tool
+        shell: pwsh
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      - name: Audit locked Rust dependencies
+        shell: pwsh
+        run: cargo audit --file src-tauri/Cargo.lock
+
+      - name: Require release signing configuration
+        shell: pwsh
+        env:
+          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
+          SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          foreach ($value in @(
+            $env:FORMATION_LAP_UPDATE_PUBLIC_KEY,
+            $env:SIGNING_ENDPOINT,
+            $env:SIGNING_ACCOUNT,
+            $env:SIGNING_PROFILE,
+            $env:TAURI_SIGNING_PRIVATE_KEY
+          )) {
+            if ([string]::IsNullOrWhiteSpace($value)) {
+              throw "A required release signing input is not configured."
+            }
+          }
+
+      - name: Build application and helper before bundling
+        shell: pwsh
+        env:
+          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
+        run: pnpm tauri build --no-bundle
+
+      - name: Authenticate to Azure with OIDC
+        uses: Azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Authenticode-sign application and one-shot helper
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: |
+            ${{ github.workspace }}\src-tauri\target\release\formation-lap.exe
+            ${{ github.workspace }}\src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Formation Lap
+          description-url: https://github.com/Williem3/FormationLap
+
+      - name: Verify application and helper Authenticode
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            "src-tauri\target\release\formation-lap.exe",
+            "src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe"
+          )) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne "Valid") {
+              throw "Authenticode verification failed for $path`: $($signature.Status)"
+            }
+          }
+
+      - name: Bundle the signed binaries without updater signing
+        id: bundle
+        shell: pwsh
+        env:
+          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
+        run: |
+          pnpm tauri bundle --bundles nsis --config src-tauri/tauri.release-bundle.conf.json --no-sign --ci
+          $installers = @(Get-ChildItem "src-tauri\target\release\bundle\nsis" -Filter "*-setup.exe" -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one NSIS installer."
+          }
+          "installer=$($installers[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Authenticode-sign installer
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ steps.bundle.outputs.installer }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Formation Lap installer
+          description-url: https://github.com/Williem3/FormationLap
+
+      - name: Prepare final named installer and Authenticode evidence
+        id: prepared
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          INSTALLER: ${{ steps.bundle.outputs.installer }}
+        run: |
+          New-Item -ItemType Directory -Path release | Out-Null
+          $namedInstaller = Join-Path $PWD "release\Formation-Lap_$env:VERSION`_x64-setup.exe"
+          Copy-Item -LiteralPath $env:INSTALLER -Destination $namedInstaller
+          $records = @(
+            @{ Name = "formation-lap.exe"; Path = "src-tauri\target\release\formation-lap.exe" },
+            @{ Name = "formation-lap-elevated-helper.exe"; Path = "src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe" },
+            @{ Name = [IO.Path]::GetFileName($namedInstaller); Path = $namedInstaller }
+          )
+          $lines = foreach ($record in $records) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $record.Path
+            if ($signature.Status -ne "Valid") {
+              throw "Authenticode verification failed for $($record.Name)`: $($signature.Status)"
+            }
+            "$($record.Name): Valid | $($signature.SignerCertificate.Subject)"
+          }
+          $lines | Set-Content -LiteralPath "release\AUTHENTICODE.txt" -Encoding utf8
+          "installer=$namedInstaller" >> $env:GITHUB_OUTPUT
+
+      - name: Tauri-sign the final Authenticode installer bytes
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri signer sign "${{ steps.prepared.outputs.installer }}"
+
+      - name: Generate dependency-license report and notices
+        shell: pwsh
+        run: >-
+          node scripts/release/generate-license-report.mjs
+          --root .
+          --output "release\THIRD-PARTY-LICENSES.json"
+          --notices "release\THIRD-PARTY-NOTICES.txt"
+
+      - name: Install pinned Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          syft-version: v1.38.0
+
+      - name: Generate SPDX SBOM
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          & "${{ steps.syft.outputs.cmd }}" scan dir:. --source-name formation-lap --source-version $env:VERSION -o "spdx-json=release\Formation-Lap_$env:VERSION.spdx.json"
+          node scripts/release/normalize-spdx-sbom.mjs --file "release\Formation-Lap_$env:VERSION.spdx.json" --version $env:VERSION
+
+      - name: Generate updater metadata and SHA-256 manifest
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          $publishedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          node scripts/release/generate-release-metadata.mjs --directory release --version $env:VERSION --tag $env:TAG --notes "docs\releases\$env:VERSION.md" --published-at $publishedAt
+
+      - name: Verify final release artifact contract
+        shell: pwsh
+        run: >-
+          node scripts/release/verify-release-artifacts.mjs
+          --directory release
+          --version "${{ steps.release.outputs.version }}"
+          --tag "${{ steps.release.outputs.tag }}"
+
+      - name: Attest release provenance
+        id: provenance
+        uses: actions/attest@36051bcae73b7c2a8a6945a48cbf80953c6baa35 # v4
+        with:
+          subject-path: release/*
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          $assets = @(Get-ChildItem release -File | ForEach-Object FullName)
+          if ($env:PRERELEASE -eq "true") {
+            gh release create $env:TAG @assets --verify-tag --title "Formation Lap $env:VERSION" --notes-file "docs\releases\$env:VERSION.md" --prerelease
+          } else {
+            gh release create $env:TAG @assets --verify-tag --title "Formation Lap $env:VERSION" --notes-file "docs\releases\$env:VERSION.md" --latest
+          }
+          "Provenance: ${{ steps.provenance.outputs.attestation-url }}"

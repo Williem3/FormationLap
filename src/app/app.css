@@ -10,9 +10,16 @@
   --muted: #68717d;
   --accent: #3478f6;
   --accent-strong: #2467da;
+  --accent-ink: #2467da;
+  --accent-action: #2467da;
   --warm: #e89b3c;
+  --warm-ink: #9a5a0c;
   --running: #1ca34a;
+  --running-ink: #137a37;
   --danger: #d94747;
+  --danger-ink: #b52d2d;
+  --danger-action: #b52d2d;
+  --action-ink: #ffffff;
   --surface: #ffffff;
   --border: #d5dae1;
   --focus-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
@@ -143,7 +150,7 @@ button:disabled {
   place-items: center;
   border-radius: 8px;
   background: var(--surface);
-  color: var(--accent);
+  color: var(--accent-ink);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
@@ -215,7 +222,7 @@ button:disabled {
 .new-profile-button:not(:disabled) {
   border-style: solid;
   background: color-mix(in srgb, var(--surface) 42%, transparent);
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
 }
 
@@ -229,7 +236,7 @@ button:disabled {
 }
 
 .import-profile-button:not(:disabled):hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .profile-nav {
@@ -267,7 +274,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--surface);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .profile-nav-icon svg {
@@ -347,10 +354,10 @@ button:disabled {
   min-height: 44px;
   min-width: 136px;
   padding: 10px 20px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-action);
   border-radius: 8px;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--accent-action);
+  color: var(--action-ink);
   font-size: 14px;
   font-weight: 620;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 18%, transparent);
@@ -381,10 +388,10 @@ button:disabled {
 .danger-button {
   min-height: 40px;
   padding: 9px 15px;
-  border: 1px solid var(--danger);
+  border: 1px solid var(--danger-action);
   border-radius: 8px;
-  background: var(--danger);
-  color: #ffffff;
+  background: var(--danger-action);
+  color: var(--action-ink);
   font-size: 13px;
   font-weight: 620;
 }
@@ -550,7 +557,7 @@ button:disabled {
 }
 
 .step-index {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-family: "Barlow Condensed", sans-serif;
   font-size: 13px;
   font-weight: 600;
@@ -593,11 +600,11 @@ button:disabled {
   width: 21px;
   height: 21px;
   flex: none;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .discovery-status-warning > svg {
-  color: var(--warm);
+  color: var(--warm-ink);
 }
 
 .discovery-status strong,
@@ -710,7 +717,7 @@ button:disabled {
   gap: 5px;
   grid-column: 2;
   margin-top: 7px;
-  color: var(--running);
+  color: var(--running-ink);
   font-family: "Barlow Condensed", sans-serif;
   font-size: 10px;
   font-weight: 650;
@@ -746,7 +753,7 @@ button:disabled {
 }
 
 .text-button:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration-color: currentColor;
 }
 
@@ -910,7 +917,7 @@ button:disabled {
   border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
-  color: var(--danger);
+  color: var(--danger-ink);
   font-size: 12px;
   line-height: 18px;
 }
@@ -1151,7 +1158,7 @@ button:disabled {
 }
 
 .game-launch-diagnostic summary {
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   font-size: 11px;
   font-weight: 620;
@@ -1245,18 +1252,18 @@ button:disabled {
 .rail-node-starting .rail-index,
 .rail-node-running .rail-index {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .rail-node-runningPreExisting .rail-index,
 .rail-node-notResponding .rail-index {
   border-color: var(--warm);
-  color: var(--warm);
+  color: var(--warm-ink);
 }
 
 .rail-node-failed .rail-index {
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .rail-node-pending .rail-index,
@@ -1267,7 +1274,7 @@ button:disabled {
 
 .rail-node-stopping .rail-index {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .recovery-offer,
@@ -1393,11 +1400,11 @@ button:disabled {
 }
 
 .update-state-updateAvailable {
-  color: var(--warm) !important;
+  color: var(--warm-ink) !important;
 }
 
 .update-state-current {
-  color: var(--running) !important;
+  color: var(--running-ink) !important;
 }
 
 .application-copy strong {
@@ -1433,26 +1440,26 @@ button:disabled {
 
 .status-starting,
 .status-running {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .status-running .status-glyph {
   border-color: var(--running);
   background: var(--running);
-  color: var(--running);
+  color: var(--running-ink);
 }
 
 .status-runningPreExisting,
 .status-notResponding {
-  color: var(--warm);
+  color: var(--warm-ink);
 }
 
 .status-stopping {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .status-failed {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .classification-label {
@@ -1491,7 +1498,7 @@ button:disabled {
 }
 
 .game-icon {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .profile-guidance {
@@ -1786,7 +1793,7 @@ button:disabled {
 }
 
 .danger-text {
-  color: var(--danger);
+  color: var(--danger-ink);
 }
 
 .supporting-policy {
@@ -1809,7 +1816,7 @@ button:disabled {
 
 .recipe-details summary {
   padding: 13px 2px 0;
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   font-size: 11px;
   font-weight: 620;
@@ -1856,7 +1863,7 @@ button:disabled {
 .status-message > svg {
   width: 26px;
   height: 26px;
-  color: var(--running);
+  color: var(--running-ink);
 }
 
 .status-message strong,
@@ -2007,7 +2014,7 @@ button:disabled {
 }
 
 .status-enabled {
-  color: var(--running);
+  color: var(--running-ink);
 }
 
 .theme-options {
@@ -2031,7 +2038,7 @@ button:disabled {
 
 .theme-options .theme-option-active {
   background: var(--surface);
-  color: var(--accent);
+  color: var(--accent-ink);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
@@ -2084,9 +2091,16 @@ button:disabled {
     --muted: #9aa3ae;
     --accent: #3a82f7;
     --accent-strong: #66a0ff;
+    --accent-ink: #66a0ff;
+    --accent-action: #66a0ff;
     --warm: #f0a243;
+    --warm-ink: #f0a243;
     --running: #4ac46f;
+    --running-ink: #4ac46f;
     --danger: #ef6666;
+    --danger-ink: #ef6666;
+    --danger-action: #ef6666;
+    --action-ink: #15171b;
   }
 }
 
@@ -2099,9 +2113,16 @@ button:disabled {
   --muted: #9aa3ae;
   --accent: #3a82f7;
   --accent-strong: #66a0ff;
+  --accent-ink: #66a0ff;
+  --accent-action: #66a0ff;
   --warm: #f0a243;
+  --warm-ink: #f0a243;
   --running: #4ac46f;
+  --running-ink: #4ac46f;
   --danger: #ef6666;
+  --danger-ink: #ef6666;
+  --danger-action: #ef6666;
+  --action-ink: #15171b;
 }
 
 @media (max-width: 1180px) {

@@ -38,34 +38,41 @@ lead to a larger final game node.
 
 ### Light
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `canvas` | `#F4F5F7` | Main window background ("Paddock White") |
-| `panel` | `#E8EBEF` | Sidebar and quiet grouped surfaces ("Fog Panel") |
-| `ink` | `#15171B` | Primary text and icons ("Carbon Ink") |
-| `muted` | `#68717D` | Secondary text and stopped state ("Telemetry Gray") |
-| `accent` | `#3478F6` | Primary actions, focus, selected navigation ("Lap Blue") |
-| `warm` | `#E89B3C` | Startup progress and warning ("Tire Warmth") |
-| `running` | `#1CA34A` | Running and ready state |
-| `danger` | `#D94747` | Failure and destructive actions |
-| `surface` | `#FFFFFF` | Inputs and raised content groups |
-| `border` | `#D5DAE1` | Dividers and control outlines |
+| Token     | Value     | Use                                                      |
+| --------- | --------- | -------------------------------------------------------- |
+| `canvas`  | `#F4F5F7` | Main window background ("Paddock White")                 |
+| `panel`   | `#E8EBEF` | Sidebar and quiet grouped surfaces ("Fog Panel")         |
+| `ink`     | `#15171B` | Primary text and icons ("Carbon Ink")                    |
+| `muted`   | `#68717D` | Secondary text and stopped state ("Telemetry Gray")      |
+| `accent`  | `#3478F6` | Primary actions, focus, selected navigation ("Lap Blue") |
+| `warm`    | `#E89B3C` | Startup progress and warning ("Tire Warmth")             |
+| `running` | `#1CA34A` | Running and ready state                                  |
+| `danger`  | `#D94747` | Failure and destructive actions                          |
+| `surface` | `#FFFFFF` | Inputs and raised content groups                         |
+| `border`  | `#D5DAE1` | Dividers and control outlines                            |
 
 ### Dark
 
-| Token | Value |
-| --- | --- |
-| `canvas` | `#1C1F24` |
+| Token     | Value     |
+| --------- | --------- |
+| `canvas`  | `#1C1F24` |
 | `surface` | `#23272D` |
-| `panel` | `#272B31` |
-| `border` | `#2F343C` |
-| `ink` | `#E6E9EE` |
-| `muted` | `#9AA3AE` |
-| `accent` | `#3A82F7` |
-| `warm` | `#F0A243` |
+| `panel`   | `#272B31` |
+| `border`  | `#2F343C` |
+| `ink`     | `#E6E9EE` |
+| `muted`   | `#9AA3AE` |
+| `accent`  | `#3A82F7` |
+| `warm`    | `#F0A243` |
 
 State tokens retain their semantic roles in both themes and must meet WCAG AA
 contrast when paired with text or icons.
+
+The base state colors are also used for borders, fills, and the Formation Rail.
+Small text and filled-action labels use the theme-aware derived tokens
+`accent-ink`, `warm-ink`, `running-ink`, `danger-ink`, `accent-action`,
+`danger-action`, and `action-ink`. These preserve each semantic hue while
+meeting at least 4.5:1 against the applicable surface. Do not use a base state
+token directly as small text simply because its non-text contrast passes.
 
 ## Typography
 
@@ -75,15 +82,15 @@ Use locally bundled, open-source variable fonts:
 - **Barlow Condensed** for compact timing, status, version, and numeric data.
 - Fall back to `"Segoe UI Variable", "Segoe UI", sans-serif`.
 
-| Role | Size / line height | Weight |
-| --- | --- | --- |
-| Display | `28 / 36` | 600 |
-| Page heading | `24 / 32` | 600 |
-| Section heading | `20 / 28` | 600 |
-| Row title | `16 / 24` | 600 |
-| Body | `14 / 20` | 400 |
-| Caption | `12 / 16` | 400 |
-| Utility data | `12 / 16` | 500, Barlow Condensed |
+| Role            | Size / line height | Weight                |
+| --------------- | ------------------ | --------------------- |
+| Display         | `28 / 36`          | 600                   |
+| Page heading    | `24 / 32`          | 600                   |
+| Section heading | `20 / 28`          | 600                   |
+| Row title       | `16 / 24`          | 600                   |
+| Body            | `14 / 20`          | 400                   |
+| Caption         | `12 / 16`          | 400                   |
+| Utility data    | `12 / 16`          | 500, Barlow Condensed |
 
 Use sentence case. Labels describe what users control, not implementation
 details.

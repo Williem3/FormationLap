@@ -5,11 +5,17 @@ export type ApplicationRequirement = "required" | "optional";
 
 export type ConsoleVisibility = "hidden" | "visible";
 
-export type LaunchSource = { "kind": "directExecutable", executablePath: string, } | { "kind": "steam", appId: number, };
+export type SteamLaunchSelector = { "kind": "default" } | { "kind": "openVr" } | { "kind": "oculus" } | { "kind": "option", index: number, };
+
+export type LaunchSource = { "kind": "directExecutable", executablePath: string, } | { "kind": "steam", appId: number, selector: SteamLaunchSelector | null, };
 
 export type ShutdownStrategy = { "kind": "closeWindows" } | { "kind": "consoleInterrupt" } | { "kind": "customStop", executablePath: string, arguments: Array<string>, } | { "kind": "forceOnly" };
 
 export type LaunchRecipe = { source: LaunchSource, arguments: Array<string>, workingDirectory: string | null, monitoredProcess: string | null, consoleVisibility: ConsoleVisibility, elevated: boolean, startupTimeoutSeconds: number, postStartDelayMilliseconds: number, shutdownStrategy: ShutdownStrategy, };
+
+export type GameLaunchTarget = { "kind": "steam", uri: string, } | { "kind": "directExecutable", executableName: string, };
+
+export type GameLaunchDiagnostic = { schemaVersion: number, profileName: string, vrEnabled: boolean, vrLaunchMode: VrLaunchMode | null, target: GameLaunchTarget, arguments: Array<string>, monitoredProcess: string | null, observedProcess: string, };
 
 export type ProfileApplication = { id: string, name: string, launchRecipe: LaunchRecipe, pathNeedsRepair: boolean, };
 
@@ -147,6 +153,10 @@ export function restartApplication(payload: RestartApplicationPayload): Promise<
 
 export function startSession(payload: ProfileIdPayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("start_session", { payload });
+}
+
+export function testGameLaunch(payload: ProfileIdPayload): Promise<GameLaunchDiagnostic> {
+  return invoke<GameLaunchDiagnostic>("test_game_launch", { payload });
 }
 
 export function cancelStartup(): Promise<AppSnapshot> {

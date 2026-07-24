@@ -23,7 +23,7 @@ const editorSnapshot: AppSnapshot = {
       id: "application-lmu",
       name: "Le Mans Ultimate",
       launchRecipe: {
-        source: { kind: "steam", appId: 2399420 },
+        source: { kind: "steam", appId: 2399420, selector: null },
         arguments: ["-windowed"],
         workingDirectory: null,
         monitoredProcess: "LeMansUltimate.exe",

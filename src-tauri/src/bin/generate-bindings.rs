@@ -4,13 +4,13 @@ use formation_lap_lib::{
     CatalogUpdateProvider, CloseSessionSettings, CommandError, CompatibilityRank,
     ConsoleVisibility, CreateProfilePayload, DiscoveredInstallation, DiscoveredPrimarySim,
     DiscoveredSupportingApplication, DiscoverySnapshot, DuplicateProfilePayload,
-    ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, LaunchRecipe,
-    LaunchSource, PrimarySimIdPayload, ProcessIdentity, ProcessOutput, ProcessOwnership,
-    ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
-    RestartApplicationPayload, SaveProfilePayload, SessionApplicationRole,
-    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
-    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SupportingApplication,
-    SupportingApplicationRecommendation, VrLaunchMode,
+    ExitApplicationPayload, ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget,
+    ImportProfilePayload, LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity,
+    ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload,
+    ProfileSummary, RacingProfile, RestartApplicationPayload, SaveProfilePayload,
+    SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
+    SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
+    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -24,9 +24,12 @@ fn render_bindings() -> String {
     let declarations = [
         ApplicationRequirement::decl(&config),
         ConsoleVisibility::decl(&config),
+        SteamLaunchSelector::decl(&config),
         LaunchSource::decl(&config),
         ShutdownStrategy::decl(&config),
         LaunchRecipe::decl(&config),
+        GameLaunchTarget::decl(&config),
+        GameLaunchDiagnostic::decl(&config),
         ProfileApplication::decl(&config),
         SupportingApplication::decl(&config),
         VrLaunchMode::decl(&config),
@@ -134,6 +137,10 @@ export function restartApplication(payload: RestartApplicationPayload): Promise<
 
 export function startSession(payload: ProfileIdPayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("start_session", {{ payload }});
+}}
+
+export function testGameLaunch(payload: ProfileIdPayload): Promise<GameLaunchDiagnostic> {{
+  return invoke<GameLaunchDiagnostic>("test_game_launch", {{ payload }});
 }}
 
 export function cancelStartup(): Promise<AppSnapshot> {{

@@ -74,7 +74,11 @@ const leMansUltimate = {
   id: "application-lmu",
   name: "Le Mans Ultimate",
   launchRecipe: {
-    source: { kind: "steam" as const, appId: 2_399_420 },
+    source: {
+      kind: "steam" as const,
+      appId: 2_399_420,
+      selector: null,
+    },
     arguments: ["-windowed"],
     workingDirectory: null,
     monitoredProcess: "LeMansUltimate.exe",

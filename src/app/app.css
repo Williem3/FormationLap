@@ -1097,6 +1097,79 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.profile-dashboard-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-launch-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--running) 38%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--running) 6%, var(--surface));
+}
+
+.game-launch-result strong {
+  font-size: 13px;
+}
+
+.game-launch-result dl {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+}
+
+.game-launch-result dt,
+.game-launch-result dd {
+  margin: 0;
+}
+
+.game-launch-result dt {
+  color: var(--muted);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.game-launch-result dd {
+  margin-top: 3px;
+  color: var(--ink);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+}
+
+.game-launch-diagnostic {
+  min-width: 150px;
+}
+
+.game-launch-diagnostic summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.game-launch-diagnostic textarea {
+  width: min(420px, 42vw);
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 10px;
+  resize: vertical;
+}
+
 .formation-rail {
   position: relative;
   display: flex;
@@ -1849,6 +1922,19 @@ button:disabled {
   .profile-dashboard {
     padding-right: 16px;
     padding-left: 16px;
+  }
+
+  .game-launch-result {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .game-launch-result dl {
+    flex-wrap: wrap;
+  }
+
+  .game-launch-diagnostic textarea {
+    width: 100%;
   }
 
   .lifecycle-row {

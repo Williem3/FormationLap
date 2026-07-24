@@ -60,7 +60,11 @@ const primarySim = {
       "Le Mans Ultimate",
       "C:\\SteamLibrary\\steamapps\\common\\Le Mans Ultimate\\LeMansUltimate.exe",
     ).launchRecipe,
-    source: { kind: "steam" as const, appId: 2_399_420 },
+    source: {
+      kind: "steam" as const,
+      appId: 2_399_420,
+      selector: null,
+    },
     monitoredProcess: "LeMansUltimate.exe",
   },
 };

@@ -8,6 +8,7 @@ import type {
   DiscoverySnapshot,
   ExitApplicationPayload,
   ForceStopApplicationPayload,
+  GameLaunchDiagnostic,
   ImportProfilePayload,
   LaunchRecipe,
   ProfileIdPayload,
@@ -283,6 +284,48 @@ export class InMemoryNativeBridge implements NativeBridge {
       first.state = "starting";
     }
     return this.getAppSnapshot();
+  }
+
+  testGameLaunch(payload: ProfileIdPayload): Promise<GameLaunchDiagnostic> {
+    const profile = this.#profilesById.get(payload.profileId);
+    if (!profile) {
+      return Promise.reject(new Error("Racing Profile was not found"));
+    }
+    const source = profile.primarySim.launchRecipe.source;
+    const executableName =
+      source.kind === "directExecutable"
+        ? source.executablePath.split(/[\\/]/).at(-1) || "unknown.exe"
+        : profile.primarySim.launchRecipe.monitoredProcess || "unknown.exe";
+    const target =
+      source.kind === "steam"
+        ? ({
+            kind: "steam",
+            uri:
+              profile.primarySim.launchRecipe.arguments.length > 0
+                ? `steam://run/${source.appId}//${profile.primarySim.launchRecipe.arguments
+                    .map(encodeURIComponent)
+                    .join("%20")}/`
+                : `steam://launch/${source.appId}/${
+                    source.selector?.kind === "openVr"
+                      ? "VR"
+                      : source.selector?.kind === "oculus"
+                        ? "OTHERVR"
+                        : source.selector?.kind === "option"
+                          ? `option${source.selector.index}`
+                          : "option0"
+                  }`,
+          } as const)
+        : ({ kind: "directExecutable", executableName } as const);
+    return Promise.resolve({
+      schemaVersion: 1,
+      profileName: profile.name,
+      vrEnabled: profile.vrEnabled,
+      vrLaunchMode: profile.vrEnabled ? profile.preferredVrLaunchMode : null,
+      target,
+      arguments: [...profile.primarySim.launchRecipe.arguments],
+      monitoredProcess: profile.primarySim.launchRecipe.monitoredProcess,
+      observedProcess: executableName,
+    });
   }
 
   cancelStartup(): Promise<AppSnapshot> {

@@ -13,6 +13,7 @@ import type {
   DiscoveredPrimarySim,
   DiscoveredSupportingApplication,
   DiscoverySnapshot,
+  GameLaunchDiagnostic,
   LaunchSource,
   ProfileApplication,
   RacingProfile,
@@ -98,6 +99,8 @@ export function App({ bridge }: AppProps) {
     useState<PendingProcessAction | null>(null);
   const [outputApplication, setOutputApplication] =
     useState<ProfileApplication | null>(null);
+  const [gameLaunchDiagnostic, setGameLaunchDiagnostic] =
+    useState<GameLaunchDiagnostic | null>(null);
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const newProfileButton = useRef<HTMLButtonElement | null>(null);
   const wasDialogOpen = useRef(false);
@@ -293,6 +296,7 @@ export function App({ bridge }: AppProps) {
       setState({ kind: "ready", snapshot: nextSnapshot });
       setView("dashboard");
       setProfileDraft(null);
+      setGameLaunchDiagnostic(null);
     } catch {
       setState({ kind: "error" });
     }
@@ -315,6 +319,7 @@ export function App({ bridge }: AppProps) {
             ? {
                 kind: "steam",
                 appId: Number.parseInt(sourceValue, 10) || 0,
+                selector: null,
               }
             : {
                 kind: "directExecutable",
@@ -500,6 +505,46 @@ export function App({ bridge }: AppProps) {
       setFormError(
         `${application.name} could not start. Check its Launch Recipe and try again.`,
       );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const testGameLaunch = async () => {
+    if (!selectedProfile) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    setGameLaunchDiagnostic(null);
+    try {
+      const diagnostic = await bridge.testGameLaunch({
+        profileId: selectedProfile.id,
+      });
+      setGameLaunchDiagnostic(diagnostic);
+    } catch {
+      setFormError(
+        "Test Game Launch could not start the Primary Sim. Review its Launch Recipe and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleDashboardVr = async (vrEnabled: boolean) => {
+    if (!selectedProfile || snapshot?.session.state !== "idle") {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const profile = structuredClone(selectedProfile);
+      profile.vrEnabled = vrEnabled;
+      const nextSnapshot = await bridge.saveProfile({ profile });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setGameLaunchDiagnostic(null);
+    } catch {
+      setFormError("Formation Lap could not remember the VR choice.");
     } finally {
       setIsSaving(false);
     }
@@ -807,6 +852,7 @@ export function App({ bridge }: AppProps) {
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
             isBusy={isSaving}
+            gameLaunchDiagnostic={gameLaunchDiagnostic}
             onCreateProfile={openNewProfile}
             onDeleteProfile={() => {
               rememberDialogTrigger();
@@ -829,6 +875,8 @@ export function App({ bridge }: AppProps) {
               requestProcessAction("force", application, processSnapshot)
             }
             onViewOutput={setOutputApplication}
+            onTestGameLaunch={() => void testGameLaunch()}
+            onVrEnabledChange={(vrEnabled) => void toggleDashboardVr(vrEnabled)}
             onStartSession={() => void runSessionAction("start")}
             onCancelStartup={() => void runSessionAction("cancel")}
             onCloseSession={() => void runSessionAction("close")}
@@ -1163,7 +1211,7 @@ function launchSourceFromInstallation(
   installation: DiscoveredInstallation,
 ): LaunchSource {
   return installation.kind === "steam"
-    ? { kind: "steam", appId: installation.appId }
+    ? { kind: "steam", appId: installation.appId, selector: null }
     : {
         kind: "directExecutable",
         executablePath: installation.executablePath,
@@ -2072,7 +2120,7 @@ function ApplicationRecipeFields({
                 update((next) => {
                   next.launchRecipe.source =
                     event.currentTarget.value === "steam"
-                      ? { kind: "steam", appId: 0 }
+                      ? { kind: "steam", appId: 0, selector: null }
                       : { kind: "directExecutable", executablePath: "" };
                   next.pathNeedsRepair =
                     next.launchRecipe.source.kind === "directExecutable";
@@ -2112,6 +2160,71 @@ function ApplicationRecipeFields({
             />
           </label>
         </div>
+        {source.kind === "steam" && (
+          <div className="field-grid">
+            <label className="field">
+              <span>{label} Steam launch option</span>
+              <select
+                value={source.selector?.kind ?? "curated"}
+                onChange={(event) =>
+                  update((next) => {
+                    const nextSource = next.launchRecipe.source;
+                    if (nextSource.kind !== "steam") {
+                      return;
+                    }
+                    switch (event.currentTarget.value) {
+                      case "default":
+                        nextSource.selector = { kind: "default" };
+                        break;
+                      case "openVr":
+                        nextSource.selector = { kind: "openVr" };
+                        break;
+                      case "oculus":
+                        nextSource.selector = { kind: "oculus" };
+                        break;
+                      case "option":
+                        nextSource.selector = { kind: "option", index: 1 };
+                        break;
+                      default:
+                        nextSource.selector = null;
+                    }
+                  })
+                }
+              >
+                <option value="curated">Use Curated Catalog</option>
+                <option value="default">Default</option>
+                <option value="openVr">OpenVR / SteamVR</option>
+                <option value="oculus">Oculus</option>
+                <option value="option">Numbered launch option</option>
+              </select>
+            </label>
+            {source.selector?.kind === "option" && (
+              <label className="field">
+                <span>Launch option index</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="255"
+                  value={source.selector.index}
+                  onChange={(event) =>
+                    update((next) => {
+                      const nextSource = next.launchRecipe.source;
+                      if (
+                        nextSource.kind === "steam" &&
+                        nextSource.selector?.kind === "option"
+                      ) {
+                        nextSource.selector.index = Math.min(
+                          255,
+                          Math.max(0, event.currentTarget.valueAsNumber || 0),
+                        );
+                      }
+                    })
+                  }
+                />
+              </label>
+            )}
+          </div>
+        )}
         <label className="field">
           <span>{label} arguments · one per line</span>
           <textarea
@@ -2299,6 +2412,7 @@ interface DashboardProps {
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
   isBusy: boolean;
+  gameLaunchDiagnostic: GameLaunchDiagnostic | null;
   onCreateProfile(): void;
   onDeleteProfile(): void;
   onDuplicateProfile(): void;
@@ -2318,6 +2432,8 @@ interface DashboardProps {
     process: ApplicationProcessSnapshot,
   ): void;
   onViewOutput(application: ProfileApplication): void;
+  onTestGameLaunch(): void;
+  onVrEnabledChange(vrEnabled: boolean): void;
   onStartSession(): void;
   onCancelStartup(): void;
   onCloseSession(): void;
@@ -2332,6 +2448,7 @@ function Dashboard({
   applicationProcesses,
   session,
   isBusy,
+  gameLaunchDiagnostic,
   onCreateProfile,
   onDeleteProfile,
   onDuplicateProfile,
@@ -2342,6 +2459,8 @@ function Dashboard({
   onRestartApplication,
   onForceStopApplication,
   onViewOutput,
+  onTestGameLaunch,
+  onVrEnabledChange,
   onStartSession,
   onCancelStartup,
   onCloseSession,
@@ -2521,15 +2640,65 @@ function Dashboard({
               <p className="eyebrow">Startup sequence</p>
               <h2 id="sequence-title">Local application control</h2>
             </div>
-            <label className="vr-toggle">
-              <input
-                type="checkbox"
-                checked={selectedProfile.vrEnabled}
-                readOnly
-              />
-              <span>VR</span>
-            </label>
+            <div className="profile-dashboard-controls">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isBusy || sessionState !== "idle"}
+                onClick={onTestGameLaunch}
+              >
+                Test game launch
+              </button>
+              <label className="vr-toggle">
+                <input
+                  type="checkbox"
+                  aria-label="VR"
+                  checked={selectedProfile.vrEnabled}
+                  disabled={isBusy || sessionState !== "idle"}
+                  onChange={(event) =>
+                    onVrEnabledChange(event.currentTarget.checked)
+                  }
+                />
+                <span>VR</span>
+              </label>
+            </div>
           </div>
+
+          {gameLaunchDiagnostic && (
+            <section
+              className="game-launch-result"
+              role="status"
+              aria-label="Test Game Launch result"
+            >
+              <div>
+                <p className="eyebrow">Test Game Launch complete</p>
+                <strong>{gameLaunchDiagnostic.profileName}</strong>
+              </div>
+              <dl>
+                <div>
+                  <dt>Target</dt>
+                  <dd>
+                    {gameLaunchDiagnostic.target.kind === "steam"
+                      ? gameLaunchDiagnostic.target.uri
+                      : gameLaunchDiagnostic.target.executableName}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Observed Process</dt>
+                  <dd>{gameLaunchDiagnostic.observedProcess}</dd>
+                </div>
+              </dl>
+              <details className="game-launch-diagnostic">
+                <summary>Copy diagnostic</summary>
+                <textarea
+                  aria-label="Test Game Launch diagnostic"
+                  readOnly
+                  rows={6}
+                  value={JSON.stringify(gameLaunchDiagnostic, null, 2)}
+                />
+              </details>
+            </section>
+          )}
 
           <FormationRail
             applications={[

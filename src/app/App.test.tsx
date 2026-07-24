@@ -73,6 +73,43 @@ function processSnapshot(
 }
 
 describe("Formation Lap shell", () => {
+  it("runs only the Primary Sim for Test Game Launch and shows a sanitized result", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Test game launch" }),
+    );
+
+    const result = await screen.findByRole("status", {
+      name: "Test Game Launch result",
+    });
+    expect(within(result).getAllByText("healthy.exe")).toHaveLength(2);
+    expect(result).not.toHaveTextContent(String.raw`C:\Fixtures`);
+    expect(screen.getByRole("button", { name: "Start session" })).toBeEnabled();
+  });
+
+  it("remembers the Dashboard VR choice and locks it while a Session is active", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    const { unmount } = render(<App bridge={bridge} />);
+
+    const vr = await screen.findByLabelText("VR");
+    await user.click(vr);
+    expect(vr).toBeChecked();
+    expect((await bridge.getAppSnapshot()).selectedProfile?.vrEnabled).toBe(
+      true,
+    );
+
+    unmount();
+    const active = lifecycleSnapshot();
+    active.session.state = "active";
+    active.session.activeProfileId = "profile-lifecycle";
+    render(<App bridge={new InMemoryNativeBridge(active)} />);
+    expect(await screen.findByLabelText("VR")).toBeDisabled();
+  });
+
   it("starts a Session through NativeBridge and renders its authoritative Formation Rail", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
@@ -562,6 +599,7 @@ describe("Formation Lap shell", () => {
     expect(savedProfile?.primarySim.launchRecipe.source).toEqual({
       kind: "steam",
       appId: 2399420,
+      selector: null,
     });
     expect(savedProfile?.supportingApplications).toMatchObject([
       {
@@ -674,7 +712,7 @@ describe("Formation Lap shell", () => {
           id: "sim-1",
           name: "Assetto Corsa",
           launchRecipe: {
-            source: { kind: "steam", appId: 244210 },
+            source: { kind: "steam", appId: 244210, selector: null },
             arguments: [],
             workingDirectory: null,
             monitoredProcess: null,
@@ -730,7 +768,7 @@ describe("Formation Lap shell", () => {
           id: "sim-1",
           name: "Le Mans Ultimate",
           launchRecipe: {
-            source: { kind: "steam", appId: 2399420 },
+            source: { kind: "steam", appId: 2399420, selector: null },
             arguments: [],
             workingDirectory: null,
             monitoredProcess: null,
@@ -796,7 +834,7 @@ describe("Formation Lap shell", () => {
           id: "sim-1",
           name: "Le Mans Ultimate",
           launchRecipe: {
-            source: { kind: "steam", appId: 2399420 },
+            source: { kind: "steam", appId: 2399420, selector: null },
             arguments: [],
             workingDirectory: null,
             monitoredProcess: null,
@@ -861,7 +899,7 @@ describe("Formation Lap shell", () => {
           id: "sim-1",
           name: "Le Mans Ultimate",
           launchRecipe: {
-            source: { kind: "steam", appId: 2399420 },
+            source: { kind: "steam", appId: 2399420, selector: null },
             arguments: [],
             workingDirectory: null,
             monitoredProcess: null,
@@ -902,7 +940,7 @@ describe("Formation Lap shell", () => {
           primarySim: {
             name: "Automobilista 2",
             launchRecipe: {
-              source: { kind: "steam", appId: 1066890 },
+              source: { kind: "steam", appId: 1066890, selector: null },
               arguments: [],
               workingDirectory: null,
               monitoredProcess: null,

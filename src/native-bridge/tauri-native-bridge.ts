@@ -19,6 +19,7 @@ import {
   selectProfile,
   startApplication,
   startSession,
+  testGameLaunch,
 } from "../generated/bindings";
 import type { NativeBridge } from "./native-bridge";
 
@@ -37,6 +38,7 @@ export class TauriNativeBridge implements NativeBridge {
   forceStopApplication = forceStopApplication;
   restartApplication = restartApplication;
   startSession = startSession;
+  testGameLaunch = testGameLaunch;
   cancelStartup = cancelStartup;
   closeSession = closeSession;
   acceptRecovery = acceptRecovery;

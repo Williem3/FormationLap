@@ -158,6 +158,15 @@ Before ending a workspace-changing turn:
    - exact blocker or next smallest action.
 4. Leave a milestone `in_progress` if required work remains.
 5. Mark `complete` only after every exit criterion has evidence.
+6. Review the final diff and create focused local commits that group only
+   related changes.
+7. Confirm the worktree is clean, or document any intentionally uncommitted
+   work in the handoff.
+
+After a workspace-changing task is complete and verified, create its logical
+local commits without waiting for a separate request. Never include unrelated
+user changes in those commits, and never push unless the user explicitly
+authorizes it.
 
 The next agent should be able to continue from `PROGRESS.md` without reconstructing
 intent from chat history.

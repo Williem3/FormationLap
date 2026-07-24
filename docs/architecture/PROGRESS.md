@@ -25,7 +25,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
-| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add local icon resolution, generic fallback, and missing-path repair |
+| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Expose discovery through NativeBridge and build recommended/Manual Entry wizard paths |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
@@ -87,7 +87,14 @@ M5 targeted Steam discovery slice:
   Ultimate and references `coasting-nc/LMUFFB` GitHub Releases.
 - Validation: compatibility rules must reference a bundled Primary Sim and
   invalid references report their exact JSON location.
-- Next action: write the red local-icon resolution and generic-fallback test.
+- Delivered: local Steam `.ico` loading, real Windows Shell executable-icon
+  extraction, in-memory typed icon data, and generic fallback without remote
+  art.
+- Repair: M2's durable `path_needs_repair` diagnostic plus editable executable
+  field remains the missing-path repair workflow and is covered by the full
+  suite.
+- Next action: write the red Tauri discovery command test, generate its
+  contracts, then build the recommended and Manual Entry wizard paths.
 
 Known environment facts:
 
@@ -156,6 +163,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M5 | Added limited Steam discovery through FormationLapCore, following declared libraries and curated App IDs while omitting stale installations | [`M5 evidence`](evidence/M5.md): 50 Rust tests and all-target/all-feature Clippy passed; the real temporary fixture covers two libraries and a missing installation | No blocker; add targeted Windows installed-app, running-process, and known-location discovery |
 | 2026-07-23 | Codex `/root` | M5 | Added bounded installed-app, running-Process, and known-location discovery with separate Steam and standalone iRacing results | [`M5 evidence`](evidence/M5.md) and the [discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md): 53 Rust tests and all-target/all-feature Clippy passed | No blocker; rank compatibility recommendations and add LMUFFB's GitHub Update Provider |
 | 2026-07-23 | Codex `/root` | M5 | Added compatibility-ranked recommendations, LMUFFB's typed GitHub Releases provider, and referential catalog validation | [`M5 evidence`](evidence/M5.md): 55 Rust tests and all-target/all-feature Clippy passed; official LMUFFB and SimHub metadata links recorded | No blocker; resolve local icons, generic fallback, and missing paths |
+| 2026-07-23 | Codex `/root` | M5 | Added local Steam and executable icon extraction, generic fallback, and documented the existing missing-path repair workflow | [`M5 evidence`](evidence/M5.md) and [discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md): 56 Rust tests and all-target/all-feature Clippy passed | No blocker; expose discovery and recommendations through NativeBridge, then build Manual Entry |
 
 ## Handoff entry template
 

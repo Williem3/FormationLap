@@ -14,6 +14,7 @@ drive.
 | Windows installed apps | `DisplayName` and `InstallLocation` under the current-user and local-machine 32-bit and 64-bit uninstall keys                                           | An exact catalog display name plus a safe catalog-relative executable path |
 | Running Processes      | The Tool Help process inventory and each accessible process image path                                                                                  | An exact catalog executable filename                                       |
 | Known locations        | `ProgramFiles`, `ProgramFiles(x86)`, `LOCALAPPDATA`, `ProgramData`, and `USERPROFILE`                                                                   | A catalog-selected root plus a safe catalog-relative executable path       |
+| Local icons            | A manifest-declared `.ico` beneath a configured Steam root, or the Windows Shell icon for an already-matched executable                                 | In-memory icon bytes; generic fallback on an unavailable or invalid source |
 
 All candidates must resolve to an existing local directory or file before
 discovery returns them. Catalog-relative paths containing absolute roots,
@@ -23,9 +24,10 @@ local and are not transmitted.
 ## Dependency capability
 
 M5 enables the `Win32_System_Registry` feature on the already-pinned
-`windows-sys` dependency. This permits read-only registry inspection through
-the APIs above. It adds no Tauri permission, generic WebView process or
-filesystem API, remote source, shell command, service, or new dependency.
+`windows-sys` dependency and its `Win32_UI_Shell` feature for local executable
+icons. These permit read-only registry inspection and Shell icon extraction
+through the APIs above. They add no Tauri permission, generic WebView process
+or filesystem API, remote source, shell command, service, or new dependency.
 
 ## Verification
 

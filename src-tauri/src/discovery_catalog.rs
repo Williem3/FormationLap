@@ -1,7 +1,7 @@
 use crate::{
-    CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CompatibilityRank,
-    DiscoveredInstallation, DiscoveredPrimarySim, DiscoveredSupportingApplication,
-    DiscoverySnapshot, SupportingApplicationRecommendation,
+    ApplicationIcon, CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider,
+    CompatibilityRank, DiscoveredInstallation, DiscoveredPrimarySim,
+    DiscoveredSupportingApplication, DiscoverySnapshot, SupportingApplicationRecommendation,
 };
 use serde::Deserialize;
 use std::{
@@ -564,15 +564,14 @@ fn discover_known_location_supporting_applications(
                 if !executable_path.is_file() {
                     continue;
                 }
-                let executable_path = executable_path
-                    .canonicalize()
-                    .unwrap_or(executable_path)
-                    .to_string_lossy()
-                    .into_owned();
+                let icon = executable_icon(&executable_path);
+                let executable_path = executable_path.canonicalize().unwrap_or(executable_path);
+                let executable_path = executable_path.to_string_lossy().into_owned();
                 discovered.push(DiscoveredSupportingApplication {
                     id: application.id.clone(),
                     name: application.name.clone(),
                     installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                    icon,
                 });
             }
         }
@@ -624,12 +623,12 @@ fn discover_running_supporting_applications(
             {
                 continue;
             }
+            let icon = executable_icon(&process.executable_path);
             let executable_path = process
                 .executable_path
                 .canonicalize()
-                .unwrap_or_else(|_| process.executable_path.clone())
-                .to_string_lossy()
-                .into_owned();
+                .unwrap_or_else(|_| process.executable_path.clone());
+            let executable_path = executable_path.to_string_lossy().into_owned();
             if !executable_paths.insert(executable_path.clone()) {
                 continue;
             }
@@ -637,6 +636,7 @@ fn discover_running_supporting_applications(
                 id: application.id.clone(),
                 name: application.name.clone(),
                 installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                icon,
             });
         }
     }
@@ -671,11 +671,9 @@ fn discover_installed_applications(
                 if !executable_path.is_file() {
                     continue;
                 }
-                let executable_path = executable_path
-                    .canonicalize()
-                    .unwrap_or(executable_path)
-                    .to_string_lossy()
-                    .into_owned();
+                let icon = executable_icon(&executable_path);
+                let executable_path = executable_path.canonicalize().unwrap_or(executable_path);
+                let executable_path = executable_path.to_string_lossy().into_owned();
                 if !executable_paths.insert(executable_path.clone()) {
                     continue;
                 }
@@ -683,6 +681,7 @@ fn discover_installed_applications(
                     id: sim.id.clone(),
                     name: sim.name.clone(),
                     installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                    icon,
                 });
             }
         }
@@ -738,10 +737,327 @@ fn discover_steam_installations(
                         app_id,
                         install_directory: installation_path,
                     },
+                    icon: steam_icon(&manifest, steam_roots),
                 })
             })
         })
         .collect()
+}
+
+fn steam_icon(manifest: &str, steam_roots: &[PathBuf]) -> ApplicationIcon {
+    let Some(icon_hash) = quoted_values_for_key(manifest, "icon").into_iter().next() else {
+        return ApplicationIcon::Generic;
+    };
+    steam_roots
+        .iter()
+        .find_map(|steam_root| {
+            fs::read(
+                steam_root
+                    .join("steam")
+                    .join("games")
+                    .join(format!("{icon_hash}.ico")),
+            )
+            .ok()
+        })
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| ApplicationIcon::LocalData {
+            media_type: "image/x-icon".to_owned(),
+            data_base64: encode_base64(&bytes),
+        })
+        .unwrap_or(ApplicationIcon::Generic)
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        encoded.push(ALPHABET[(first >> 2) as usize] as char);
+        encoded.push(ALPHABET[(((first & 0b11) << 4) | (second >> 4)) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            ALPHABET[(((second & 0b1111) << 2) | (third >> 6)) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            ALPHABET[(third & 0b11_1111) as usize] as char
+        } else {
+            '='
+        });
+    }
+    encoded
+}
+
+fn executable_icon(executable_path: &Path) -> ApplicationIcon {
+    windows_icon::extract(executable_path)
+        .filter(|bytes| !bytes.is_empty())
+        .map(|bytes| ApplicationIcon::LocalData {
+            media_type: "image/x-icon".to_owned(),
+            data_base64: encode_base64(&bytes),
+        })
+        .unwrap_or(ApplicationIcon::Generic)
+}
+
+#[cfg(not(windows))]
+mod windows_icon {
+    use std::path::Path;
+
+    pub(super) fn extract(_executable_path: &Path) -> Option<Vec<u8>> {
+        None
+    }
+}
+
+#[cfg(windows)]
+mod windows_icon {
+    use std::{ffi::OsStr, mem::size_of, os::windows::ffi::OsStrExt, path::Path, ptr::null_mut};
+    use windows_sys::Win32::{
+        Graphics::Gdi::{
+            BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS,
+            DeleteDC, DeleteObject, GetDIBits, GetObjectW, HBITMAP, HDC, RGBQUAD,
+        },
+        UI::{
+            Shell::{SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW},
+            WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO},
+        },
+    };
+
+    struct OwnedIcon(HICON);
+    struct OwnedBitmap(HBITMAP);
+    struct OwnedDeviceContext(HDC);
+
+    impl Drop for OwnedIcon {
+        fn drop(&mut self) {
+            unsafe {
+                DestroyIcon(self.0);
+            }
+        }
+    }
+
+    impl Drop for OwnedBitmap {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe {
+                    DeleteObject(self.0);
+                }
+            }
+        }
+    }
+
+    impl Drop for OwnedDeviceContext {
+        fn drop(&mut self) {
+            unsafe {
+                DeleteDC(self.0);
+            }
+        }
+    }
+
+    #[repr(C)]
+    struct MonochromeBitmapInfo {
+        header: BITMAPINFOHEADER,
+        colors: [RGBQUAD; 2],
+    }
+
+    pub(super) fn extract(executable_path: &Path) -> Option<Vec<u8>> {
+        let path = wide_null(executable_path.as_os_str());
+        let mut shell_info = SHFILEINFOW::default();
+        let shell_info_size = u32::try_from(size_of::<SHFILEINFOW>()).ok()?;
+        if unsafe {
+            SHGetFileInfoW(
+                path.as_ptr(),
+                0,
+                &mut shell_info,
+                shell_info_size,
+                SHGFI_ICON | SHGFI_LARGEICON,
+            )
+        } == 0
+            || shell_info.hIcon.is_null()
+        {
+            return None;
+        }
+        let icon = OwnedIcon(shell_info.hIcon);
+        encode_icon(icon.0)
+    }
+
+    fn wide_null(value: &OsStr) -> Vec<u16> {
+        value.encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    fn encode_icon(icon: HICON) -> Option<Vec<u8>> {
+        let mut icon_info = ICONINFO::default();
+        if unsafe { GetIconInfo(icon, &mut icon_info) } == 0 {
+            return None;
+        }
+        let color = OwnedBitmap(icon_info.hbmColor);
+        let mask = OwnedBitmap(icon_info.hbmMask);
+        if color.0.is_null() {
+            return None;
+        }
+
+        let mut bitmap = BITMAP::default();
+        let bitmap_size = i32::try_from(size_of::<BITMAP>()).ok()?;
+        if unsafe { GetObjectW(color.0, bitmap_size, (&mut bitmap as *mut BITMAP).cast()) } == 0 {
+            return None;
+        }
+        let width = u32::try_from(bitmap.bmWidth).ok()?;
+        let height = u32::try_from(bitmap.bmHeight).ok()?;
+        if width == 0 || height == 0 {
+            return None;
+        }
+
+        let device_context = OwnedDeviceContext(unsafe { CreateCompatibleDC(null_mut()) });
+        if device_context.0.is_null() {
+            return None;
+        }
+        let pixel_count = usize::try_from(width.checked_mul(height)?).ok()?;
+        let mut color_pixels = vec![0_u8; pixel_count.checked_mul(4)?];
+        let mut color_info = BITMAPINFO {
+            bmiHeader: bitmap_header(width, height, 32, color_pixels.len())?,
+            ..BITMAPINFO::default()
+        };
+        if unsafe {
+            GetDIBits(
+                device_context.0,
+                color.0,
+                0,
+                height,
+                color_pixels.as_mut_ptr().cast(),
+                &mut color_info,
+                DIB_RGB_COLORS,
+            )
+        } != i32::try_from(height).ok()?
+        {
+            return None;
+        }
+
+        let mask_row_bytes = usize::try_from(width.div_ceil(32).checked_mul(4)?).ok()?;
+        let mut mask_pixels = vec![0_u8; mask_row_bytes.checked_mul(height as usize)?];
+        if !mask.0.is_null() {
+            let mut mask_info = MonochromeBitmapInfo {
+                header: bitmap_header(width, height, 1, mask_pixels.len())?,
+                colors: [RGBQUAD::default(), RGBQUAD::default()],
+            };
+            let mask_result = unsafe {
+                GetDIBits(
+                    device_context.0,
+                    mask.0,
+                    0,
+                    height,
+                    mask_pixels.as_mut_ptr().cast(),
+                    (&mut mask_info as *mut MonochromeBitmapInfo).cast(),
+                    DIB_RGB_COLORS,
+                )
+            };
+            if mask_result != i32::try_from(height).ok()? {
+                mask_pixels.fill(0);
+            }
+        }
+        apply_mask_alpha(
+            &mut color_pixels,
+            &mask_pixels,
+            width as usize,
+            height as usize,
+            mask_row_bytes,
+        );
+        build_ico(width, height, color_pixels, mask_pixels)
+    }
+
+    fn bitmap_header(
+        width: u32,
+        height: u32,
+        bit_count: u16,
+        image_size: usize,
+    ) -> Option<BITMAPINFOHEADER> {
+        Some(BITMAPINFOHEADER {
+            biSize: u32::try_from(size_of::<BITMAPINFOHEADER>()).ok()?,
+            biWidth: i32::try_from(width).ok()?,
+            biHeight: i32::try_from(height).ok()?,
+            biPlanes: 1,
+            biBitCount: bit_count,
+            biCompression: BI_RGB,
+            biSizeImage: u32::try_from(image_size).ok()?,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
+        })
+    }
+
+    fn apply_mask_alpha(
+        color_pixels: &mut [u8],
+        mask_pixels: &[u8],
+        width: usize,
+        height: usize,
+        mask_row_bytes: usize,
+    ) {
+        let has_alpha = color_pixels.chunks_exact(4).any(|pixel| pixel[3] != 0);
+        for y in 0..height {
+            for x in 0..width {
+                let masked = mask_pixels[y * mask_row_bytes + x / 8] & (0x80_u8 >> (x % 8)) != 0;
+                let alpha = &mut color_pixels[(y * width + x) * 4 + 3];
+                if masked {
+                    *alpha = 0;
+                } else if !has_alpha {
+                    *alpha = u8::MAX;
+                }
+            }
+        }
+    }
+
+    fn build_ico(
+        width: u32,
+        height: u32,
+        color_pixels: Vec<u8>,
+        mask_pixels: Vec<u8>,
+    ) -> Option<Vec<u8>> {
+        let doubled_height = height.checked_mul(2)?;
+        let image_size = color_pixels.len().checked_add(mask_pixels.len())?;
+        let mut image = Vec::with_capacity(size_of::<BITMAPINFOHEADER>().checked_add(image_size)?);
+        push_u32(
+            &mut image,
+            u32::try_from(size_of::<BITMAPINFOHEADER>()).ok()?,
+        );
+        push_i32(&mut image, i32::try_from(width).ok()?);
+        push_i32(&mut image, i32::try_from(doubled_height).ok()?);
+        push_u16(&mut image, 1);
+        push_u16(&mut image, 32);
+        push_u32(&mut image, BI_RGB);
+        push_u32(&mut image, u32::try_from(image_size).ok()?);
+        push_i32(&mut image, 0);
+        push_i32(&mut image, 0);
+        push_u32(&mut image, 0);
+        push_u32(&mut image, 0);
+        image.extend_from_slice(&color_pixels);
+        image.extend_from_slice(&mask_pixels);
+
+        let mut ico = Vec::with_capacity(22_usize.checked_add(image.len())?);
+        push_u16(&mut ico, 0);
+        push_u16(&mut ico, 1);
+        push_u16(&mut ico, 1);
+        ico.push(if width >= 256 { 0 } else { width as u8 });
+        ico.push(if height >= 256 { 0 } else { height as u8 });
+        ico.push(0);
+        ico.push(0);
+        push_u16(&mut ico, 1);
+        push_u16(&mut ico, 32);
+        push_u32(&mut ico, u32::try_from(image.len()).ok()?);
+        push_u32(&mut ico, 22);
+        ico.extend_from_slice(&image);
+        Some(ico)
+    }
+
+    fn push_u16(output: &mut Vec<u8>, value: u16) {
+        output.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_u32(output: &mut Vec<u8>, value: u32) {
+        output.extend_from_slice(&value.to_le_bytes());
+    }
+
+    fn push_i32(output: &mut Vec<u8>, value: i32) {
+        output.extend_from_slice(&value.to_le_bytes());
+    }
 }
 
 fn steam_library_roots(steam_roots: &[PathBuf]) -> Vec<PathBuf> {

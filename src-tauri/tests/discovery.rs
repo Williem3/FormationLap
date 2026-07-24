@@ -1,7 +1,8 @@
 use formation_lap_lib::{
-    AppCommand, CatalogUpdateProvider, CommandOutcome, CompatibilityRank, DiscoveredInstallation,
-    FormationLapCore, TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
-    WindowsKnownLocationRoot, WindowsRunningProcess,
+    AppCommand, ApplicationIcon, CatalogUpdateProvider, CommandOutcome, CompatibilityRank,
+    DiscoveredInstallation, FormationLapCore, TargetedDiscoverySources,
+    WindowsInstalledApplication, WindowsKnownLocation, WindowsKnownLocationRoot,
+    WindowsRunningProcess,
 };
 use std::{
     fs,
@@ -383,8 +384,11 @@ fn installed_app_discovery_distinguishes_standalone_iracing_from_steam() {
     let standalone_root = storage.path().join("iRacing standalone");
     fs::create_dir_all(&standalone_root).expect("standalone iRacing root should be created");
     let standalone_executable = standalone_root.join("iRacingSim64DX11.exe");
-    fs::write(&standalone_executable, b"fixture")
-        .expect("standalone iRacing executable should be written");
+    fs::copy(
+        std::env::current_exe().expect("test executable path should be available"),
+        &standalone_executable,
+    )
+    .expect("standalone iRacing executable fixture should be copied");
 
     let mut core = FormationLapCore::open_with_discovery_sources(
         storage.path(),
@@ -437,6 +441,29 @@ fn installed_app_discovery_distinguishes_standalone_iracing_from_steam() {
             ),
         ]
     );
+    let standalone_iracing = discovery
+        .installed_primary_sims
+        .iter()
+        .find(|sim| {
+            sim.id == "iracing"
+                && matches!(
+                    sim.installation,
+                    DiscoveredInstallation::DirectExecutable { .. }
+                )
+        })
+        .expect("standalone iRacing should remain discoverable");
+    match &standalone_iracing.icon {
+        ApplicationIcon::LocalData {
+            media_type,
+            data_base64,
+        } => {
+            assert_eq!(media_type, "image/x-icon");
+            assert!(!data_base64.is_empty());
+        }
+        ApplicationIcon::Generic => {
+            panic!("an existing standalone executable should expose its local Shell icon")
+        }
+    }
 }
 
 #[test]
@@ -571,4 +598,79 @@ fn le_mans_ultimate_recommends_lmuffb_with_its_github_update_provider() {
             repository: "coasting-nc/LMUFFB".to_owned(),
         })
     );
+}
+
+#[test]
+fn steam_icon_resolution_uses_local_metadata_then_generic_fallback() {
+    let storage = TempStorage::new();
+    let steam_root = storage.path().join("Steam");
+    let steamapps = steam_root.join("steamapps");
+    fs::create_dir_all(steamapps.join("common").join("assettocorsa"))
+        .expect("Assetto Corsa installation should be created");
+    fs::create_dir_all(steamapps.join("common").join("Le Mans Ultimate"))
+        .expect("Le Mans Ultimate installation should be created");
+    fs::create_dir_all(steam_root.join("steam").join("games"))
+        .expect("Steam icon cache should be created");
+    fs::write(
+        steamapps.join("appmanifest_244210.acf"),
+        r#""AppState"
+{
+  "appid" "244210"
+  "installdir" "assettocorsa"
+  "icon" "assetto-corsa-fixture"
+}"#,
+    )
+    .expect("Assetto Corsa manifest should be written");
+    fs::write(
+        steamapps.join("appmanifest_2399420.acf"),
+        r#""AppState"
+{
+  "appid" "2399420"
+  "installdir" "Le Mans Ultimate"
+}"#,
+    )
+    .expect("Le Mans Ultimate manifest should be written");
+    fs::write(
+        steam_root
+            .join("steam")
+            .join("games")
+            .join("assetto-corsa-fixture.ico"),
+        [0_u8, 0, 1, 0],
+    )
+    .expect("local Steam icon should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            steam_roots: vec![steam_root],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with local Steam metadata");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("Steam icon discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    let assetto_corsa = discovery
+        .installed_primary_sims
+        .iter()
+        .find(|sim| sim.id == "assetto-corsa")
+        .expect("Assetto Corsa should be discovered");
+    assert_eq!(
+        assetto_corsa.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/x-icon".to_owned(),
+            data_base64: "AAABAA==".to_owned(),
+        }
+    );
+    let le_mans_ultimate = discovery
+        .installed_primary_sims
+        .iter()
+        .find(|sim| sim.id == "le-mans-ultimate")
+        .expect("Le Mans Ultimate should be discovered");
+    assert_eq!(le_mans_ultimate.icon, ApplicationIcon::Generic);
 }

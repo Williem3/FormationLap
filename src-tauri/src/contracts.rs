@@ -256,6 +256,19 @@ pub enum DiscoveredInstallation {
     },
 }
 
+/// Local-only icon data or Formation Lap's generic visual fallback.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ApplicationIcon {
+    LocalData {
+        media_type: String,
+        data_base64: String,
+    },
+    #[default]
+    Generic,
+}
+
 /// One curated Primary Sim found at a targeted local source.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -264,6 +277,8 @@ pub struct DiscoveredPrimarySim {
     pub id: String,
     pub name: String,
     pub installation: DiscoveredInstallation,
+    #[serde(default)]
+    pub icon: ApplicationIcon,
 }
 
 /// One curated Supporting Application found at a targeted local source.
@@ -274,6 +289,8 @@ pub struct DiscoveredSupportingApplication {
     pub id: String,
     pub name: String,
     pub installation: DiscoveredInstallation,
+    #[serde(default)]
+    pub icon: ApplicationIcon,
 }
 
 /// Curated compatibility strength between a sim and Supporting Application.

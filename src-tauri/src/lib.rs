@@ -18,9 +18,9 @@ pub use commands::{
     select_profile, start_application,
 };
 pub use contracts::{
-    AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CatalogPrimarySim,
-    CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CompatibilityRank,
-    ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
+    AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
+    CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings,
+    CompatibilityRank, ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
     DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
     ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
     ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,

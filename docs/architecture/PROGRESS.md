@@ -24,9 +24,9 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M3 evidence](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg) | Begin M4 |
-| M4 | `not_started` | — | — | — | — | Ready after M3 |
+| M4 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M4 evidence](evidence/M4.md), [pre-start](evidence/m4-pre-start.jpg), [starting](evidence/m4-starting.jpg), [active](evidence/m4-active.jpg), [failed](evidence/m4-failed.jpg), [closing](evidence/m4-closing.jpg) | Begin M6 |
 | M5 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M5 evidence](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg) | Continue M4 |
-| M6 | `not_started` | — | — | — | — | Wait for M4 |
+| M6 | `not_started` | — | — | — | — | Ready after M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Ready after M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
 | M9 | `not_started` | — | — | — | — | Wait for M5 and M8 |
@@ -34,9 +34,13 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-No milestone implementation is active. M3 and M5 are complete; M4 is the next
-dependency-ready milestone and should begin with the FormationLapCore Session
-state red test.
+No milestone implementation is active.
+
+- M6 is ready because M4 Session orchestration and M5 discovery/catalog are
+  complete.
+- M7 is independently ready after M3.
+- Next action: begin M6 with a failing FormationLapCore test for an explicit
+  Steam Primary Sim recipe that never opens a mode-choice dialog.
 
 Known environment facts:
 
@@ -110,6 +114,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M5 | Added the installed-sim picker, ranked installed recommendations, saved discovered launch sources, Manual Entry, and a deterministic M5 preview | [`M5 evidence`](evidence/M5.md): 17 React tests, lint, typecheck, and production build passed | Reload `?preview=m5-wizard`; capture and review the required recommended and Manual Entry screenshots |
 | 2026-07-24 | Codex `/root` | M3 | Captured all Dashboard status families and fixed lifecycle-row overflow at a 200% effective viewport | [`M3 evidence`](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg), `pnpm.cmd verify`, and browser measurements at 125%/200% | M3 complete; M4 and M7 are ready |
 | 2026-07-24 | Codex `/root` | M5 | Captured and reviewed the recommended and Manual Entry wizard paths, including selected Supporting Application persistence and scaling | [`M5 evidence`](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg), and `pnpm.cmd verify` | M5 complete; begin M4 with a Session-state red test |
+| 2026-07-24 | Codex `/root` | M4 | Delivered serialized Session orchestration, ordered startup/cleanup, ownership-aware recovery, quiet summaries, profile locking, and an authoritative dynamic Formation Rail; serialized Windows shell icon extraction after full-suite verification exposed an API race | [`M4 evidence`](evidence/M4.md): 15 orchestration tests, all-target Rust tests/Clippy, 20 React tests, production build, capability audit, five captures, and 125%/200% measurements passed | No blocker; begin M6 with a red explicit Steam-recipe test |
 
 ## Handoff entry template
 

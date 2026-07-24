@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Create the first Racing Profile through the React wizard |
+| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Edit the selected Racing Profile through NativeBridge |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,7 +34,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 remains in progress after the typed native-command slice:
+M2 remains in progress after the first-profile wizard slice:
 
 - Delivered: `CreateProfile` assigns a stable identifier, atomically persists
   one versioned Racing Profile with exactly one Primary Sim; blank or
@@ -49,12 +49,15 @@ M2 remains in progress after the typed native-command slice:
   profiles migrate to the complete schema-two contract with backups. Portable
   export omits local identity and diagnostics; import assigns fresh stable IDs,
   preserves missing paths, and flags them for repair. Eight narrow typed Tauri
-  commands and both NativeBridge adapters expose profile behavior.
-- Next behavior: guide an empty-library user through creating the first Racing
-  Profile in React and render the returned authoritative snapshot.
+  commands and both NativeBridge adapters expose profile behavior. An
+  empty-library user can create the first Racing Profile through the React
+  wizard and see the authoritative result in the sidebar and dashboard.
+- Next behavior: open the selected Racing Profile editor, change profile and
+  Primary Sim settings, save through NativeBridge, and render the returned
+  snapshot.
 - Test seam: React behavior through the in-memory NativeBridge adapter.
 - Next file scope: `src/app/App.tsx`, `src/app/App.test.tsx`,
-  `src/app/app.css`, `src/native-bridge/in-memory-native-bridge.ts`,
+  `src/app/app.css`,
   `docs/architecture/evidence/M2.md`, and this ledger.
 
 Known environment facts:

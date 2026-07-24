@@ -140,4 +140,63 @@ describe("Formation Lap shell", () => {
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByLabelText("VR")).toBeChecked();
   });
+
+  it("selects another Racing Profile from the sidebar", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [
+        {
+          id: "profile-1",
+          name: "Assetto Corsa",
+          primarySimName: "Assetto Corsa",
+        },
+        {
+          id: "profile-2",
+          name: "Le Mans evening",
+          primarySimName: "Le Mans Ultimate",
+        },
+      ],
+      selectedProfile: {
+        id: "profile-1",
+        name: "Assetto Corsa",
+        primarySim: {
+          id: "sim-1",
+          name: "Assetto Corsa",
+          launchRecipe: {
+            source: { kind: "steam", appId: 244210 },
+            arguments: [],
+            workingDirectory: null,
+            monitoredProcess: null,
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        supportingApplications: [],
+        vrEnabled: false,
+        preferredVrLaunchMode: null,
+        closeSession: { stopSteamVr: false },
+      },
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /Le Mans evening/ }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Le Mans evening",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Le Mans evening/ }),
+    ).toHaveAttribute("aria-current", "page");
+  });
 });

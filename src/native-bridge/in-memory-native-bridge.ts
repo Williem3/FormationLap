@@ -4,6 +4,7 @@ import type {
   DuplicateProfilePayload,
   ImportProfilePayload,
   ProfileIdPayload,
+  ProfileSummary,
   RacingProfile,
   SaveProfilePayload,
 } from "../generated/bindings";
@@ -11,10 +12,20 @@ import type { NativeBridge } from "./native-bridge";
 
 export class InMemoryNativeBridge implements NativeBridge {
   #nextId = 1;
+  #profilesById = new Map<string, RacingProfile>();
   #snapshot: AppSnapshot;
 
   constructor(snapshot: AppSnapshot) {
     this.#snapshot = structuredClone(snapshot);
+    for (const summary of this.#snapshot.profiles) {
+      this.#profilesById.set(summary.id, this.#profileFromSummary(summary));
+    }
+    if (this.#snapshot.selectedProfile) {
+      this.#profilesById.set(
+        this.#snapshot.selectedProfile.id,
+        structuredClone(this.#snapshot.selectedProfile),
+      );
+    }
   }
 
   getAppSnapshot(): Promise<AppSnapshot> {
@@ -54,6 +65,7 @@ export class InMemoryNativeBridge implements NativeBridge {
     this.#snapshot.profiles.sort((left, right) =>
       left.name.localeCompare(right.name),
     );
+    this.#profilesById.set(profile.id, structuredClone(profile));
     this.#snapshot.selectedProfile ??= profile;
     return this.getAppSnapshot();
   }
@@ -67,20 +79,26 @@ export class InMemoryNativeBridge implements NativeBridge {
     }
     summary.name = payload.profile.name;
     summary.primarySimName = payload.profile.primarySim.name;
+    this.#profilesById.set(
+      payload.profile.id,
+      structuredClone(payload.profile),
+    );
     this.#snapshot.selectedProfile = structuredClone(payload.profile);
     return this.getAppSnapshot();
   }
 
   selectProfile(payload: ProfileIdPayload): Promise<AppSnapshot> {
-    if (this.#snapshot.selectedProfile?.id !== payload.profileId) {
+    const profile = this.#profilesById.get(payload.profileId);
+    if (!profile) {
       return Promise.reject(new Error("Profile detail is unavailable"));
     }
+    this.#snapshot.selectedProfile = structuredClone(profile);
     return this.getAppSnapshot();
   }
 
   duplicateProfile(payload: DuplicateProfilePayload): Promise<AppSnapshot> {
-    const source = this.#snapshot.selectedProfile;
-    if (!source || source.id !== payload.sourceProfileId) {
+    const source = this.#profilesById.get(payload.sourceProfileId);
+    if (!source) {
       return Promise.reject(new Error("Racing Profile was not found"));
     }
     const duplicate = structuredClone(source);
@@ -95,6 +113,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       name: duplicate.name,
       primarySimName: duplicate.primarySim.name,
     });
+    this.#profilesById.set(duplicate.id, structuredClone(duplicate));
     return this.getAppSnapshot();
   }
 
@@ -102,15 +121,19 @@ export class InMemoryNativeBridge implements NativeBridge {
     this.#snapshot.profiles = this.#snapshot.profiles.filter(
       (profile) => profile.id !== payload.profileId,
     );
+    this.#profilesById.delete(payload.profileId);
     if (this.#snapshot.selectedProfile?.id === payload.profileId) {
-      this.#snapshot.selectedProfile = null;
+      const fallback = this.#snapshot.profiles[0];
+      this.#snapshot.selectedProfile = fallback
+        ? structuredClone(this.#profilesById.get(fallback.id) ?? null)
+        : null;
     }
     return this.getAppSnapshot();
   }
 
   exportProfile(payload: ProfileIdPayload): Promise<string> {
-    const profile = this.#snapshot.selectedProfile;
-    if (!profile || profile.id !== payload.profileId) {
+    const profile = this.#profilesById.get(payload.profileId);
+    if (!profile) {
       return Promise.reject(new Error("Racing Profile was not found"));
     }
     return Promise.resolve(JSON.stringify(profile));
@@ -131,5 +154,32 @@ export class InMemoryNativeBridge implements NativeBridge {
     const id = `${prefix}-${this.#nextId}`;
     this.#nextId += 1;
     return id;
+  }
+
+  #profileFromSummary(summary: ProfileSummary): RacingProfile {
+    return {
+      id: summary.id,
+      name: summary.name,
+      primarySim: {
+        id: `${summary.id}-primary`,
+        name: summary.primarySimName,
+        launchRecipe: {
+          source: { kind: "directExecutable", executablePath: "" },
+          arguments: [],
+          workingDirectory: null,
+          monitoredProcess: null,
+          consoleVisibility: "hidden",
+          elevated: false,
+          startupTimeoutSeconds: 30,
+          postStartDelayMilliseconds: 0,
+          shutdownStrategy: { kind: "closeWindows" },
+        },
+        pathNeedsRepair: true,
+      },
+      supportingApplications: [],
+      vrEnabled: false,
+      preferredVrLaunchMode: null,
+      closeSession: { stopSteamVr: false },
+    };
   }
 }

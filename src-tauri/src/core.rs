@@ -20,6 +20,7 @@ pub enum CommandOutcome {
 pub enum CoreError {
     Storage(io::Error),
     InvalidProfileDocument(serde_json::Error),
+    InvalidProfileName(&'static str),
     UnsupportedProfileSchema(u32),
 }
 
@@ -29,6 +30,9 @@ impl fmt::Display for CoreError {
             Self::Storage(error) => write!(formatter, "profile storage failed: {error}"),
             Self::InvalidProfileDocument(error) => {
                 write!(formatter, "profile document is invalid: {error}")
+            }
+            Self::InvalidProfileName(field) => {
+                write!(formatter, "{field} must not be blank")
             }
             Self::UnsupportedProfileSchema(version) => {
                 write!(
@@ -45,7 +49,7 @@ impl Error for CoreError {
         match self {
             Self::Storage(error) => Some(error),
             Self::InvalidProfileDocument(error) => Some(error),
-            Self::UnsupportedProfileSchema(_) => None,
+            Self::InvalidProfileName(_) | Self::UnsupportedProfileSchema(_) => None,
         }
     }
 }

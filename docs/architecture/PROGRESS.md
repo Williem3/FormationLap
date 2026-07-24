@@ -22,7 +22,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | --- | --- | --- | --- | --- | --- | --- |
 | M0 | `complete` | Codex | 2026-07-23 | 2026-07-23 | Product spec, architecture, ADRs, design system, concept images, test seams | Begin M1 |
 | M1 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M1 evidence](evidence/M1.md), [shell screenshot](evidence/m1-shell.png), [capability audit](../security/M1_CAPABILITY_AUDIT.md) | Begin M2 |
-| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Reject invalid Racing Profile names before storage |
+| M2 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M2 evidence](evidence/M2.md) | Edit one Racing Profile and persist the change |
 | M3 | `not_started` | — | — | — | — | Wait for M2 |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
 | M5 | `not_started` | — | — | — | — | Wait for M2 |
@@ -34,15 +34,18 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-M2 remains in progress after the first profile-persistence slice:
+M2 remains in progress after the stored-profile validation slice:
 
 - Delivered: `CreateProfile` assigns a stable identifier, atomically persists
-  one versioned Racing Profile with exactly one Primary Sim, and exposes it
-  after FormationLapCore is reopened.
-- Next behavior: reject blank or whitespace-only Racing Profile and Primary Sim
-  names without changing the snapshot or writing a profile document.
+  one versioned Racing Profile with exactly one Primary Sim; blank or
+  whitespace-only Racing Profile and Primary Sim names are rejected before
+  state or storage changes and when persisted documents are opened.
+- Next behavior: edit an existing Racing Profile name and Primary Sim name
+  through FormationLapCore while preserving its stable identifier across
+  restart.
 - Test seam: FormationLapCore with a real temporary storage directory.
 - Next file scope: `src-tauri/src/core.rs`,
+  `src-tauri/src/profile_library.rs`,
   `src-tauri/tests/racing_profiles.rs`,
   `docs/architecture/evidence/M2.md`, and this ledger.
 

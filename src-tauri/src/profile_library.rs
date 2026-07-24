@@ -9,6 +9,17 @@ use uuid::Uuid;
 
 const PROFILE_SCHEMA_VERSION: u32 = 1;
 
+fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
+    if name.trim().is_empty() {
+        return Err(CoreError::InvalidProfileName("Racing Profile name"));
+    }
+    if primary_sim_name.trim().is_empty() {
+        return Err(CoreError::InvalidProfileName("Primary Sim name"));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PrimarySimDocument {
@@ -45,6 +56,7 @@ impl ProfileLibrary {
             if document.schema_version != PROFILE_SCHEMA_VERSION {
                 return Err(CoreError::UnsupportedProfileSchema(document.schema_version));
             }
+            validate_profile_names(&document.name, &document.primary_sim.name)?;
             profiles.push(document);
         }
 
@@ -76,6 +88,8 @@ impl ProfileLibrary {
         name: String,
         primary_sim_name: String,
     ) -> Result<String, CoreError> {
+        validate_profile_names(&name, &primary_sim_name)?;
+
         let id = Uuid::new_v4().to_string();
         let profile = RacingProfileDocument {
             schema_version: PROFILE_SCHEMA_VERSION,

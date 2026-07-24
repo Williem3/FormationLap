@@ -68,3 +68,64 @@ fn created_racing_profile_survives_core_restart() {
         }]
     );
 }
+
+#[test]
+fn blank_racing_profile_names_are_rejected_without_changing_storage() {
+    for (name, primary_sim_name) in [("   ", "Le Mans Ultimate"), ("Le Mans Ultimate", "\t\r\n")] {
+        let storage = TempStorage::new();
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+
+        let result = core.execute(AppCommand::CreateProfile {
+            name: name.to_owned(),
+            primary_sim_name: primary_sim_name.to_owned(),
+        });
+
+        assert!(
+            result.is_err(),
+            "blank Racing Profile and Primary Sim names should be rejected"
+        );
+        assert!(
+            core.snapshot().profiles.is_empty(),
+            "rejected input should not change the authoritative snapshot"
+        );
+        assert_eq!(
+            fs::read_dir(storage.path().join("profiles"))
+                .expect("profile directory should remain readable")
+                .count(),
+            0,
+            "rejected input should not write a profile document"
+        );
+    }
+}
+
+#[test]
+fn persisted_blank_racing_profile_names_are_rejected_on_open() {
+    for document in [
+        r#"{
+  "schemaVersion": 1,
+  "id": "9c760ef8-79d8-446d-9d9d-21df5fc28b28",
+  "name": " ",
+  "primarySim": { "name": "Le Mans Ultimate" }
+}"#,
+        r#"{
+  "schemaVersion": 1,
+  "id": "9c760ef8-79d8-446d-9d9d-21df5fc28b28",
+  "name": "Le Mans Ultimate",
+  "primarySim": { "name": "\t" }
+}"#,
+    ] {
+        let storage = TempStorage::new();
+        let profiles = storage.path().join("profiles");
+        fs::create_dir_all(&profiles).expect("profile directory should be created");
+        fs::write(profiles.join("invalid.json"), document)
+            .expect("invalid persisted profile fixture should be written");
+
+        let result = FormationLapCore::open(storage.path());
+
+        assert!(
+            result.is_err(),
+            "persisted blank Racing Profile names should not enter core state"
+        );
+    }
+}

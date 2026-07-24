@@ -36,6 +36,7 @@ struct RacingProfileDocument {
 }
 
 pub(crate) struct ProfileLibrary {
+    backups_directory: PathBuf,
     profiles_directory: PathBuf,
     profiles: Vec<RacingProfileDocument>,
 }
@@ -43,7 +44,9 @@ pub(crate) struct ProfileLibrary {
 impl ProfileLibrary {
     pub(crate) fn open(storage_root: impl AsRef<Path>) -> Result<Self, CoreError> {
         let profiles_directory = storage_root.as_ref().join("profiles");
+        let backups_directory = storage_root.as_ref().join("backups");
         fs::create_dir_all(&profiles_directory)?;
+        fs::create_dir_all(&backups_directory)?;
 
         let mut profiles = Vec::new();
         for entry in fs::read_dir(&profiles_directory)? {
@@ -67,6 +70,7 @@ impl ProfileLibrary {
         });
 
         Ok(Self {
+            backups_directory,
             profiles_directory,
             profiles,
         })
@@ -121,5 +125,93 @@ impl ProfileLibrary {
         });
 
         Ok(id)
+    }
+
+    pub(crate) fn edit(
+        &mut self,
+        profile_id: &str,
+        name: String,
+        primary_sim_name: String,
+    ) -> Result<(), CoreError> {
+        validate_profile_names(&name, &primary_sim_name)?;
+        let profile_index = self
+            .profiles
+            .iter()
+            .position(|profile| profile.id == profile_id)
+            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
+        let profile = RacingProfileDocument {
+            schema_version: PROFILE_SCHEMA_VERSION,
+            id: profile_id.to_owned(),
+            name,
+            primary_sim: PrimarySimDocument {
+                name: primary_sim_name,
+            },
+        };
+        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
+        let temporary = self
+            .profiles_directory
+            .join(format!(".{profile_id}.json.tmp"));
+        let backup = self.backups_directory.join(format!("{profile_id}.json"));
+        let mut serialized = serde_json::to_vec_pretty(&profile)?;
+        serialized.push(b'\n');
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(&serialized)?;
+        file.sync_all()?;
+        drop(file);
+
+        if backup.exists() {
+            fs::remove_file(&backup)?;
+        }
+        fs::rename(&destination, &backup)?;
+        if let Err(error) = fs::rename(&temporary, &destination) {
+            let _ = fs::rename(&backup, &destination);
+            return Err(error.into());
+        }
+
+        self.profiles[profile_index] = profile;
+        self.profiles.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        Ok(())
+    }
+
+    pub(crate) fn delete(&mut self, profile_id: &str) -> Result<(), CoreError> {
+        let profile_index = self
+            .profiles
+            .iter()
+            .position(|profile| profile.id == profile_id)
+            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
+        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
+        let backup = self.backups_directory.join(format!("{profile_id}.json"));
+
+        if backup.exists() {
+            fs::remove_file(&backup)?;
+        }
+        fs::rename(destination, backup)?;
+        self.profiles.remove(profile_index);
+
+        Ok(())
+    }
+
+    pub(crate) fn duplicate(
+        &mut self,
+        source_profile_id: &str,
+        name: String,
+    ) -> Result<String, CoreError> {
+        let primary_sim_name = self
+            .profiles
+            .iter()
+            .find(|profile| profile.id == source_profile_id)
+            .map(|profile| profile.primary_sim.name.clone())
+            .ok_or_else(|| CoreError::ProfileNotFound(source_profile_id.to_owned()))?;
+
+        self.create(name, primary_sim_name)
     }
 }

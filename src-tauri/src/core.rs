@@ -8,12 +8,26 @@ pub enum AppCommand {
         name: String,
         primary_sim_name: String,
     },
+    EditProfile {
+        profile_id: String,
+        name: String,
+        primary_sim_name: String,
+    },
+    DeleteProfile {
+        profile_id: String,
+    },
+    DuplicateProfile {
+        source_profile_id: String,
+        name: String,
+    },
 }
 
 /// Observable result of a completed FormationLapCore command.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandOutcome {
     ProfileCreated { profile_id: String },
+    ProfileUpdated { profile_id: String },
+    ProfileDeleted { profile_id: String },
 }
 
 #[derive(Debug)]
@@ -21,6 +35,7 @@ pub enum CoreError {
     Storage(io::Error),
     InvalidProfileDocument(serde_json::Error),
     InvalidProfileName(&'static str),
+    ProfileNotFound(String),
     UnsupportedProfileSchema(u32),
 }
 
@@ -33,6 +48,9 @@ impl fmt::Display for CoreError {
             }
             Self::InvalidProfileName(field) => {
                 write!(formatter, "{field} must not be blank")
+            }
+            Self::ProfileNotFound(profile_id) => {
+                write!(formatter, "Racing Profile {profile_id} was not found")
             }
             Self::UnsupportedProfileSchema(version) => {
                 write!(
@@ -49,7 +67,9 @@ impl Error for CoreError {
         match self {
             Self::Storage(error) => Some(error),
             Self::InvalidProfileDocument(error) => Some(error),
-            Self::InvalidProfileName(_) | Self::UnsupportedProfileSchema(_) => None,
+            Self::InvalidProfileName(_)
+            | Self::ProfileNotFound(_)
+            | Self::UnsupportedProfileSchema(_) => None,
         }
     }
 }
@@ -91,6 +111,26 @@ impl FormationLapCore {
                 primary_sim_name,
             } => {
                 let profile_id = self.profile_library.create(name, primary_sim_name)?;
+                Ok(CommandOutcome::ProfileCreated { profile_id })
+            }
+            AppCommand::EditProfile {
+                profile_id,
+                name,
+                primary_sim_name,
+            } => {
+                self.profile_library
+                    .edit(&profile_id, name, primary_sim_name)?;
+                Ok(CommandOutcome::ProfileUpdated { profile_id })
+            }
+            AppCommand::DeleteProfile { profile_id } => {
+                self.profile_library.delete(&profile_id)?;
+                Ok(CommandOutcome::ProfileDeleted { profile_id })
+            }
+            AppCommand::DuplicateProfile {
+                source_profile_id,
+                name,
+            } => {
+                let profile_id = self.profile_library.duplicate(&source_profile_id, name)?;
                 Ok(CommandOutcome::ProfileCreated { profile_id })
             }
         }

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-24",
+  "fixture": "formation-lap-process-fixture.exe",
+  "mainManifest": "asInvoker",
+  "launch": {
+    "uacApproved": true,
+    "stableProcessIdentityObserved": true
+  },
+  "close": {
+    "secondUacApproved": true,
+    "strategy": "closeWindows",
+    "requested": true,
+    "exitedWithinFiveSeconds": true
+  },
+  "helperProcessesRemaining": 0,
+  "result": "passed"
+}

@@ -1,7 +1,8 @@
 use formation_lap_lib::{
-    AppSnapshot, ApplicationRequirement, CloseSessionSettings, ConsoleVisibility, LaunchRecipe,
-    LaunchSource, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
-    SupportingApplication, VrLaunchMode,
+    AppSnapshot, ApplicationRequirement, CloseSessionSettings, CommandError, ConsoleVisibility,
+    CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload, LaunchRecipe,
+    LaunchSource, ProfileApplication, ProfileIdPayload, ProfileSummary, RacingProfile,
+    SaveProfilePayload, ShutdownStrategy, SupportingApplication, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -12,39 +13,7 @@ use ts_rs::TS;
 
 fn render_bindings() -> String {
     let config = ts_rs::Config::default();
-
-    format!(
-        r#"// This file is generated from Rust. Do not edit by hand.
-import {{ invoke }} from "@tauri-apps/api/core";
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export {}
-
-export function getAppSnapshot(): Promise<AppSnapshot> {{
-  return invoke<AppSnapshot>("get_app_snapshot");
-}}
-"#,
+    let declarations = [
         ApplicationRequirement::decl(&config),
         ConsoleVisibility::decl(&config),
         LaunchSource::decl(&config),
@@ -56,7 +25,57 @@ export function getAppSnapshot(): Promise<AppSnapshot> {{
         CloseSessionSettings::decl(&config),
         RacingProfile::decl(&config),
         ProfileSummary::decl(&config),
-        AppSnapshot::decl(&config)
+        AppSnapshot::decl(&config),
+        CommandError::decl(&config),
+        CreateProfilePayload::decl(&config),
+        SaveProfilePayload::decl(&config),
+        ProfileIdPayload::decl(&config),
+        DuplicateProfilePayload::decl(&config),
+        ImportProfilePayload::decl(&config),
+    ]
+    .into_iter()
+    .map(|declaration| format!("export {declaration}"))
+    .collect::<Vec<_>>()
+    .join("\n\n");
+
+    format!(
+        r#"// This file is generated from Rust. Do not edit by hand.
+import {{ invoke }} from "@tauri-apps/api/core";
+
+{declarations}
+
+export function getAppSnapshot(): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("get_app_snapshot");
+}}
+
+export function createProfile(payload: CreateProfilePayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("create_profile", {{ payload }});
+}}
+
+export function saveProfile(payload: SaveProfilePayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("save_profile", {{ payload }});
+}}
+
+export function selectProfile(payload: ProfileIdPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("select_profile", {{ payload }});
+}}
+
+export function duplicateProfile(payload: DuplicateProfilePayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("duplicate_profile", {{ payload }});
+}}
+
+export function deleteProfile(payload: ProfileIdPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("delete_profile", {{ payload }});
+}}
+
+export function exportProfile(payload: ProfileIdPayload): Promise<string> {{
+  return invoke<string>("export_profile", {{ payload }});
+}}
+
+export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("import_profile", {{ payload }});
+}}
+"#,
     )
 }
 

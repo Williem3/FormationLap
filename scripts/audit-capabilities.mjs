@@ -71,9 +71,18 @@ const commands = handlerMatch.groups.commands
   .split(",")
   .map((command) => command.trim())
   .filter(Boolean);
-assert.deepEqual(commands, ["commands::get_app_snapshot"]);
+assert.deepEqual(commands, [
+  "commands::get_app_snapshot",
+  "commands::create_profile",
+  "commands::save_profile",
+  "commands::select_profile",
+  "commands::duplicate_profile",
+  "commands::delete_profile",
+  "commands::export_profile",
+  "commands::import_profile",
+]);
 assert.match(nativeHost, /on_navigation/);
 
 console.log(
-  "Capability audit passed: local main window, zero core/plugin permissions, one narrow app command, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
+  "Capability audit passed: local main window, zero core/plugin permissions, eight narrow app commands, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
 );

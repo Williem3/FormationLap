@@ -25,6 +25,46 @@ export type ProfileSummary = { id: string, name: string, primarySimName: string,
 
 export type AppSnapshot = { applicationName: string, foundationStatus: string, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, };
 
+export type CommandError = { code: string, message: string, recovery: string | null, diagnosticId: string | null, };
+
+export type CreateProfilePayload = { name: string, primarySimName: string, };
+
+export type SaveProfilePayload = { profile: RacingProfile, };
+
+export type ProfileIdPayload = { profileId: string, };
+
+export type DuplicateProfilePayload = { sourceProfileId: string, name: string, };
+
+export type ImportProfilePayload = { document: string, };
+
 export function getAppSnapshot(): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("get_app_snapshot");
+}
+
+export function createProfile(payload: CreateProfilePayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("create_profile", { payload });
+}
+
+export function saveProfile(payload: SaveProfilePayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("save_profile", { payload });
+}
+
+export function selectProfile(payload: ProfileIdPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("select_profile", { payload });
+}
+
+export function duplicateProfile(payload: DuplicateProfilePayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("duplicate_profile", { payload });
+}
+
+export function deleteProfile(payload: ProfileIdPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("delete_profile", { payload });
+}
+
+export function exportProfile(payload: ProfileIdPayload): Promise<string> {
+  return invoke<string>("export_profile", { payload });
+}
+
+export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("import_profile", { payload });
 }

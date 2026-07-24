@@ -14,4 +14,26 @@ describe("InMemoryNativeBridge", () => {
 
     await expect(bridge.getAppSnapshot()).resolves.toEqual(snapshot);
   });
+
+  it("supports the same typed profile creation behavior as the native adapter", async () => {
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [],
+      selectedProfile: null,
+    });
+
+    const snapshot = await bridge.createProfile({
+      name: "Le Mans evening",
+      primarySimName: "Le Mans Ultimate",
+    });
+
+    expect(snapshot.profiles).toEqual([
+      expect.objectContaining({
+        name: "Le Mans evening",
+        primarySimName: "Le Mans Ultimate",
+      }),
+    ]);
+    expect(snapshot.selectedProfile?.name).toBe("Le Mans evening");
+  });
 });

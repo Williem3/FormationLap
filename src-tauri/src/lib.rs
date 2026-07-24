@@ -6,7 +6,12 @@ mod core;
 mod profile_library;
 mod settings;
 
-pub use commands::get_app_snapshot;
+pub use commands::{
+    CommandError, CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload,
+    NativeCommandHost, ProfileIdPayload, SaveProfilePayload, create_profile, delete_profile,
+    duplicate_profile, export_profile, get_app_snapshot, import_profile, save_profile,
+    select_profile,
+};
 pub use contracts::{
     AppSnapshot, ApplicationRequirement, CloseSessionSettings, ConsoleVisibility, LaunchRecipe,
     LaunchSource, ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy,
@@ -15,6 +20,7 @@ pub use contracts::{
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 use profile_library::ProfileLibrary;
 use settings::SettingsStore;
+use tauri::Manager;
 use tauri::Url;
 
 fn navigation_is_allowed(url: &Url) -> bool {
@@ -34,7 +40,23 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(navigation_guard)
-        .invoke_handler(tauri::generate_handler![commands::get_app_snapshot])
+        .setup(|app| {
+            let storage_root = app.path().app_config_dir()?;
+            let commands = NativeCommandHost::open(storage_root)
+                .map_err(|error| std::io::Error::other(error.message))?;
+            app.manage(commands);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::get_app_snapshot,
+            commands::create_profile,
+            commands::save_profile,
+            commands::select_profile,
+            commands::duplicate_profile,
+            commands::delete_profile,
+            commands::export_profile,
+            commands::import_profile
+        ])
         .run(tauri::generate_context!())
         .expect("Formation Lap failed to start");
 }

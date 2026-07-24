@@ -1,4 +1,5 @@
 use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
+use crate::game_launch_diagnostics::GameLaunchDiagnostics;
 use crate::{
     AppSnapshot, ApplicationProcessSnapshot, ProcessObservation, ProcessOwnership,
     ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
@@ -71,6 +72,9 @@ pub enum AppCommand {
     RecommendApplications {
         primary_sim_id: String,
     },
+    TestGameLaunch {
+        profile_id: String,
+    },
     RefreshProcesses,
 }
 
@@ -126,6 +130,9 @@ pub enum CommandOutcome {
     ApplicationsRecommended {
         recommendations: Vec<crate::SupportingApplicationRecommendation>,
     },
+    GameLaunchTested {
+        diagnostic: crate::GameLaunchDiagnostic,
+    },
     ProcessesRefreshed,
 }
 
@@ -135,6 +142,8 @@ pub enum CoreError {
     InvalidProfileDocument(serde_json::Error),
     InvalidSettingsDocument(serde_json::Error),
     InvalidSessionJournal(serde_json::Error),
+    InvalidGameLaunchDiagnostic(serde_json::Error),
+    InvalidLaunchRecipe(String),
     InvalidProfileName(&'static str),
     ProfileNotFound(String),
     ApplicationNotFound(String),
@@ -161,6 +170,12 @@ impl fmt::Display for CoreError {
             }
             Self::InvalidSessionJournal(error) => {
                 write!(formatter, "active Session journal is invalid: {error}")
+            }
+            Self::InvalidGameLaunchDiagnostic(error) => {
+                write!(formatter, "Test Game Launch diagnostic is invalid: {error}")
+            }
+            Self::InvalidLaunchRecipe(message) => {
+                write!(formatter, "Launch Recipe is invalid: {message}")
             }
             Self::InvalidProfileName(field) => {
                 write!(formatter, "{field} must not be blank")
@@ -208,7 +223,9 @@ impl Error for CoreError {
             Self::InvalidProfileDocument(error) => Some(error),
             Self::InvalidSettingsDocument(error) => Some(error),
             Self::InvalidSessionJournal(error) => Some(error),
+            Self::InvalidGameLaunchDiagnostic(error) => Some(error),
             Self::InvalidProfileName(_)
+            | Self::InvalidLaunchRecipe(_)
             | Self::ProfileNotFound(_)
             | Self::ApplicationNotFound(_)
             | Self::InvalidSessionTransition { .. }
@@ -259,6 +276,7 @@ pub struct FormationLapCore {
     session_events: Vec<crate::SessionEvent>,
     session_journal: SessionJournal,
     discovery_catalog: DiscoveryCatalog,
+    game_launch_diagnostics: GameLaunchDiagnostics,
     session: crate::SessionSnapshot,
 }
 
@@ -367,6 +385,7 @@ impl FormationLapCore {
             session_events: Vec::new(),
             session_journal,
             discovery_catalog: DiscoveryCatalog::bundled_with_sources(discovery_sources)?,
+            game_launch_diagnostics: GameLaunchDiagnostics::open(storage_root)?,
             session,
         })
     }
@@ -452,12 +471,12 @@ impl FormationLapCore {
                     .profile(&profile_id)
                     .ok_or_else(|| CoreError::ProfileNotFound(profile_id.clone()))?;
                 let application = if profile.primary_sim.id == application_id {
-                    Some(&profile.primary_sim)
+                    Some(self.resolved_primary_sim(&profile)?)
                 } else {
                     profile
                         .supporting_applications
                         .iter()
-                        .map(|supporting| &supporting.application)
+                        .map(|supporting| supporting.application.clone())
                         .find(|application| application.id == application_id)
                 }
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
@@ -575,12 +594,12 @@ impl FormationLapCore {
                     .profile(&profile_id)
                     .ok_or_else(|| CoreError::ProfileNotFound(profile_id.clone()))?;
                 let application = if profile.primary_sim.id == application_id {
-                    Some(&profile.primary_sim)
+                    Some(self.resolved_primary_sim(&profile)?)
                 } else {
                     profile
                         .supporting_applications
                         .iter()
-                        .map(|supporting| &supporting.application)
+                        .map(|supporting| supporting.application.clone())
                         .find(|application| application.id == application_id)
                 }
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
@@ -659,12 +678,7 @@ impl FormationLapCore {
                     state: crate::SessionApplicationState::Pending,
                 });
 
-                let ordered_applications = profile
-                    .supporting_applications
-                    .iter()
-                    .map(|supporting| supporting.application.clone())
-                    .chain(std::iter::once(profile.primary_sim.clone()))
-                    .collect::<Vec<_>>();
+                let ordered_applications = self.ordered_session_applications(&profile)?;
                 self.session = crate::SessionSnapshot {
                     state: crate::SessionState::Starting,
                     active_profile_id: Some(profile_id.clone()),
@@ -905,6 +919,71 @@ impl FormationLapCore {
                     recommendations: self.discovery_catalog.recommendations(&primary_sim_id),
                 })
             }
+            AppCommand::TestGameLaunch { profile_id } => {
+                if self.session.state != crate::SessionState::Idle {
+                    return Err(CoreError::InvalidSessionTransition {
+                        current: self.session.state.clone(),
+                        command: "Test Game Launch",
+                    });
+                }
+                let mut profile = self
+                    .profile_library
+                    .profile(&profile_id)
+                    .ok_or_else(|| CoreError::ProfileNotFound(profile_id.clone()))?;
+                let primary_sim = self.resolved_primary_sim(&profile)?;
+                let target = crate::launch_recipe::sanitized_target(&primary_sim.launch_recipe)
+                    .map_err(CoreError::InvalidLaunchRecipe)?;
+                self.launch_or_adopt(&primary_sim.id, primary_sim.launch_recipe.clone())?;
+                let observed_process = self
+                    .application_processes
+                    .get(&primary_sim.id)
+                    .and_then(|process| process.identity.as_ref())
+                    .and_then(|identity| {
+                        std::path::Path::new(&identity.canonical_executable_path)
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                    })
+                    .filter(|name| !name.trim().is_empty())
+                    .ok_or_else(|| {
+                        CoreError::InvalidLaunchRecipe(
+                            "observed Process does not have a valid executable name".to_owned(),
+                        )
+                    })?
+                    .to_owned();
+                let monitored_process = primary_sim
+                    .launch_recipe
+                    .monitored_process
+                    .as_deref()
+                    .and_then(|name| std::path::Path::new(name).file_name())
+                    .and_then(|name| name.to_str())
+                    .filter(|name| !name.trim().is_empty())
+                    .map(str::to_owned);
+                if profile
+                    .primary_sim
+                    .launch_recipe
+                    .monitored_process
+                    .is_none()
+                {
+                    profile.primary_sim.launch_recipe.monitored_process =
+                        Some(observed_process.clone());
+                    self.profile_library.save(profile.clone())?;
+                }
+                let diagnostic = crate::GameLaunchDiagnostic {
+                    schema_version: 1,
+                    profile_name: profile.name,
+                    vr_enabled: profile.vr_enabled,
+                    vr_launch_mode: profile
+                        .vr_enabled
+                        .then_some(profile.preferred_vr_launch_mode)
+                        .flatten(),
+                    target,
+                    arguments: primary_sim.launch_recipe.arguments,
+                    monitored_process,
+                    observed_process,
+                };
+                self.game_launch_diagnostics.persist(&diagnostic)?;
+                Ok(CommandOutcome::GameLaunchTested { diagnostic })
+            }
         }
     }
 
@@ -1046,12 +1125,7 @@ impl FormationLapCore {
             .profile_library
             .profile(&profile_id)
             .ok_or_else(|| CoreError::ProfileNotFound(profile_id.clone()))?;
-        let ordered_applications = profile
-            .supporting_applications
-            .iter()
-            .map(|supporting| supporting.application.clone())
-            .chain(std::iter::once(profile.primary_sim.clone()))
-            .collect::<Vec<_>>();
+        let ordered_applications = self.ordered_session_applications(&profile)?;
 
         loop {
             if let Some(blocking_failure) = self.session.applications.iter().find(|application| {
@@ -1154,6 +1228,35 @@ impl FormationLapCore {
         }
     }
 
+    fn ordered_session_applications(
+        &self,
+        profile: &RacingProfile,
+    ) -> Result<Vec<crate::ProfileApplication>, CoreError> {
+        let primary_sim = self.resolved_primary_sim(profile)?;
+        Ok(profile
+            .supporting_applications
+            .iter()
+            .map(|supporting| supporting.application.clone())
+            .chain(std::iter::once(primary_sim))
+            .collect())
+    }
+
+    fn resolved_primary_sim(
+        &self,
+        profile: &RacingProfile,
+    ) -> Result<crate::ProfileApplication, CoreError> {
+        let mut primary_sim = profile.primary_sim.clone();
+        primary_sim.launch_recipe = self
+            .discovery_catalog
+            .resolve_primary_launch_recipe(
+                &primary_sim.launch_recipe,
+                profile.vr_enabled,
+                profile.preferred_vr_launch_mode.as_ref(),
+            )
+            .map_err(CoreError::InvalidLaunchRecipe)?;
+        Ok(primary_sim)
+    }
+
     fn begin_close_if_primary_exited(&mut self) {
         let primary_exited = self
             .session
@@ -1191,7 +1294,15 @@ impl FormationLapCore {
                 .supporting_applications
                 .iter()
                 .rev()
-                .map(|supporting| (supporting.application.id.clone(), supporting.keep_running)),
+                .map(|supporting| {
+                    let preserve_steam_vr =
+                        supporting.application.name.eq_ignore_ascii_case("SteamVR")
+                            && !profile.close_session.stop_steam_vr;
+                    (
+                        supporting.application.id.clone(),
+                        supporting.keep_running || preserve_steam_vr,
+                    )
+                }),
         );
 
         for (application_id, keep_running) in cleanup_order {

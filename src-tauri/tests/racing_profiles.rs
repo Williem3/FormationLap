@@ -296,7 +296,10 @@ fn complete_racing_profile_configuration_survives_restart() {
             id: "f5a04482-c611-4e27-bb51-f467c307d76e".to_owned(),
             name: "Le Mans Ultimate".to_owned(),
             launch_recipe: LaunchRecipe {
-                source: LaunchSource::Steam { app_id: 2399420 },
+                source: LaunchSource::Steam {
+                    app_id: 2399420,
+                    selector: None,
+                },
                 arguments: vec!["-vr".to_owned()],
                 working_directory: None,
                 monitored_process: Some("LeMansUltimate.exe".to_owned()),

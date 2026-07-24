@@ -5,6 +5,8 @@ mod commands;
 mod contracts;
 mod core;
 mod discovery_catalog;
+mod game_launch_diagnostics;
+mod launch_recipe;
 mod process_runtime;
 mod profile_library;
 mod session_journal;
@@ -18,18 +20,18 @@ pub use commands::{
     discover_applications, dismiss_recovery, duplicate_profile, exit_application, export_profile,
     force_stop_application, get_app_snapshot, import_profile, recommend_applications,
     refresh_processes, restart_application, save_profile, select_profile, start_application,
-    start_session,
+    start_session, test_game_launch,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
     CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings,
     CompatibilityRank, ConsoleVisibility, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
-    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
-    ProfileSummary, RacingProfile, SessionApplicationRole, SessionApplicationSnapshot,
-    SessionApplicationState, SessionEvent, SessionEventKind, SessionSnapshot, SessionState,
-    SessionSummary, ShutdownStrategy, SupportingApplication, SupportingApplicationRecommendation,
-    VrLaunchMode,
+    DiscoveredSupportingApplication, DiscoverySnapshot, GameLaunchDiagnostic, GameLaunchTarget,
+    LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
+    ProfileApplication, ProfileSummary, RacingProfile, SessionApplicationRole,
+    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
+    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SteamLaunchSelector,
+    SupportingApplication, SupportingApplicationRecommendation, VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{
@@ -85,6 +87,7 @@ pub fn run() {
             commands::force_stop_application,
             commands::restart_application,
             commands::start_session,
+            commands::test_game_launch,
             commands::cancel_startup,
             commands::close_session,
             commands::accept_recovery,

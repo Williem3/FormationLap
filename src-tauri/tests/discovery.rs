@@ -2,7 +2,7 @@ use formation_lap_lib::{
     AppCommand, ApplicationIcon, CatalogUpdateProvider, CommandOutcome, CompatibilityRank,
     DiscoveredInstallation, FormationLapCore, NativeCommandHost, PrimarySimIdPayload,
     TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
-    WindowsKnownLocationRoot, WindowsRunningProcess,
+    WindowsKnownLocationRoot, WindowsRunningProcess, validate_catalog_documents,
 };
 use std::{
     fs,
@@ -110,6 +110,86 @@ fn bundled_catalog_returns_exactly_the_reviewed_supporting_applications() {
             ("steamvr", "SteamVR"),
             ("lmuffb", "LMUFFB"),
         ]
+    );
+}
+
+#[test]
+fn catalog_validator_requires_a_complete_safe_recipe_for_every_steam_sim() {
+    let applications = r#"{ "schemaVersion": 1, "applications": [] }"#;
+    let missing_recipe = r#"{
+      "schemaVersion": 1,
+      "sims": [
+        { "id": "sim", "name": "Sim", "steamAppId": 42 }
+      ]
+    }"#;
+    assert_eq!(
+        validate_catalog_documents(missing_recipe, applications)
+            .expect_err("a Steam sim without launch recipes should be rejected")
+            .to_string(),
+        "Steam sim at sims[0] is missing launchRecipes"
+    );
+
+    let unsafe_process = r#"{
+      "schemaVersion": 1,
+      "sims": [
+        {
+          "id": "sim",
+          "name": "Sim",
+          "steamAppId": 42,
+          "launchRecipes": {
+            "ordinary": {
+              "steamSelector": { "kind": "default" },
+              "monitoredProcess": "../Sim.exe"
+            }
+          }
+        }
+      ]
+    }"#;
+    assert_eq!(
+        validate_catalog_documents(unsafe_process, applications)
+            .expect_err("a monitored path should be rejected")
+            .to_string(),
+        "invalid monitored Process at sims[0].launchRecipes.ordinary.monitoredProcess; expected an executable file name"
+    );
+}
+
+#[test]
+fn catalog_validator_rejects_duplicate_vr_launch_modes() {
+    let sims = r#"{
+      "schemaVersion": 1,
+      "sims": [
+        {
+          "id": "sim",
+          "name": "Sim",
+          "steamAppId": 42,
+          "launchRecipes": {
+            "ordinary": {
+              "steamSelector": { "kind": "default" },
+              "monitoredProcess": "Sim.exe"
+            },
+            "vr": [
+              {
+                "mode": "openVr",
+                "steamSelector": { "kind": "openVr" },
+                "monitoredProcess": "Sim.exe"
+              },
+              {
+                "mode": "openVr",
+                "steamSelector": { "kind": "option", "index": 2 },
+                "monitoredProcess": "Sim.exe"
+              }
+            ]
+          }
+        }
+      ]
+    }"#;
+    let applications = r#"{ "schemaVersion": 1, "applications": [] }"#;
+
+    assert_eq!(
+        validate_catalog_documents(sims, applications)
+            .expect_err("a duplicate VR mode should be rejected")
+            .to_string(),
+        "duplicate VR Launch Mode at sims[0].launchRecipes.vr[1].mode; first declared at sims[0].launchRecipes.vr[0].mode"
     );
 }
 

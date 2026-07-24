@@ -28,6 +28,17 @@ pub enum ConsoleVisibility {
     Visible,
 }
 
+/// Explicit Steam launch-option selector that never requests the choice dialog.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum SteamLaunchSelector {
+    Default,
+    OpenVr,
+    Oculus,
+    Option { index: u8 },
+}
+
 /// Portable source choice for one Launch Recipe.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -42,6 +53,8 @@ pub enum LaunchSource {
         #[serde(rename = "appId")]
         #[ts(rename = "appId")]
         app_id: u32,
+        #[serde(default)]
+        selector: Option<SteamLaunchSelector>,
     },
 }
 
@@ -75,6 +88,36 @@ pub struct LaunchRecipe {
     pub startup_timeout_seconds: u32,
     pub post_start_delay_milliseconds: u32,
     pub shutdown_strategy: ShutdownStrategy,
+}
+
+/// Sanitized launch target included in a local Test Game Launch report.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum GameLaunchTarget {
+    Steam {
+        uri: String,
+    },
+    DirectExecutable {
+        #[serde(rename = "executableName")]
+        #[ts(rename = "executableName")]
+        executable_name: String,
+    },
+}
+
+/// Copyable, local-only evidence from a Test Game Launch.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct GameLaunchDiagnostic {
+    pub schema_version: u32,
+    pub profile_name: String,
+    pub vr_enabled: bool,
+    pub vr_launch_mode: Option<VrLaunchMode>,
+    pub target: GameLaunchTarget,
+    pub arguments: Vec<String>,
+    pub monitored_process: Option<String>,
+    pub observed_process: String,
 }
 
 impl Default for LaunchRecipe {

@@ -5,6 +5,29 @@
       "id": "iracing",
       "name": "iRacing",
       "steamAppId": 266410,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "iRacingSim64DX11.exe"
+        },
+        "vr": [
+          {
+            "mode": "openXr",
+            "steamSelector": { "kind": "default" },
+            "monitoredProcess": "iRacingSim64DX11.exe"
+          },
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "default" },
+            "monitoredProcess": "iRacingSim64DX11.exe"
+          },
+          {
+            "mode": "oculus",
+            "steamSelector": { "kind": "default" },
+            "monitoredProcess": "iRacingSim64DX11.exe"
+          }
+        ]
+      },
       "installedAppMatchers": [
         {
           "displayName": "iRacing.com Race Simulation",
@@ -15,47 +38,187 @@
     {
       "id": "assetto-corsa",
       "name": "Assetto Corsa",
-      "steamAppId": 244210
+      "steamAppId": 244210,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "AssettoCorsa.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "default" },
+            "monitoredProcess": "AssettoCorsa.exe"
+          }
+        ]
+      }
     },
     {
       "id": "assetto-corsa-competizione",
       "name": "Assetto Corsa Competizione",
-      "steamAppId": 805550
+      "steamAppId": 805550,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "acc.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "acc.exe"
+          },
+          {
+            "mode": "oculus",
+            "steamSelector": { "kind": "oculus" },
+            "monitoredProcess": "acc.exe"
+          }
+        ]
+      }
     },
     {
       "id": "assetto-corsa-evo",
       "name": "Assetto Corsa EVO",
-      "steamAppId": 3058630
+      "steamAppId": 3058630,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "AssettoCorsaEVO.exe"
+        },
+        "vr": [
+          {
+            "mode": "openXr",
+            "steamSelector": { "kind": "default" },
+            "arguments": ["-vr"],
+            "monitoredProcess": "AssettoCorsaEVO.exe"
+          }
+        ]
+      }
     },
     {
       "id": "automobilista-2",
       "name": "Automobilista 2",
-      "steamAppId": 1066890
+      "steamAppId": 1066890,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "arguments": ["-novr"],
+          "monitoredProcess": "AMS2.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "AMS2.exe"
+          },
+          {
+            "mode": "oculus",
+            "steamSelector": { "kind": "oculus" },
+            "monitoredProcess": "AMS2.exe"
+          }
+        ]
+      }
     },
     {
       "id": "rfactor-2",
       "name": "rFactor 2",
-      "steamAppId": 365960
+      "steamAppId": 365960,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "rFactor2.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "rFactor2.exe"
+          }
+        ]
+      }
     },
     {
       "id": "le-mans-ultimate",
       "name": "Le Mans Ultimate",
-      "steamAppId": 2399420
+      "steamAppId": 2399420,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "Le Mans Ultimate.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "Le Mans Ultimate.exe"
+          },
+          {
+            "mode": "openXr",
+            "steamSelector": { "kind": "option", "index": 3 },
+            "monitoredProcess": "Le Mans Ultimate.exe"
+          }
+        ]
+      }
     },
     {
       "id": "raceroom",
       "name": "RaceRoom Racing Experience",
-      "steamAppId": 211500
+      "steamAppId": 211500,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "option", "index": 1 },
+          "monitoredProcess": "RRRE64.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "RRRE64.exe"
+          }
+        ]
+      }
     },
     {
       "id": "ea-sports-wrc",
       "name": "EA SPORTS WRC",
-      "steamAppId": 1849250
+      "steamAppId": 1849250,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "monitoredProcess": "WRC.exe"
+        },
+        "vr": [
+          {
+            "mode": "openXr",
+            "steamSelector": { "kind": "option", "index": 2 },
+            "monitoredProcess": "WRC.exe"
+          }
+        ]
+      }
     },
     {
       "id": "dirt-rally-2",
       "name": "DiRT Rally 2.0",
-      "steamAppId": 690790
+      "steamAppId": 690790,
+      "launchRecipes": {
+        "ordinary": {
+          "steamSelector": { "kind": "default" },
+          "arguments": ["-novr"],
+          "monitoredProcess": "dirtrally2.exe"
+        },
+        "vr": [
+          {
+            "mode": "openVr",
+            "steamSelector": { "kind": "openVr" },
+            "monitoredProcess": "dirtrally2.exe"
+          },
+          {
+            "mode": "oculus",
+            "steamSelector": { "kind": "oculus" },
+            "monitoredProcess": "dirtrally2.exe"
+          }
+        ]
+      }
     }
   ]
 }

@@ -1,6 +1,7 @@
 use crate::{
     AppCommand, AppSnapshot, CommandOutcome, CoreError, DiscoverySnapshot, FormationLapCore,
-    RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
+    GameLaunchDiagnostic, RacingProfile, SupportingApplicationRecommendation,
+    TargetedDiscoverySources,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::mpsc, thread};
@@ -133,6 +134,11 @@ impl From<CoreError> for CommandError {
                 "Formation Lap could not open its bundled Curated Catalog.".to_owned(),
                 Some("Reinstall Formation Lap from an official signed release."),
             ),
+            CoreError::InvalidLaunchRecipe(_) => (
+                "invalid_launch_recipe",
+                error.to_string(),
+                Some("Review the Primary Sim Launch Recipe and try again."),
+            ),
             CoreError::InvalidSessionTransition { .. } => (
                 "invalid_session_transition",
                 error.to_string(),
@@ -148,6 +154,7 @@ impl From<CoreError> for CommandError {
             | CoreError::InvalidSettingsDocument(_)
             | CoreError::UnsupportedSettingsSchema(_)
             | CoreError::InvalidSessionJournal(_)
+            | CoreError::InvalidGameLaunchDiagnostic(_)
             | CoreError::UnsupportedSessionJournalSchema(_) => (
                 "invalid_local_state",
                 "Formation Lap found local profile data it cannot safely open.".to_owned(),
@@ -382,6 +389,26 @@ impl NativeCommandHost {
         .map(|(_, snapshot)| snapshot)
     }
 
+    pub fn test_game_launch(
+        &self,
+        payload: ProfileIdPayload,
+    ) -> Result<GameLaunchDiagnostic, CommandError> {
+        match self
+            .execute_command(AppCommand::TestGameLaunch {
+                profile_id: payload.profile_id,
+            })?
+            .0
+        {
+            CommandOutcome::GameLaunchTested { diagnostic } => Ok(diagnostic),
+            _ => Err(CommandError {
+                code: "unexpected_outcome".to_owned(),
+                message: "Formation Lap could not complete Test Game Launch.".to_owned(),
+                recovery: Some("Try the launch test again.".to_owned()),
+                diagnostic_id: None,
+            }),
+        }
+    }
+
     pub fn cancel_startup(&self) -> Result<AppSnapshot, CommandError> {
         self.execute_command(AppCommand::CancelStartup)
             .map(|(_, snapshot)| snapshot)
@@ -543,6 +570,14 @@ pub fn start_session(
     payload: ProfileIdPayload,
 ) -> Result<AppSnapshot, CommandError> {
     commands.start_session(payload)
+}
+
+#[tauri::command]
+pub fn test_game_launch(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ProfileIdPayload,
+) -> Result<GameLaunchDiagnostic, CommandError> {
+    commands.test_game_launch(payload)
 }
 
 #[tauri::command]

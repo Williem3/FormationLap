@@ -878,6 +878,127 @@ fn close_session_stops_primary_then_owned_supports_in_reverse_and_detaches_prese
 }
 
 #[test]
+fn stop_steam_vr_applies_only_when_the_session_started_it_and_the_profile_opts_in() {
+    let session_owned_steam_vr = steam_vr_close_trace(false, false);
+    assert_eq!(
+        session_owned_steam_vr,
+        vec![31_002],
+        "an owned SteamVR Process is preserved unless Stop SteamVR is enabled"
+    );
+
+    let opted_in_steam_vr = steam_vr_close_trace(true, false);
+    assert_eq!(
+        opted_in_steam_vr,
+        vec![31_002, 31_001],
+        "an owned SteamVR Process stops after the Primary Sim when opted in"
+    );
+
+    let pre_existing_steam_vr = steam_vr_close_trace(true, true);
+    assert_eq!(
+        pre_existing_steam_vr,
+        vec![31_002],
+        "a Pre-existing SteamVR Process is never stopped"
+    );
+}
+
+fn steam_vr_close_trace(stop_steam_vr: bool, steam_vr_pre_existing: bool) -> Vec<u32> {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let steam_vr_identity = ProcessIdentity {
+        pid: 31_001,
+        creation_time: "133822945310010000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let primary_identity = ProcessIdentity {
+        pid: 31_002,
+        creation_time: "133822945310020000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let stop_trace = Arc::new(Mutex::new(Vec::new()));
+    let runtime = ScriptedProcessRuntime {
+        matching_processes: VecDeque::from([
+            if steam_vr_pre_existing {
+                vec![steam_vr_identity.clone()]
+            } else {
+                Vec::new()
+            },
+            Vec::new(),
+        ]),
+        launch_results: VecDeque::from(if steam_vr_pre_existing {
+            vec![Ok(primary_identity)]
+        } else {
+            vec![Ok(steam_vr_identity), Ok(primary_identity)]
+        }),
+        graceful_stop_results: VecDeque::from(
+            (0..if stop_steam_vr && !steam_vr_pre_existing {
+                2
+            } else {
+                1
+            })
+                .map(|_| Ok(GracefulStopResult::Requested))
+                .collect::<Vec<_>>(),
+        ),
+        wait_for_exit_results: VecDeque::from(
+            (0..if stop_steam_vr && !steam_vr_pre_existing {
+                2
+            } else {
+                1
+            })
+                .map(|_| Ok(true))
+                .collect::<Vec<_>>(),
+        ),
+        stop_trace: Some(Arc::clone(&stop_trace)),
+        ..ScriptedProcessRuntime::default()
+    };
+    let mut core = FormationLapCore::open_with_runtime(storage.path(), runtime)
+        .expect("empty Session storage should open");
+    let CommandOutcome::ProfileCreated { profile_id } = core
+        .execute(AppCommand::CreateProfile {
+            name: "SteamVR ownership".to_owned(),
+            primary_sim_name: "Primary Sim".to_owned(),
+        })
+        .expect("fixture profile should be created")
+    else {
+        panic!("profile creation should return its id");
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should be selected");
+    profile.supporting_applications = vec![SupportingApplication {
+        application: application("steam-vr", "SteamVR", &executable_path),
+        requirement: ApplicationRequirement::Required,
+        keep_running: false,
+    }];
+    profile.primary_sim = application(&profile.primary_sim.id, "Primary Sim", &executable_path);
+    profile.close_session.stop_steam_vr = stop_steam_vr;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("fixture profile should save");
+
+    core.execute(AppCommand::StartSession { profile_id })
+        .expect("Session should begin");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("Primary Sim should launch");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("Session should become Active");
+    core.execute(AppCommand::CloseSession)
+        .expect("Session should accept Close Session");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("eligible Processes should close or detach");
+
+    assert_eq!(core.snapshot().session.state, SessionState::Idle);
+    stop_trace
+        .lock()
+        .expect("stop trace should be readable")
+        .clone()
+}
+
+#[test]
 fn unexpected_primary_sim_exit_begins_cleanup_exactly_once() {
     let storage = TempStorage::new();
     let executable_path = std::env::current_exe()

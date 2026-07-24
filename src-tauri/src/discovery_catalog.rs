@@ -1,7 +1,8 @@
 use crate::{
     ApplicationIcon, CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider,
     CompatibilityRank, DiscoveredInstallation, DiscoveredPrimarySim,
-    DiscoveredSupportingApplication, DiscoverySnapshot, SupportingApplicationRecommendation,
+    DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
+    SteamLaunchSelector, SupportingApplicationRecommendation, VrLaunchMode,
 };
 use serde::Deserialize;
 use std::{
@@ -297,6 +298,16 @@ pub enum DiscoveryCatalogError {
         first_location: String,
         duplicate_location: String,
     },
+    MissingSteamLaunchRecipes {
+        sim_index: usize,
+    },
+    InvalidCatalogMonitoredProcess {
+        location: String,
+    },
+    DuplicateVrLaunchMode {
+        first_location: String,
+        duplicate_location: String,
+    },
     UnknownCompatibilitySim {
         sim_id: String,
         application_index: usize,
@@ -340,6 +351,23 @@ impl fmt::Display for DiscoveryCatalogError {
                 formatter,
                 "duplicate Steam App ID {app_id} at {duplicate_location}; first declared at {first_location}"
             ),
+            Self::MissingSteamLaunchRecipes { sim_index } => {
+                write!(
+                    formatter,
+                    "Steam sim at sims[{sim_index}] is missing launchRecipes"
+                )
+            }
+            Self::InvalidCatalogMonitoredProcess { location } => write!(
+                formatter,
+                "invalid monitored Process at {location}; expected an executable file name"
+            ),
+            Self::DuplicateVrLaunchMode {
+                first_location,
+                duplicate_location,
+            } => write!(
+                formatter,
+                "duplicate VR Launch Mode at {duplicate_location}; first declared at {first_location}"
+            ),
             Self::UnknownCompatibilitySim {
                 sim_id,
                 application_index,
@@ -362,6 +390,9 @@ impl Error for DiscoveryCatalogError {
             | Self::UnsupportedSupportingApplicationSchema(_)
             | Self::DuplicateSimId { .. }
             | Self::DuplicateSteamAppId { .. }
+            | Self::MissingSteamLaunchRecipes { .. }
+            | Self::InvalidCatalogMonitoredProcess { .. }
+            | Self::DuplicateVrLaunchMode { .. }
             | Self::UnknownCompatibilitySim { .. } => None,
         }
     }
@@ -383,6 +414,37 @@ struct SimCatalogEntry {
     steam_app_id: Option<u32>,
     #[serde(default)]
     installed_app_matchers: Vec<InstalledApplicationMatcher>,
+    #[serde(default)]
+    launch_recipes: Option<CatalogPrimarySimLaunchRecipes>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogPrimarySimLaunchRecipes {
+    ordinary: CatalogLaunchRecipe,
+    #[serde(default)]
+    vr: Vec<CatalogVrLaunchRecipe>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogLaunchRecipe {
+    steam_selector: SteamLaunchSelector,
+    #[serde(default)]
+    arguments: Vec<String>,
+    #[serde(default)]
+    monitored_process: Option<String>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogVrLaunchRecipe {
+    mode: VrLaunchMode,
+    steam_selector: SteamLaunchSelector,
+    #[serde(default)]
+    arguments: Vec<String>,
+    #[serde(default)]
+    monitored_process: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -430,6 +492,7 @@ struct KnownLocationMatcher {
 
 pub(crate) struct DiscoveryCatalog {
     primary_sims: Vec<CatalogPrimarySim>,
+    steam_launch_recipes: BTreeMap<u32, CatalogPrimarySimLaunchRecipes>,
     supporting_applications: Vec<CatalogSupportingApplication>,
     installed_app_matchers: BTreeMap<String, Vec<InstalledApplicationMatcher>>,
     supporting_executable_names: BTreeMap<String, Vec<String>>,
@@ -446,8 +509,12 @@ impl DiscoveryCatalog {
         let documents = parse_and_validate_catalog_documents(BUNDLED_SIMS, BUNDLED_APPLICATIONS)?;
         let mut primary_sims = Vec::with_capacity(documents.sims.len());
         let mut installed_app_matchers = BTreeMap::new();
+        let mut steam_launch_recipes = BTreeMap::new();
         for sim in documents.sims {
             installed_app_matchers.insert(sim.id.clone(), sim.installed_app_matchers);
+            if let (Some(app_id), Some(launch_recipes)) = (sim.steam_app_id, sim.launch_recipes) {
+                steam_launch_recipes.insert(app_id, launch_recipes);
+            }
             primary_sims.push(CatalogPrimarySim {
                 id: sim.id,
                 name: sim.name,
@@ -475,6 +542,7 @@ impl DiscoveryCatalog {
         }
         Ok(Self {
             primary_sims,
+            steam_launch_recipes,
             supporting_applications,
             installed_app_matchers,
             supporting_executable_names,
@@ -538,6 +606,60 @@ impl DiscoveryCatalog {
             .collect::<Vec<_>>();
         recommendations.sort_by_key(|recommendation| recommendation.rank.clone());
         recommendations
+    }
+
+    pub(crate) fn resolve_primary_launch_recipe(
+        &self,
+        recipe: &LaunchRecipe,
+        vr_enabled: bool,
+        preferred_vr_launch_mode: Option<&VrLaunchMode>,
+    ) -> Result<LaunchRecipe, String> {
+        let mut resolved = recipe.clone();
+        if let LaunchSource::Steam { app_id, selector } = &mut resolved.source
+            && let Some(recipes) = self.steam_launch_recipes.get(app_id)
+        {
+            let selected_recipe = if vr_enabled {
+                if let Some(mode) = preferred_vr_launch_mode {
+                    match recipes.vr.iter().find(|recipe| &recipe.mode == mode) {
+                        Some(vr_recipe) => Some((
+                            &vr_recipe.steam_selector,
+                            &vr_recipe.arguments,
+                            vr_recipe.monitored_process.as_ref(),
+                        )),
+                        None if selector.is_some() && resolved.monitored_process.is_some() => None,
+                        None => {
+                            return Err(format!(
+                                "Steam App ID {app_id} does not support the selected VR Launch Mode"
+                            ));
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let (steam_selector, arguments, monitored_process) =
+                if let Some(vr_recipe) = selected_recipe {
+                    (vr_recipe.0, vr_recipe.1, vr_recipe.2)
+                } else {
+                    (
+                        &recipes.ordinary.steam_selector,
+                        &recipes.ordinary.arguments,
+                        recipes.ordinary.monitored_process.as_ref(),
+                    )
+                };
+            if selector.is_none() {
+                *selector = Some(steam_selector.clone());
+            }
+            if resolved.arguments.is_empty() {
+                resolved.arguments.clone_from(arguments);
+            }
+            if resolved.monitored_process.is_none() {
+                resolved.monitored_process = monitored_process.cloned();
+            }
+        }
+        Ok(resolved)
     }
 }
 
@@ -1165,6 +1287,38 @@ fn parse_and_validate_catalog_documents(
             }
         }
     }
+    for (index, sim) in document.sims.iter().enumerate() {
+        if sim.steam_app_id.is_none() {
+            continue;
+        }
+        let launch_recipes = sim
+            .launch_recipes
+            .as_ref()
+            .ok_or(DiscoveryCatalogError::MissingSteamLaunchRecipes { sim_index: index })?;
+        validate_catalog_monitored_process(
+            launch_recipes.ordinary.monitored_process.as_deref(),
+            format!("sims[{index}].launchRecipes.ordinary.monitoredProcess"),
+        )?;
+        let mut declared_vr_modes = Vec::<(&VrLaunchMode, usize)>::new();
+        for (recipe_index, recipe) in launch_recipes.vr.iter().enumerate() {
+            if let Some((_, first_index)) = declared_vr_modes
+                .iter()
+                .find(|(mode, _)| *mode == &recipe.mode)
+            {
+                return Err(DiscoveryCatalogError::DuplicateVrLaunchMode {
+                    first_location: format!("sims[{index}].launchRecipes.vr[{first_index}].mode"),
+                    duplicate_location: format!(
+                        "sims[{index}].launchRecipes.vr[{recipe_index}].mode"
+                    ),
+                });
+            }
+            declared_vr_modes.push((&recipe.mode, recipe_index));
+            validate_catalog_monitored_process(
+                recipe.monitored_process.as_deref(),
+                format!("sims[{index}].launchRecipes.vr[{recipe_index}].monitoredProcess"),
+            )?;
+        }
+    }
 
     let application_document: SupportingApplicationCatalogDocument =
         serde_json::from_str(supporting_applications)
@@ -1192,6 +1346,26 @@ fn parse_and_validate_catalog_documents(
         sims: document.sims,
         supporting_applications: application_document.applications,
     })
+}
+
+fn validate_catalog_monitored_process(
+    monitored_process: Option<&str>,
+    location: String,
+) -> Result<(), DiscoveryCatalogError> {
+    let is_safe = monitored_process.is_some_and(|name| {
+        let path = Path::new(name);
+        !name.trim().is_empty()
+            && path.file_name().and_then(|file_name| file_name.to_str()) == Some(name)
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    });
+    if is_safe {
+        Ok(())
+    } else {
+        Err(DiscoveryCatalogError::InvalidCatalogMonitoredProcess { location })
+    }
 }
 
 pub fn validate_catalog_documents(

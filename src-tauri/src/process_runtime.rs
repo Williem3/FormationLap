@@ -253,12 +253,16 @@ mod windows_adapter {
     use super::{ProcessObservation, ProcessOutput, ProcessResponsiveness, ProcessRuntimeError};
     use crate::{ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity};
     use std::{
-        ffi::OsString,
+        ffi::{OsStr, OsString},
         io::{self, Read},
         mem::size_of,
-        os::windows::{ffi::OsStringExt, process::CommandExt},
+        os::windows::{
+            ffi::{OsStrExt, OsStringExt},
+            process::CommandExt,
+        },
         path::{Path, PathBuf},
         process::{Command, Stdio},
+        ptr,
         sync::{Arc, Mutex},
         thread,
         time::{Duration, Instant},
@@ -280,8 +284,12 @@ mod windows_adapter {
                 TerminateProcess, WaitForSingleObject,
             },
         },
-        UI::WindowsAndMessaging::{
-            EnumWindows, GetWindowThreadProcessId, IsHungAppWindow, PostMessageW, WM_CLOSE,
+        UI::{
+            Shell::ShellExecuteW,
+            WindowsAndMessaging::{
+                EnumWindows, GetWindowThreadProcessId, IsHungAppWindow, PostMessageW,
+                SW_SHOWNORMAL, WM_CLOSE,
+            },
         },
     };
 
@@ -402,6 +410,29 @@ mod windows_adapter {
         }
     }
 
+    fn expected_executable(recipe: &LaunchRecipe) -> Result<Option<PathBuf>, ProcessRuntimeError> {
+        match &recipe.source {
+            LaunchSource::DirectExecutable { .. } => direct_executable(recipe).map(Some),
+            LaunchSource::Steam { .. } => {
+                let monitored_process = recipe.monitored_process.as_deref().ok_or_else(|| {
+                    ProcessRuntimeError::new(
+                        "Steam launch requires a monitored process executable name",
+                    )
+                })?;
+                let monitored_path = Path::new(monitored_process);
+                if monitored_process.trim().is_empty()
+                    || monitored_path.file_name().and_then(|name| name.to_str())
+                        != Some(monitored_process)
+                {
+                    return Err(ProcessRuntimeError::new(
+                        "Steam monitored process must be an executable file name",
+                    ));
+                }
+                Ok(None)
+            }
+        }
+    }
+
     fn creation_time_value(creation_time: FILETIME) -> String {
         ((u64::from(creation_time.dwHighDateTime) << 32) | u64::from(creation_time.dwLowDateTime))
             .to_string()
@@ -469,7 +500,7 @@ mod windows_adapter {
 
     fn expected_process_matches(
         identity: &ProcessIdentity,
-        expected_executable: &Path,
+        expected_executable: Option<&Path>,
         monitored_process: Option<&str>,
     ) -> bool {
         if let Some(monitored_process) = monitored_process {
@@ -481,9 +512,11 @@ mod windows_adapter {
                 });
         }
 
-        Path::new(&identity.canonical_executable_path)
-            .to_string_lossy()
-            .eq_ignore_ascii_case(&expected_executable.to_string_lossy())
+        expected_executable.is_some_and(|expected_executable| {
+            Path::new(&identity.canonical_executable_path)
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&expected_executable.to_string_lossy())
+        })
     }
 
     struct WindowObservation {
@@ -559,7 +592,7 @@ mod windows_adapter {
     pub(super) fn matching_processes(
         recipe: &LaunchRecipe,
     ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
-        let expected_executable = direct_executable(recipe)?;
+        let expected_executable = expected_executable(recipe)?;
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(runtime_error(
@@ -580,7 +613,7 @@ mod windows_adapter {
             if let Ok(identity) = process_identity(entry.th32ProcessID)
                 && expected_process_matches(
                     &identity,
-                    &expected_executable,
+                    expected_executable.as_deref(),
                     recipe.monitored_process.as_deref(),
                 )
             {
@@ -619,7 +652,7 @@ mod windows_adapter {
         executable_paths
     }
 
-    pub(super) fn launch(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
+    fn launch_direct(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
         if recipe.elevated {
             return Err(ProcessRuntimeError::new(
                 "elevated launch requires the one-shot helper",
@@ -701,6 +734,64 @@ mod windows_adapter {
                 let _ = child.kill();
                 let _ = child.wait();
             })
+    }
+
+    fn launch_steam(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
+        if recipe.elevated {
+            return Err(ProcessRuntimeError::new(
+                "elevated launch requires the one-shot helper",
+            ));
+        }
+        let existing_processes = matching_processes(recipe)?;
+        let uri =
+            crate::launch_recipe::steam_launch_uri(recipe).map_err(ProcessRuntimeError::new)?;
+        let wide_uri = OsStr::new(&uri)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let launch_result = unsafe {
+            ShellExecuteW(
+                ptr::null_mut(),
+                ptr::null(),
+                wide_uri.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if launch_result as isize <= 32 {
+            return Err(ProcessRuntimeError::new(format!(
+                "Steam launch request was rejected with ShellExecute status {}",
+                launch_result as isize
+            )));
+        }
+
+        let deadline =
+            Instant::now() + Duration::from_secs(u64::from(recipe.startup_timeout_seconds));
+        loop {
+            if let Some(identity) = matching_processes(recipe)?
+                .into_iter()
+                .find(|identity| !existing_processes.contains(identity))
+            {
+                return Ok(LaunchedProcess {
+                    identity,
+                    captured_output: None,
+                });
+            }
+            if Instant::now() >= deadline {
+                return Err(ProcessRuntimeError::new(
+                    "Steam monitored process did not appear before the startup timeout",
+                ));
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    pub(super) fn launch(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
+        match recipe.source {
+            LaunchSource::DirectExecutable { .. } => launch_direct(recipe),
+            LaunchSource::Steam { .. } => launch_steam(recipe),
+        }
     }
 
     pub(super) fn observe(

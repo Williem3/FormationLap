@@ -576,6 +576,280 @@ button:disabled {
   line-height: 20px;
 }
 
+.discovery-status,
+.selected-sim-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.discovery-status > svg,
+.selected-sim-summary > svg {
+  width: 21px;
+  height: 21px;
+  flex: none;
+  color: var(--accent);
+}
+
+.discovery-status-warning > svg {
+  color: var(--warm);
+}
+
+.discovery-status strong,
+.discovery-status small,
+.selected-sim-summary strong,
+.selected-sim-summary small {
+  display: block;
+}
+
+.discovery-status strong,
+.selected-sim-summary strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.discovery-status small,
+.selected-sim-summary small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.sim-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.sim-choice {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0 12px;
+  align-items: center;
+  min-height: 82px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--ink);
+  text-align: left;
+}
+
+.sim-choice:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+
+.sim-choice[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.sim-choice-icon,
+.recommendation-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  grid-row: 1 / span 2;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.sim-choice-icon img,
+.recommendation-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.sim-choice-icon svg,
+.recommendation-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.sim-choice-copy {
+  min-width: 0;
+}
+
+.sim-choice-copy strong,
+.sim-choice-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-choice-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.sim-choice-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sim-choice-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  grid-column: 2;
+  margin-top: 7px;
+  color: var(--running);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sim-choice-status svg {
+  width: 13px;
+  height: 13px;
+}
+
+.manual-entry-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.text-button {
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.text-button:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
+.manual-entry-panel {
+  margin-top: 16px;
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--canvas) 72%, var(--surface));
+}
+
+.manual-entry-panel > .eyebrow {
+  margin: 0 0 2px;
+}
+
+.recommendation-region {
+  margin-top: 18px;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recommendation-row {
+  display: grid;
+  grid-template-columns: 18px 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 68px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.recommendation-row:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.recommendation-row input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.recommendation-icon {
+  grid-row: auto;
+}
+
+.recommendation-copy {
+  min-width: 0;
+}
+
+.recommendation-copy strong,
+.recommendation-copy small {
+  display: block;
+}
+
+.recommendation-copy strong {
+  font-size: 13px;
+  font-weight: 630;
+}
+
+.recommendation-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.recommendation-rank {
+  color: var(--muted);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.recommendation-rank-recommended {
+  color: var(--accent-strong);
+}
+
+.recommendation-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recommendation-empty svg {
+  width: 19px;
+  height: 19px;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -677,6 +951,7 @@ button:disabled {
 }
 
 .order-empty,
+.order-application-row,
 .game-order-row,
 .application-empty,
 .application-row {
@@ -695,6 +970,10 @@ button:disabled {
   color: var(--muted);
 }
 
+.order-application-row + .order-application-row {
+  margin-top: 8px;
+}
+
 .order-empty > svg,
 .application-empty > svg {
   width: 20px;
@@ -704,6 +983,8 @@ button:disabled {
 
 .order-empty strong,
 .order-empty small,
+.order-application-row strong,
+.order-application-row small,
 .game-order-row strong,
 .game-order-row small,
 .application-empty strong,
@@ -712,6 +993,7 @@ button:disabled {
 }
 
 .order-empty strong,
+.order-application-row strong,
 .game-order-row strong,
 .application-empty strong {
   color: var(--ink);
@@ -720,6 +1002,7 @@ button:disabled {
 }
 
 .order-empty small,
+.order-application-row small,
 .game-order-row small,
 .application-empty small {
   margin-top: 2px;

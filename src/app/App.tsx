@@ -9,10 +9,15 @@ import markUrl from "../assets/formation-lap-mark.svg";
 import type {
   ApplicationProcessSnapshot,
   AppSnapshot,
+  DiscoveredInstallation,
+  DiscoveredPrimarySim,
+  DiscoveredSupportingApplication,
+  DiscoverySnapshot,
   LaunchSource,
   ProfileApplication,
   RacingProfile,
   SupportingApplication,
+  SupportingApplicationRecommendation,
 } from "../generated/bindings";
 import type { NativeBridge } from "../native-bridge/native-bridge";
 import {
@@ -34,6 +39,22 @@ type SnapshotState =
   | { kind: "ready"; snapshot: AppSnapshot }
   | { kind: "error" };
 
+type DiscoveryState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; snapshot: DiscoverySnapshot }
+  | { kind: "error" };
+
+type RecommendationState =
+  | { kind: "idle" }
+  | { kind: "loading"; primarySimName: string }
+  | {
+      kind: "ready";
+      primarySimName: string;
+      recommendations: SupportingApplicationRecommendation[];
+    }
+  | { kind: "error"; primarySimName: string };
+
 type WorkspaceView = "dashboard" | "new-profile" | "edit-profile";
 type PrimarySimSource = "direct" | "steam";
 type PendingProcessAction = {
@@ -50,6 +71,18 @@ export function App({ bridge }: AppProps) {
   const [primarySimSource, setPrimarySimSource] =
     useState<PrimarySimSource>("direct");
   const [sourceValue, setSourceValue] = useState("");
+  const [discoveryState, setDiscoveryState] = useState<DiscoveryState>({
+    kind: "idle",
+  });
+  const [recommendationState, setRecommendationState] =
+    useState<RecommendationState>({ kind: "idle" });
+  const [selectedPrimarySimId, setSelectedPrimarySimId] = useState<
+    string | null
+  >(null);
+  const [selectedSupportingIds, setSelectedSupportingIds] = useState<string[]>(
+    [],
+  );
+  const [isManualEntry, setIsManualEntry] = useState(false);
   const [profileDraft, setProfileDraft] = useState<RacingProfile | null>(null);
   const [duplicateName, setDuplicateName] = useState("");
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
@@ -67,6 +100,7 @@ export function App({ bridge }: AppProps) {
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const newProfileButton = useRef<HTMLButtonElement | null>(null);
   const wasDialogOpen = useRef(false);
+  const recommendationRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -158,7 +192,96 @@ export function App({ bridge }: AppProps) {
 
   const openNewProfile = () => {
     setFormError(null);
+    setProfileName("");
+    setPrimarySimName("");
+    setPrimarySimSource("direct");
+    setSourceValue("");
+    setSelectedPrimarySimId(null);
+    setSelectedSupportingIds([]);
+    setRecommendationState({ kind: "idle" });
+    setIsManualEntry(false);
+    setDiscoveryState({ kind: "loading" });
     setView("new-profile");
+    void bridge
+      .discoverApplications()
+      .then((discovery) => {
+        setDiscoveryState({ kind: "ready", snapshot: discovery });
+        if (discovery.installedPrimarySims.length === 0) {
+          setIsManualEntry(true);
+        }
+      })
+      .catch(() => {
+        setDiscoveryState({ kind: "error" });
+        setIsManualEntry(true);
+      });
+  };
+
+  const selectDiscoveredPrimarySim = (primarySim: DiscoveredPrimarySim) => {
+    setSelectedPrimarySimId(primarySim.id);
+    setPrimarySimName(primarySim.name);
+    setIsManualEntry(false);
+    setSelectedSupportingIds([]);
+    if (primarySim.installation.kind === "steam") {
+      setPrimarySimSource("steam");
+      setSourceValue(String(primarySim.installation.appId));
+    } else {
+      setPrimarySimSource("direct");
+      setSourceValue(primarySim.installation.executablePath);
+    }
+
+    const request = ++recommendationRequest.current;
+    setRecommendationState({
+      kind: "loading",
+      primarySimName: primarySim.name,
+    });
+    void bridge
+      .recommendApplications({ primarySimId: primarySim.id })
+      .then((recommendations) => {
+        if (request !== recommendationRequest.current) {
+          return;
+        }
+        const installedIds = new Set(
+          discoveryState.kind === "ready"
+            ? discoveryState.snapshot.installedSupportingApplications.map(
+                (application) => application.id,
+              )
+            : [],
+        );
+        setRecommendationState({
+          kind: "ready",
+          primarySimName: primarySim.name,
+          recommendations: recommendations.filter((recommendation) =>
+            installedIds.has(recommendation.id),
+          ),
+        });
+      })
+      .catch(() => {
+        if (request === recommendationRequest.current) {
+          setRecommendationState({
+            kind: "error",
+            primarySimName: primarySim.name,
+          });
+        }
+      });
+  };
+
+  const enterManualPrimarySim = () => {
+    recommendationRequest.current += 1;
+    setSelectedPrimarySimId(null);
+    setSelectedSupportingIds([]);
+    setRecommendationState({ kind: "idle" });
+    setPrimarySimName("");
+    setPrimarySimSource("direct");
+    setSourceValue("");
+    setIsManualEntry(true);
+  };
+
+  const toggleSupportingApplication = (applicationId: string) => {
+    setSelectedSupportingIds((selected) =>
+      selected.includes(applicationId)
+        ? selected.filter((id) => id !== applicationId)
+        : [...selected, applicationId],
+    );
   };
 
   const selectProfile = async (profileId: string) => {
@@ -200,6 +323,14 @@ export function App({ bridge }: AppProps) {
         profile.primarySim.pathNeedsRepair =
           source.kind === "directExecutable" &&
           source.executablePath.length === 0;
+        if (discoveryState.kind === "ready") {
+          profile.supportingApplications =
+            discoveryState.snapshot.installedSupportingApplications
+              .filter((application) =>
+                selectedSupportingIds.includes(application.id),
+              )
+              .map(discoveredSupportingApplicationToProfile);
+        }
         nextSnapshot = await bridge.saveProfile({ profile });
       }
       setState({ kind: "ready", snapshot: nextSnapshot });
@@ -207,6 +338,11 @@ export function App({ bridge }: AppProps) {
       setProfileName("");
       setPrimarySimName("");
       setSourceValue("");
+      setDiscoveryState({ kind: "idle" });
+      setRecommendationState({ kind: "idle" });
+      setSelectedPrimarySimId(null);
+      setSelectedSupportingIds([]);
+      setIsManualEntry(false);
     } catch {
       setFormError(
         "The Racing Profile could not be created. Review the profile details and try again.",
@@ -599,13 +735,26 @@ export function App({ bridge }: AppProps) {
             primarySimName={primarySimName}
             primarySimSource={primarySimSource}
             sourceValue={sourceValue}
+            discoveryState={discoveryState}
+            recommendationState={recommendationState}
+            selectedPrimarySimId={selectedPrimarySimId}
+            selectedSupportingIds={selectedSupportingIds}
+            isManualEntry={isManualEntry}
             isSaving={isSaving}
             error={formError}
             onProfileNameChange={setProfileName}
             onPrimarySimNameChange={setPrimarySimName}
             onPrimarySimSourceChange={setPrimarySimSource}
             onSourceValueChange={setSourceValue}
-            onCancel={() => setView("dashboard")}
+            onSelectPrimarySim={selectDiscoveredPrimarySim}
+            onEnterManual={enterManualPrimarySim}
+            onToggleSupporting={toggleSupportingApplication}
+            onCancel={() => {
+              recommendationRequest.current += 1;
+              setDiscoveryState({ kind: "idle" });
+              setRecommendationState({ kind: "idle" });
+              setView("dashboard");
+            }}
             onSubmit={createProfile}
           />
         ) : view === "edit-profile" &&
@@ -976,17 +1125,96 @@ function ModalDialog({
   );
 }
 
+function launchSourceFromInstallation(
+  installation: DiscoveredInstallation,
+): LaunchSource {
+  return installation.kind === "steam"
+    ? { kind: "steam", appId: installation.appId }
+    : {
+        kind: "directExecutable",
+        executablePath: installation.executablePath,
+      };
+}
+
+function installationWorkingDirectory(
+  installation: DiscoveredInstallation,
+): string | null {
+  if (installation.kind === "steam") {
+    return installation.install_directory;
+  }
+
+  const lastSeparator = Math.max(
+    installation.executablePath.lastIndexOf("\\"),
+    installation.executablePath.lastIndexOf("/"),
+  );
+  return lastSeparator > 0
+    ? installation.executablePath.slice(0, lastSeparator)
+    : null;
+}
+
+function discoveredSupportingApplicationToProfile(
+  application: DiscoveredSupportingApplication,
+): SupportingApplication {
+  return {
+    application: {
+      id: crypto.randomUUID(),
+      name: application.name,
+      launchRecipe: {
+        source: launchSourceFromInstallation(application.installation),
+        arguments: [],
+        workingDirectory: installationWorkingDirectory(
+          application.installation,
+        ),
+        monitoredProcess: null,
+        consoleVisibility: "hidden",
+        elevated: false,
+        startupTimeoutSeconds: 30,
+        postStartDelayMilliseconds: 0,
+        shutdownStrategy: { kind: "closeWindows" },
+      },
+      pathNeedsRepair: false,
+    },
+    requirement: "optional",
+    keepRunning: false,
+  };
+}
+
+function installationSourceLabel(installation: DiscoveredInstallation): string {
+  return installation.kind === "steam" ? "Steam" : "Standalone";
+}
+
+function applicationIcon(
+  application: DiscoveredPrimarySim | DiscoveredSupportingApplication,
+) {
+  return application.icon.kind === "localData" ? (
+    <img
+      alt=""
+      src={`data:${application.icon.media_type};base64,${application.icon.data_base64}`}
+    />
+  ) : (
+    <FlagIcon />
+  );
+}
+
 interface ProfileWizardProps {
   profileName: string;
   primarySimName: string;
   primarySimSource: PrimarySimSource;
   sourceValue: string;
+  discoveryState: DiscoveryState;
+  recommendationState: RecommendationState;
+  selectedPrimarySimId: string | null;
+  selectedSupportingIds: string[];
+  isManualEntry: boolean;
   isSaving: boolean;
   error: string | null;
   onProfileNameChange(value: string): void;
   onPrimarySimNameChange(value: string): void;
   onPrimarySimSourceChange(value: PrimarySimSource): void;
   onSourceValueChange(value: string): void;
+  onSelectPrimarySim(primarySim: DiscoveredPrimarySim): void;
+  onEnterManual(): void;
+  onToggleSupporting(applicationId: string): void;
   onCancel(): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
 }
@@ -996,15 +1224,30 @@ function ProfileWizard({
   primarySimName,
   primarySimSource,
   sourceValue,
+  discoveryState,
+  recommendationState,
+  selectedPrimarySimId,
+  selectedSupportingIds,
+  isManualEntry,
   isSaving,
   error,
   onProfileNameChange,
   onPrimarySimNameChange,
   onPrimarySimSourceChange,
   onSourceValueChange,
+  onSelectPrimarySim,
+  onEnterManual,
+  onToggleSupporting,
   onCancel,
   onSubmit,
 }: ProfileWizardProps) {
+  const selectedSupportingApplications =
+    discoveryState.kind === "ready"
+      ? discoveryState.snapshot.installedSupportingApplications.filter(
+          (application) => selectedSupportingIds.includes(application.id),
+        )
+      : [];
+
   return (
     <>
       <header className="workspace-header wizard-header">
@@ -1046,62 +1289,277 @@ function ProfileWizard({
           <section className="wizard-step" aria-labelledby="sim-step-title">
             <span className="step-index">02</span>
             <div>
-              <h2 id="sim-step-title">Primary Sim</h2>
+              <h2 id="sim-step-title">Choose a Primary Sim</h2>
               <p>
-                The Primary Sim always launches after Supporting Applications.
+                Formation Lap found these Curated Catalog sims on this PC. The
+                Primary Sim always launches last.
               </p>
-              <div className="field-grid">
-                <label className="field">
-                  <span>Primary Sim name</span>
-                  <input
-                    required
-                    value={primarySimName}
-                    onChange={(event) =>
-                      onPrimarySimNameChange(event.currentTarget.value)
-                    }
-                    placeholder="Le Mans Ultimate"
-                  />
-                </label>
-                <label className="field">
-                  <span>Primary Sim source</span>
-                  <select
-                    value={primarySimSource}
-                    onChange={(event) =>
-                      onPrimarySimSourceChange(
-                        event.currentTarget.value as PrimarySimSource,
-                      )
-                    }
-                  >
-                    <option value="direct">Direct executable</option>
-                    <option value="steam">Steam</option>
-                  </select>
-                </label>
+
+              {discoveryState.kind === "loading" && (
+                <div className="discovery-status" role="status">
+                  <PulseIcon />
+                  <span>
+                    <strong>Checking known locations</strong>
+                    <small>
+                      Only targeted Steam and Windows locations are inspected.
+                    </small>
+                  </span>
+                </div>
+              )}
+
+              {discoveryState.kind === "error" && (
+                <div className="discovery-status discovery-status-warning">
+                  <FlagIcon />
+                  <span>
+                    <strong>Automatic discovery is unavailable</strong>
+                    <small>
+                      You can still configure the Primary Sim manually.
+                    </small>
+                  </span>
+                </div>
+              )}
+
+              {discoveryState.kind === "ready" &&
+                discoveryState.snapshot.installedPrimarySims.length > 0 && (
+                  <div className="sim-picker">
+                    {discoveryState.snapshot.installedPrimarySims.map(
+                      (primarySim) => {
+                        const isSelected =
+                          primarySim.id === selectedPrimarySimId;
+                        const sourceLabel = installationSourceLabel(
+                          primarySim.installation,
+                        );
+                        return (
+                          <button
+                            type="button"
+                            className="sim-choice"
+                            aria-label={`Use ${primarySim.name} (${sourceLabel})`}
+                            aria-pressed={isSelected}
+                            key={`${primarySim.id}:${sourceLabel}`}
+                            onClick={() => onSelectPrimarySim(primarySim)}
+                          >
+                            <span className="sim-choice-icon">
+                              {applicationIcon(primarySim)}
+                            </span>
+                            <span className="sim-choice-copy">
+                              <strong>{primarySim.name}</strong>
+                              <small>{sourceLabel}</small>
+                            </span>
+                            <span className="sim-choice-status">
+                              <CheckIcon />
+                              Installed
+                            </span>
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+                )}
+
+              {discoveryState.kind === "ready" &&
+                discoveryState.snapshot.installedPrimarySims.length === 0 && (
+                  <div className="discovery-status">
+                    <FlagIcon />
+                    <span>
+                      <strong>No Curated Catalog sim was found</strong>
+                      <small>
+                        Manual Entry keeps uncommon and custom installs
+                        available.
+                      </small>
+                    </span>
+                  </div>
+                )}
+
+              <div className="manual-entry-action">
+                <span>Not listed or using a custom executable?</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={onEnterManual}
+                >
+                  Enter a sim manually
+                </button>
               </div>
-              <label className="field">
-                <span>
-                  {primarySimSource === "steam"
-                    ? "Steam App ID"
-                    : "Executable path"}
-                </span>
-                <input
-                  inputMode={primarySimSource === "steam" ? "numeric" : "text"}
-                  value={sourceValue}
-                  onChange={(event) =>
-                    onSourceValueChange(event.currentTarget.value)
-                  }
-                  placeholder={
-                    primarySimSource === "steam"
-                      ? "2399420"
-                      : String.raw`C:\Games\Le Mans Ultimate\LMU.exe`
-                  }
-                />
-                <small>
-                  You can leave this blank and repair the path in the profile
-                  editor.
-                </small>
-              </label>
+
+              {isManualEntry && (
+                <div className="manual-entry-panel">
+                  <p className="eyebrow">Manual Entry</p>
+                  <div className="field-grid">
+                    <label className="field">
+                      <span>Primary Sim name</span>
+                      <input
+                        required
+                        value={primarySimName}
+                        onChange={(event) =>
+                          onPrimarySimNameChange(event.currentTarget.value)
+                        }
+                        placeholder="Le Mans Ultimate"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Primary Sim source</span>
+                      <select
+                        value={primarySimSource}
+                        onChange={(event) =>
+                          onPrimarySimSourceChange(
+                            event.currentTarget.value as PrimarySimSource,
+                          )
+                        }
+                      >
+                        <option value="direct">Direct executable</option>
+                        <option value="steam">Steam</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label className="field">
+                    <span>
+                      {primarySimSource === "steam"
+                        ? "Steam App ID"
+                        : "Executable path"}
+                    </span>
+                    <input
+                      aria-label={
+                        primarySimSource === "steam"
+                          ? "Steam App ID"
+                          : "Executable path"
+                      }
+                      inputMode={
+                        primarySimSource === "steam" ? "numeric" : "text"
+                      }
+                      value={sourceValue}
+                      onChange={(event) =>
+                        onSourceValueChange(event.currentTarget.value)
+                      }
+                      placeholder={
+                        primarySimSource === "steam"
+                          ? "2399420"
+                          : String.raw`C:\Games\Le Mans Ultimate\LMU.exe`
+                      }
+                    />
+                    <small>
+                      You can leave this blank and repair the path in the
+                      profile editor.
+                    </small>
+                  </label>
+                </div>
+              )}
+
+              {!isManualEntry && selectedPrimarySimId && (
+                <div className="selected-sim-summary" role="status">
+                  <CheckIcon />
+                  <span>
+                    <strong>{primarySimName} selected</strong>
+                    <small>
+                      {primarySimSource === "steam"
+                        ? `Steam App ID ${sourceValue}`
+                        : sourceValue}
+                    </small>
+                  </span>
+                </div>
+              )}
             </div>
           </section>
+
+          {!isManualEntry && selectedPrimarySimId && (
+            <section
+              className="wizard-step"
+              aria-labelledby="recommendations-step-title"
+            >
+              <span className="step-index">03</span>
+              <div>
+                <h2 id="recommendations-step-title">
+                  Add Supporting Applications
+                </h2>
+                <p>
+                  Installed recommendations are optional and launch before the
+                  Primary Sim.
+                </p>
+                <div
+                  className="recommendation-region"
+                  role="region"
+                  aria-label={`Recommended for ${primarySimName}`}
+                >
+                  {recommendationState.kind === "loading" && (
+                    <div className="recommendation-empty" role="status">
+                      <PulseIcon />
+                      <span>Ranking installed applications…</span>
+                    </div>
+                  )}
+                  {recommendationState.kind === "error" && (
+                    <div className="recommendation-empty">
+                      <FlagIcon />
+                      <span>Recommendations could not be loaded.</span>
+                    </div>
+                  )}
+                  {recommendationState.kind === "ready" &&
+                    recommendationState.recommendations.length === 0 && (
+                      <div className="recommendation-empty">
+                        <CheckIcon />
+                        <span>No installed recommendations to add.</span>
+                      </div>
+                    )}
+                  {recommendationState.kind === "ready" &&
+                    recommendationState.recommendations.length > 0 && (
+                      <div className="recommendation-list">
+                        {recommendationState.recommendations.map(
+                          (recommendation) => {
+                            const installedApplication =
+                              discoveryState.kind === "ready"
+                                ? discoveryState.snapshot.installedSupportingApplications.find(
+                                    (application) =>
+                                      application.id === recommendation.id,
+                                  )
+                                : undefined;
+                            const rankLabel =
+                              recommendation.rank === "recommended"
+                                ? "Recommended"
+                                : "Compatible";
+                            return (
+                              <label
+                                className="recommendation-row"
+                                key={recommendation.id}
+                              >
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Add ${recommendation.name}`}
+                                  checked={selectedSupportingIds.includes(
+                                    recommendation.id,
+                                  )}
+                                  onChange={() =>
+                                    onToggleSupporting(recommendation.id)
+                                  }
+                                />
+                                <span className="recommendation-icon">
+                                  {installedApplication ? (
+                                    applicationIcon(installedApplication)
+                                  ) : (
+                                    <FlagIcon />
+                                  )}
+                                </span>
+                                <span className="recommendation-copy">
+                                  <strong>{recommendation.name}</strong>
+                                  <small>
+                                    {recommendation.updateProvider?.kind ===
+                                    "githubReleases"
+                                      ? "Update notifications via GitHub Releases"
+                                      : "Detected on this PC"}
+                                  </small>
+                                </span>
+                                <span
+                                  className={`recommendation-rank recommendation-rank-${recommendation.rank}`}
+                                >
+                                  {rankLabel}
+                                </span>
+                              </label>
+                            );
+                          },
+                        )}
+                      </div>
+                    )}
+                </div>
+              </div>
+            </section>
+          )}
 
           {error && (
             <p className="form-error" role="alert">
@@ -1113,7 +1571,7 @@ function ProfileWizard({
             <button
               type="submit"
               className="primary-button"
-              disabled={isSaving}
+              disabled={isSaving || primarySimName.trim().length === 0}
             >
               {isSaving ? "Creating profile…" : "Create Racing Profile"}
             </button>
@@ -1122,20 +1580,34 @@ function ProfileWizard({
 
         <aside className="wizard-preview" aria-labelledby="preview-title">
           <div className="preview-heading">
-            <span className="step-index">03</span>
+            <span className="step-index">04</span>
             <div>
               <p className="eyebrow">Review</p>
               <h2 id="preview-title">Startup order</h2>
             </div>
           </div>
           <div className="order-preview">
-            <div className="order-empty">
-              <PlusIcon />
-              <span>
-                <strong>Supporting Applications</strong>
-                <small>Add and order them after creating the profile.</small>
-              </span>
-            </div>
+            {selectedSupportingApplications.length > 0 ? (
+              selectedSupportingApplications.map((application) => (
+                <div className="order-application-row" key={application.id}>
+                  <span className="application-icon">
+                    {applicationIcon(application)}
+                  </span>
+                  <span>
+                    <strong>{application.name}</strong>
+                    <small>Supporting Application</small>
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="order-empty">
+                <PlusIcon />
+                <span>
+                  <strong>Supporting Applications</strong>
+                  <small>Select installed recommendations to add them.</small>
+                </span>
+              </div>
+            )}
             <div className="order-divider" aria-hidden="true">
               <span />
               <small>Launches last</small>
@@ -1148,8 +1620,8 @@ function ProfileWizard({
                 <strong>{primarySimName || "Primary Sim"}</strong>
                 <small>
                   {primarySimSource === "steam"
-                    ? "Steam source"
-                    : "Direct executable"}
+                    ? "Steam"
+                    : "Standalone / Direct executable"}
                 </small>
               </span>
               <span className="locked-label">Locked</span>

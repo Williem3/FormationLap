@@ -6,6 +6,8 @@ import userEvent from "@testing-library/user-event";
 import type {
   ApplicationProcessSnapshot,
   AppSnapshot,
+  DiscoverySnapshot,
+  SupportingApplicationRecommendation,
 } from "../generated/bindings";
 
 function lifecycleSnapshot(): AppSnapshot {
@@ -249,7 +251,7 @@ describe("Formation Lap shell", () => {
     );
     await user.type(screen.getByLabelText("Profile name"), "Le Mans evening");
     await user.type(
-      screen.getByLabelText("Primary Sim name"),
+      await screen.findByLabelText("Primary Sim name"),
       "Le Mans Ultimate",
     );
     await user.click(
@@ -265,6 +267,225 @@ describe("Formation Lap shell", () => {
     expect(
       screen.getByRole("button", { name: /Le Mans evening/ }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("offers discovered curated sims, ranked recommendations, and Manual Entry", async () => {
+    const user = userEvent.setup();
+    const discovery: DiscoverySnapshot = {
+      primarySims: [
+        {
+          id: "le-mans-ultimate",
+          name: "Le Mans Ultimate",
+          steamAppId: 2399420,
+        },
+        {
+          id: "assetto-corsa",
+          name: "Assetto Corsa",
+          steamAppId: 244210,
+        },
+      ],
+      supportingApplications: [
+        { id: "lmuffb", name: "LMUFFB" },
+        { id: "simhub", name: "SimHub" },
+      ],
+      installedPrimarySims: [
+        {
+          id: "le-mans-ultimate",
+          name: "Le Mans Ultimate",
+          installation: {
+            kind: "steam",
+            appId: 2399420,
+            install_directory: String.raw`C:\Steam\Le Mans Ultimate`,
+          },
+          icon: { kind: "generic" },
+        },
+      ],
+      installedSupportingApplications: [
+        {
+          id: "lmuffb",
+          name: "LMUFFB",
+          installation: {
+            kind: "directExecutable",
+            executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
+          },
+          icon: { kind: "generic" },
+        },
+        {
+          id: "simhub",
+          name: "SimHub",
+          installation: {
+            kind: "directExecutable",
+            executablePath: String.raw`C:\Program Files (x86)\SimHub\SimHubWPF.exe`,
+          },
+          icon: { kind: "generic" },
+        },
+      ],
+    };
+    const recommendations: SupportingApplicationRecommendation[] = [
+      {
+        id: "lmuffb",
+        name: "LMUFFB",
+        rank: "recommended",
+        updateProvider: {
+          kind: "githubReleases",
+          repository: "coasting-nc/LMUFFB",
+        },
+      },
+      {
+        id: "simhub",
+        name: "SimHub",
+        rank: "compatible",
+        updateProvider: null,
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(
+      {
+        applicationName: "Formation Lap",
+        foundationStatus: "ready",
+        applicationProcesses: [],
+        profiles: [],
+        selectedProfile: null,
+      },
+      discovery,
+      { "le-mans-ultimate": recommendations },
+    );
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "New profile" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Choose a Primary Sim" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Use Le Mans Ultimate (Steam)",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText("Assetto Corsa")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Use Le Mans Ultimate (Steam)",
+      }),
+    );
+    const recommendationRegion = await screen.findByRole("region", {
+      name: "Recommended for Le Mans Ultimate",
+    });
+    expect(
+      within(recommendationRegion)
+        .getAllByRole("checkbox")
+        .map((checkbox) => checkbox.getAttribute("aria-label")),
+    ).toEqual(["Add LMUFFB", "Add SimHub"]);
+    expect(within(recommendationRegion).getByText("Recommended")).toBeVisible();
+    expect(within(recommendationRegion).getByText("Compatible")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Enter a sim manually" }),
+    );
+    expect(await screen.findByLabelText("Primary Sim name")).toBeVisible();
+    expect(screen.getByLabelText("Primary Sim source")).toHaveValue("direct");
+    expect(await screen.findByLabelText("Executable path")).toBeVisible();
+  });
+
+  it("creates a profile with selected discovered Supporting Applications", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(
+      {
+        applicationName: "Formation Lap",
+        foundationStatus: "ready",
+        applicationProcesses: [],
+        profiles: [],
+        selectedProfile: null,
+      },
+      {
+        primarySims: [
+          {
+            id: "le-mans-ultimate",
+            name: "Le Mans Ultimate",
+            steamAppId: 2399420,
+          },
+        ],
+        supportingApplications: [{ id: "lmuffb", name: "LMUFFB" }],
+        installedPrimarySims: [
+          {
+            id: "le-mans-ultimate",
+            name: "Le Mans Ultimate",
+            installation: {
+              kind: "steam",
+              appId: 2399420,
+              install_directory: String.raw`C:\Steam\Le Mans Ultimate`,
+            },
+            icon: { kind: "generic" },
+          },
+        ],
+        installedSupportingApplications: [
+          {
+            id: "lmuffb",
+            name: "LMUFFB",
+            installation: {
+              kind: "directExecutable",
+              executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
+            },
+            icon: { kind: "generic" },
+          },
+        ],
+      },
+      {
+        "le-mans-ultimate": [
+          {
+            id: "lmuffb",
+            name: "LMUFFB",
+            rank: "recommended",
+            updateProvider: {
+              kind: "githubReleases",
+              repository: "coasting-nc/LMUFFB",
+            },
+          },
+        ],
+      },
+    );
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "New profile" }),
+    );
+    await user.type(screen.getByLabelText("Profile name"), "LMU race");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Use Le Mans Ultimate (Steam)",
+      }),
+    );
+    await user.click(await screen.findByLabelText("Add LMUFFB"));
+    await user.click(
+      screen.getByRole("button", { name: "Create Racing Profile" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "LMU race" }),
+    ).toBeVisible();
+    const savedProfile = (await bridge.getAppSnapshot()).selectedProfile;
+    expect(savedProfile?.primarySim.launchRecipe.source).toEqual({
+      kind: "steam",
+      appId: 2399420,
+    });
+    expect(savedProfile?.supportingApplications).toMatchObject([
+      {
+        application: {
+          name: "LMUFFB",
+          launchRecipe: {
+            source: {
+              kind: "directExecutable",
+              executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
+            },
+            workingDirectory: String.raw`C:\Tools\LMUFFB`,
+          },
+          pathNeedsRepair: false,
+        },
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ]);
   });
 
   it("edits the selected Racing Profile through NativeBridge", async () => {

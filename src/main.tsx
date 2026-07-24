@@ -25,6 +25,10 @@ async function resolveNativeBridge(): Promise<NativeBridge> {
     const { createM3PreviewBridge } = await import("./preview/m3-preview");
     return createM3PreviewBridge();
   }
+  if (import.meta.env.DEV && preview === "m5-wizard") {
+    const { createM5PreviewBridge } = await import("./preview/m5-preview");
+    return createM5PreviewBridge();
+  }
 
   return new TauriNativeBridge();
 }

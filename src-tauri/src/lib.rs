@@ -19,13 +19,15 @@ pub use commands::{
 };
 pub use contracts::{
     AppSnapshot, ApplicationProcessSnapshot, ApplicationRequirement, CatalogPrimarySim,
-    CatalogSupportingApplication, CloseSessionSettings, ConsoleVisibility, DiscoverySnapshot,
-    LaunchRecipe, LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
-    ProfileApplication, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
-    VrLaunchMode,
+    CatalogSupportingApplication, CloseSessionSettings, ConsoleVisibility, DiscoveredInstallation,
+    DiscoveredPrimarySim, DiscoverySnapshot, LaunchRecipe, LaunchSource, ProcessIdentity,
+    ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication, ProfileSummary,
+    RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
-pub use discovery_catalog::{DiscoveryCatalogError, validate_catalog_documents};
+pub use discovery_catalog::{
+    DiscoveryCatalogError, TargetedDiscoverySources, validate_catalog_documents,
+};
 pub use process_runtime::{
     GracefulStopResult, ProcessObservation, ProcessResponsiveness, ProcessRuntime,
     ProcessRuntimeError, WindowsProcessRuntime,

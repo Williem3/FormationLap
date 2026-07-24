@@ -25,7 +25,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M3 evidence](evidence/M3.md) | Capture and review the M3 Dashboard status screenshot |
 | M4 | `not_started` | — | — | — | — | Wait for M3 |
-| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Discover curated sims across multiple targeted Steam libraries |
+| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Add targeted Windows installed-app, running-process, and known-location discovery |
 | M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
 | M7 | `not_started` | — | — | — | — | Wait for M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
@@ -71,7 +71,11 @@ M5 targeted Steam discovery slice:
   and this ledger.
 - Isolation: M3 owns only its pending Dashboard screenshot/evidence update; M5
   does not change M3 lifecycle policy or screenshot artifacts.
-- Next action: write the red multiple-Steam-library discovery fixture test.
+- Evidence: a real temporary filesystem fixture declares two Steam libraries,
+  discovers Assetto Corsa and Le Mans Ultimate from separate manifests, and
+  omits a stale Assetto Corsa Competizione manifest with no installation
+  directory.
+- Next action: write the red targeted Windows installed-app discovery test.
 
 Known environment facts:
 
@@ -137,6 +141,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M2 | Captured wizard/editor screenshots and fixed the 125% overflow by stacking profile layouts before their minimum columns exceed the workspace | [`M2 evidence`](evidence/M2.md): 125% red and green dimensions, 200% no-overflow dimensions, screenshots, formatting, lint, typecheck, ten React tests, production build, contracts, and capability audit passed | Confirm the five-control native Tab traversal in the visible wizard; then complete M2 and begin M3 |
 | 2026-07-23 | Codex `/root` | M2 | Completed every profile, persistence, recovery, UI, keyboard, and scaling exit criterion | [`M2 evidence`](evidence/M2.md); user confirmed native five-control Tab traversal; worktree and evidence links reviewed | No blocker; begin M3 with a red FormationLapCore launch test through ProcessRuntime |
 | 2026-07-23 | Codex `/root` | M3 | Delivered stable process identity, the complete local lifecycle policy, 11 real Windows fixture cases, five typed commands, Dashboard controls/status/output, and the VirtualDesktopSwitcher-compatible demonstration | [`M3 evidence`](evidence/M3.md): 45 Rust tests, 14 React tests, Rust fmt/Clippy, frontend verify/build, generated contracts, and zero-permission capability audit passed | Reload the already-open `?preview=m3-dashboard` tab so screenshot/scaling review can complete M3 |
+| 2026-07-23 | Codex `/root` | M5 | Added limited Steam discovery through FormationLapCore, following declared libraries and curated App IDs while omitting stale installations | [`M5 evidence`](evidence/M5.md): 50 Rust tests and all-target/all-feature Clippy passed; the real temporary fixture covers two libraries and a missing installation | No blocker; add targeted Windows installed-app, running-process, and known-location discovery |
 
 ## Handoff entry template
 

@@ -1,4 +1,4 @@
-use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError};
+use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
 use crate::{
     AppSnapshot, ApplicationProcessSnapshot, ProcessObservation, ProcessOwnership,
     ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
@@ -186,9 +186,32 @@ impl FormationLapCore {
         Self::open_with_runtime(storage_root, WindowsProcessRuntime::new())
     }
 
+    pub fn open_with_discovery_sources(
+        storage_root: impl AsRef<std::path::Path>,
+        sources: TargetedDiscoverySources,
+    ) -> Result<Self, CoreError> {
+        Self::open_with_runtime_and_discovery_sources(
+            storage_root,
+            WindowsProcessRuntime::new(),
+            sources,
+        )
+    }
+
     pub fn open_with_runtime(
         storage_root: impl AsRef<std::path::Path>,
         process_runtime: impl ProcessRuntime + 'static,
+    ) -> Result<Self, CoreError> {
+        Self::open_with_runtime_and_discovery_sources(
+            storage_root,
+            process_runtime,
+            TargetedDiscoverySources::default(),
+        )
+    }
+
+    fn open_with_runtime_and_discovery_sources(
+        storage_root: impl AsRef<std::path::Path>,
+        process_runtime: impl ProcessRuntime + 'static,
+        discovery_sources: TargetedDiscoverySources,
     ) -> Result<Self, CoreError> {
         let storage_root = storage_root.as_ref();
         Ok(Self {
@@ -199,7 +222,7 @@ impl FormationLapCore {
             failed_responsiveness_checks: BTreeMap::new(),
             application_recipes: BTreeMap::new(),
             pending_restarts: BTreeMap::new(),
-            discovery_catalog: DiscoveryCatalog::bundled()?,
+            discovery_catalog: DiscoveryCatalog::bundled_with_sources(discovery_sources)?,
         })
     }
 

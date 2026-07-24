@@ -238,6 +238,34 @@ pub struct CatalogSupportingApplication {
     pub name: String,
 }
 
+/// A locally verified way to launch one discovered application.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum DiscoveredInstallation {
+    DirectExecutable {
+        #[serde(rename = "executablePath")]
+        #[ts(rename = "executablePath")]
+        executable_path: String,
+    },
+    Steam {
+        #[serde(rename = "appId")]
+        #[ts(rename = "appId")]
+        app_id: u32,
+        install_directory: String,
+    },
+}
+
+/// One curated Primary Sim found at a targeted local source.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct DiscoveredPrimarySim {
+    pub id: String,
+    pub name: String,
+    pub installation: DiscoveredInstallation,
+}
+
 /// Curated and locally discovered applications available to profile flows.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -245,6 +273,8 @@ pub struct CatalogSupportingApplication {
 pub struct DiscoverySnapshot {
     pub primary_sims: Vec<CatalogPrimarySim>,
     pub supporting_applications: Vec<CatalogSupportingApplication>,
+    #[serde(default)]
+    pub installed_primary_sims: Vec<DiscoveredPrimarySim>,
 }
 
 /// Authoritative native state rendered by React.

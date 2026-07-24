@@ -1,4 +1,6 @@
-use formation_lap_lib::{AppCommand, CommandOutcome, FormationLapCore};
+use formation_lap_lib::{
+    AppCommand, CommandOutcome, DiscoveredInstallation, FormationLapCore, TargetedDiscoverySources,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -207,5 +209,94 @@ fn catalog_validator_rejects_duplicate_steam_app_ids_with_an_actionable_location
     assert_eq!(
         String::from_utf8(output.stderr).expect("validator error should be UTF-8"),
         "duplicate Steam App ID 266410 at sims[1].steamAppId; first declared at sims[0].steamAppId\n"
+    );
+}
+
+#[test]
+fn steam_discovery_follows_declared_libraries_and_omits_missing_installations() {
+    let storage = TempStorage::new();
+    let steam_root = storage.path().join("Steam");
+    let second_library = storage.path().join("Second Library");
+    let steamapps = steam_root.join("steamapps");
+    let second_steamapps = second_library.join("steamapps");
+    fs::create_dir_all(steamapps.join("common").join("assettocorsa"))
+        .expect("first Steam installation should be created");
+    fs::create_dir_all(second_steamapps.join("common").join("Le Mans Ultimate"))
+        .expect("second Steam installation should be created");
+    let escaped_steam_root = steam_root.to_string_lossy().replace('\\', "\\\\");
+    let escaped_second_library = second_library.to_string_lossy().replace('\\', "\\\\");
+    fs::write(
+        steamapps.join("libraryfolders.vdf"),
+        format!(
+            r#""libraryfolders"
+{{
+  "0"
+  {{
+    "path" "{escaped_steam_root}"
+  }}
+  "1"
+  {{
+    "path" "{escaped_second_library}"
+  }}
+}}"#
+        ),
+    )
+    .expect("Steam library declaration should be written");
+    fs::write(
+        steamapps.join("appmanifest_244210.acf"),
+        r#""AppState"
+{
+  "appid" "244210"
+  "installdir" "assettocorsa"
+}"#,
+    )
+    .expect("Assetto Corsa manifest should be written");
+    fs::write(
+        second_steamapps.join("appmanifest_2399420.acf"),
+        r#""AppState"
+{
+  "appid" "2399420"
+  "installdir" "Le Mans Ultimate"
+}"#,
+    )
+    .expect("Le Mans Ultimate manifest should be written");
+    fs::write(
+        second_steamapps.join("appmanifest_805550.acf"),
+        r#""AppState"
+{
+  "appid" "805550"
+  "installdir" "Missing ACC"
+}"#,
+    )
+    .expect("stale missing-installation manifest should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            steam_roots: vec![steam_root],
+        },
+    )
+    .expect("FormationLapCore should open with targeted Steam roots");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("targeted Steam discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    assert_eq!(
+        discovery
+            .installed_primary_sims
+            .iter()
+            .map(|sim| {
+                let app_id = match &sim.installation {
+                    DiscoveredInstallation::Steam { app_id, .. } => *app_id,
+                    other => panic!("expected Steam installation, got {other:?}"),
+                };
+                (sim.id.as_str(), app_id)
+            })
+            .collect::<Vec<_>>(),
+        vec![("assetto-corsa", 244210), ("le-mans-ultimate", 2399420)]
     );
 }

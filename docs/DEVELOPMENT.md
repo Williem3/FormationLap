@@ -54,6 +54,20 @@ tests use `InMemoryNativeBridge`.
 Do not hand-edit `src/generated/bindings.ts`. Do not import Tauri APIs outside
 the production NativeBridge adapter.
 
+## M2 visual evidence
+
+The Vite development server exposes two development-only NativeBridge previews
+for repeatable visual checks. Production builds remove this branch and always
+use `TauriNativeBridge`.
+
+| URL | State |
+| --- | --- |
+| `http://127.0.0.1:1420/?preview=m2-wizard` | Empty library ready for the first-profile wizard |
+| `http://127.0.0.1:1420/?preview=m2-editor` | Complete sample profile ready to open in the editor |
+
+Start `pnpm.cmd dev`, then use these previews for keyboard navigation,
+125–200% scaling checks, and the required M2 screenshots.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on Windows with immutable action SHAs and no

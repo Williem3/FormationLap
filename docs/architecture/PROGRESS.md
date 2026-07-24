@@ -81,7 +81,10 @@ Known environment facts:
 
 ## Blockers
 
-None.
+- M2 visual evidence is pending a fresh browser tab opened at the documented
+  development-only preview. The automated in-app tab entered a browser-owned
+  connection-error page before the local server was available and its security
+  policy correctly prevents programmatic navigation away from that page.
 
 ## M1 evidence
 

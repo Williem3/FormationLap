@@ -8,6 +8,34 @@ pub(crate) fn running_executable_paths() -> Vec<std::path::PathBuf> {
     windows_adapter::running_executable_paths()
 }
 
+#[cfg(windows)]
+pub(crate) fn process_identity_for_pid(pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
+    windows_adapter::process_identity(pid)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn process_identity_for_pid(_pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
+    Err(ProcessRuntimeError::new(
+        "stable Process identity requires Windows",
+    ))
+}
+
+#[cfg(windows)]
+pub(crate) fn launch_without_output_capture(
+    recipe: &LaunchRecipe,
+) -> Result<ProcessIdentity, ProcessRuntimeError> {
+    windows_adapter::launch_direct(recipe, false).map(|launched| launched.identity)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn launch_without_output_capture(
+    _recipe: &LaunchRecipe,
+) -> Result<ProcessIdentity, ProcessRuntimeError> {
+    Err(ProcessRuntimeError::new(
+        "elevated process launch requires Windows",
+    ))
+}
+
 #[cfg(not(windows))]
 pub(crate) fn running_executable_paths() -> Vec<std::path::PathBuf> {
     Vec::new()
@@ -269,8 +297,8 @@ mod windows_adapter {
     };
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, FILETIME, HANDLE, HWND, INVALID_HANDLE_VALUE, LPARAM, WAIT_OBJECT_0,
-            WAIT_TIMEOUT,
+            CloseHandle, FILETIME, HANDLE, HWND, INVALID_HANDLE_VALUE, LPARAM, SetLastError,
+            WAIT_OBJECT_0, WAIT_TIMEOUT,
         },
         System::{
             Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent},
@@ -438,7 +466,7 @@ mod windows_adapter {
             .to_string()
     }
 
-    fn process_identity(pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
+    pub(super) fn process_identity(pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
         let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
         if handle.is_null() {
             return Err(runtime_error(
@@ -546,6 +574,9 @@ mod windows_adapter {
             has_window: false,
             has_hung_window: false,
         };
+        unsafe {
+            SetLastError(0);
+        }
         if unsafe {
             EnumWindows(
                 Some(observe_window),
@@ -553,10 +584,13 @@ mod windows_adapter {
             )
         } == 0
         {
-            return Err(runtime_error(
-                "process windows could not be observed",
-                io::Error::last_os_error(),
-            ));
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(0) {
+                return Err(runtime_error(
+                    "process windows could not be observed",
+                    error,
+                ));
+            }
         }
 
         Ok(if observation.has_hung_window {
@@ -652,7 +686,10 @@ mod windows_adapter {
         executable_paths
     }
 
-    fn launch_direct(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
+    pub(super) fn launch_direct(
+        recipe: &LaunchRecipe,
+        capture_output: bool,
+    ) -> Result<LaunchedProcess, ProcessRuntimeError> {
         if recipe.elevated {
             return Err(ProcessRuntimeError::new(
                 "elevated launch requires the one-shot helper",
@@ -687,9 +724,12 @@ mod windows_adapter {
             .current_dir(working_directory)
             .creation_flags(creation_flags)
             .stdin(Stdio::null());
-        let capture_output = recipe.console_visibility == ConsoleVisibility::Hidden;
+        let capture_output =
+            capture_output && recipe.console_visibility == ConsoleVisibility::Hidden;
         if capture_output {
             command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        } else if recipe.console_visibility == ConsoleVisibility::Hidden {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
         } else {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
         }
@@ -789,7 +829,7 @@ mod windows_adapter {
 
     pub(super) fn launch(recipe: &LaunchRecipe) -> Result<LaunchedProcess, ProcessRuntimeError> {
         match recipe.source {
-            LaunchSource::DirectExecutable { .. } => launch_direct(recipe),
+            LaunchSource::DirectExecutable { .. } => launch_direct(recipe, true),
             LaunchSource::Steam { .. } => launch_steam(recipe),
         }
     }

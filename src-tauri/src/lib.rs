@@ -7,6 +7,8 @@ mod core;
 mod discovery_catalog;
 mod game_launch_diagnostics;
 mod launch_recipe;
+mod privilege_broker;
+mod privilege_protocol;
 mod process_runtime;
 mod profile_library;
 mod session_journal;
@@ -38,6 +40,17 @@ pub use discovery_catalog::{
     DiscoveryCatalogError, TargetedDiscoverySources, WindowsInstalledApplication,
     WindowsKnownLocation, WindowsKnownLocationRoot, WindowsRunningProcess,
     validate_catalog_documents,
+};
+pub use privilege_broker::{
+    DevelopmentPrivilegeBroker, PrivilegeBroker, PrivilegeBrokerError, WindowsPrivilegeBroker,
+    run_elevated_helper,
+};
+pub use privilege_protocol::{
+    ELEVATED_HELPER_PROTOCOL_VERSION, ElevatedHelperRequest, ElevatedHelperResponse,
+    ElevatedOperation, ElevatedOperationResult, ElevatedRequestValidator, HelperProtocolError,
+    HelperValidationContext, MAX_ELEVATED_ARGUMENT_BYTES, MAX_ELEVATED_ARGUMENTS,
+    MAX_ELEVATED_OPERATIONS, MAX_HELPER_MESSAGE_BYTES, decode_helper_request,
+    encode_helper_message,
 };
 pub use process_runtime::{
     GracefulStopResult, ProcessObservation, ProcessResponsiveness, ProcessRuntime,
@@ -116,5 +129,13 @@ mod tests {
         let bundled = Url::parse("http://tauri.localhost").expect("valid test URL");
 
         assert!(navigation_is_allowed(&bundled));
+    }
+
+    #[test]
+    fn main_application_manifest_explicitly_remains_non_administrative() {
+        let manifest = include_str!("../windows-app-manifest.xml");
+
+        assert!(manifest.contains(r#"requestedExecutionLevel level="asInvoker""#));
+        assert!(!manifest.contains("requireAdministrator"));
     }
 }

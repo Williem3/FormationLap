@@ -1,9 +1,11 @@
 use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
 use crate::game_launch_diagnostics::GameLaunchDiagnostics;
 use crate::{
-    AppSnapshot, ApplicationProcessSnapshot, ProcessObservation, ProcessOwnership,
-    ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
-    RacingProfile, SettingsStore, WindowsProcessRuntime, session_journal::SessionJournal,
+    AppSnapshot, ApplicationProcessSnapshot, DevelopmentPrivilegeBroker, ElevatedOperation,
+    ElevatedOperationResult, PrivilegeBroker, PrivilegeBrokerError, ProcessIdentity,
+    ProcessObservation, ProcessOwnership, ProcessResponsiveness, ProcessRuntime,
+    ProcessRuntimeError, ProcessStatus, ProfileLibrary, RacingProfile, SettingsStore,
+    WindowsPrivilegeBroker, WindowsProcessRuntime, session_journal::SessionJournal,
 };
 use std::{
     collections::BTreeMap,
@@ -148,6 +150,7 @@ pub enum CoreError {
     ProfileNotFound(String),
     ApplicationNotFound(String),
     ProcessRuntime(ProcessRuntimeError),
+    PrivilegeBroker(PrivilegeBrokerError),
     DiscoveryCatalog(DiscoveryCatalogError),
     InvalidSessionTransition {
         current: crate::SessionState,
@@ -187,6 +190,9 @@ impl fmt::Display for CoreError {
                 write!(formatter, "application {application_id} was not found")
             }
             Self::ProcessRuntime(error) => write!(formatter, "process runtime failed: {error}"),
+            Self::PrivilegeBroker(error) => {
+                write!(formatter, "privileged operation failed: {error}")
+            }
             Self::DiscoveryCatalog(error) => write!(formatter, "catalog discovery failed: {error}"),
             Self::InvalidSessionTransition { current, command } => {
                 write!(
@@ -233,6 +239,7 @@ impl Error for CoreError {
             | Self::UnsupportedSettingsSchema(_)
             | Self::UnsupportedSessionJournalSchema(_) => None,
             Self::ProcessRuntime(error) => Some(error),
+            Self::PrivilegeBroker(error) => Some(error),
             Self::DiscoveryCatalog(error) => Some(error),
         }
     }
@@ -256,6 +263,12 @@ impl From<ProcessRuntimeError> for CoreError {
     }
 }
 
+impl From<PrivilegeBrokerError> for CoreError {
+    fn from(error: PrivilegeBrokerError) -> Self {
+        Self::PrivilegeBroker(error)
+    }
+}
+
 impl From<DiscoveryCatalogError> for CoreError {
     fn from(error: DiscoveryCatalogError) -> Self {
         Self::DiscoveryCatalog(error)
@@ -267,10 +280,12 @@ pub struct FormationLapCore {
     profile_library: ProfileLibrary,
     settings_store: SettingsStore,
     process_runtime: Box<dyn ProcessRuntime>,
+    privilege_broker: Box<dyn PrivilegeBroker>,
     application_processes: BTreeMap<String, ApplicationProcessSnapshot>,
     failed_responsiveness_checks: BTreeMap<String, u8>,
     application_recipes: BTreeMap<String, crate::LaunchRecipe>,
     pending_restarts: BTreeMap<String, crate::LaunchRecipe>,
+    prepared_elevated_launches: BTreeMap<String, PreparedElevatedLaunch>,
     startup_started_at: BTreeMap<String, Instant>,
     post_start_ready_at: BTreeMap<String, Instant>,
     session_events: Vec<crate::SessionEvent>,
@@ -280,11 +295,19 @@ pub struct FormationLapCore {
     session: crate::SessionSnapshot,
 }
 
+#[derive(Clone)]
+enum PreparedElevatedLaunch {
+    SessionOwned(ProcessIdentity),
+    PreExisting(ProcessIdentity),
+    Failed(String),
+}
+
 impl FormationLapCore {
     pub fn open(storage_root: impl AsRef<std::path::Path>) -> Result<Self, CoreError> {
         Self::open_with_runtime_and_discovery_sources(
             storage_root,
             WindowsProcessRuntime::new(),
+            WindowsPrivilegeBroker::new()?,
             TargetedDiscoverySources::windows_defaults(),
         )
     }
@@ -296,6 +319,7 @@ impl FormationLapCore {
         Self::open_with_runtime_and_discovery_sources(
             storage_root,
             WindowsProcessRuntime::new(),
+            WindowsPrivilegeBroker::new()?,
             sources,
         )
     }
@@ -307,6 +331,20 @@ impl FormationLapCore {
         Self::open_with_runtime_and_discovery_sources(
             storage_root,
             process_runtime,
+            DevelopmentPrivilegeBroker::default(),
+            TargetedDiscoverySources::default(),
+        )
+    }
+
+    pub fn open_with_runtime_and_privilege_broker(
+        storage_root: impl AsRef<std::path::Path>,
+        process_runtime: impl ProcessRuntime + 'static,
+        privilege_broker: impl PrivilegeBroker + 'static,
+    ) -> Result<Self, CoreError> {
+        Self::open_with_runtime_and_discovery_sources(
+            storage_root,
+            process_runtime,
+            privilege_broker,
             TargetedDiscoverySources::default(),
         )
     }
@@ -314,6 +352,7 @@ impl FormationLapCore {
     fn open_with_runtime_and_discovery_sources(
         storage_root: impl AsRef<std::path::Path>,
         mut process_runtime: impl ProcessRuntime + 'static,
+        privilege_broker: impl PrivilegeBroker + 'static,
         discovery_sources: TargetedDiscoverySources,
     ) -> Result<Self, CoreError> {
         let storage_root = storage_root.as_ref();
@@ -376,10 +415,12 @@ impl FormationLapCore {
             profile_library,
             settings_store: SettingsStore::open(storage_root)?,
             process_runtime: Box::new(process_runtime),
+            privilege_broker: Box::new(privilege_broker),
             application_processes,
             failed_responsiveness_checks: BTreeMap::new(),
             application_recipes,
             pending_restarts: BTreeMap::new(),
+            prepared_elevated_launches: BTreeMap::new(),
             startup_started_at: BTreeMap::new(),
             post_start_ready_at: BTreeMap::new(),
             session_events: Vec::new(),
@@ -511,21 +552,16 @@ impl FormationLapCore {
                 let strategy = self
                     .application_recipes
                     .get(&application_id)
-                    .map(|recipe| &recipe.shutdown_strategy)
+                    .map(|recipe| (recipe.shutdown_strategy.clone(), recipe.elevated))
                     .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                let graceful = self
-                    .process_runtime
-                    .request_graceful_stop(&identity, strategy)?;
+                let (graceful, exited) =
+                    self.request_graceful_stop(&identity, &strategy.0, strategy.1)?;
                 self.application_processes
                     .get_mut(&application_id)
                     .expect("application Process should remain present")
                     .status = ProcessStatus::Stopping;
 
-                if graceful == crate::GracefulStopResult::Requested
-                    && self
-                        .process_runtime
-                        .wait_for_exit(&identity, Duration::from_secs(5))?
-                {
+                if graceful == crate::GracefulStopResult::Requested && exited {
                     let process = self
                         .application_processes
                         .get_mut(&application_id)
@@ -563,7 +599,11 @@ impl FormationLapCore {
                 let Some(identity) = process.identity else {
                     return Ok(CommandOutcome::ApplicationStopped { application_id });
                 };
-                self.process_runtime.force_stop(&identity)?;
+                let elevated = self
+                    .application_recipes
+                    .get(&application_id)
+                    .is_some_and(|recipe| recipe.elevated);
+                self.force_stop_process(&identity, elevated)?;
                 let process = self
                     .application_processes
                     .get_mut(&application_id)
@@ -624,19 +664,17 @@ impl FormationLapCore {
                         CommandOutcome::ApplicationRestarted { application_id }
                     });
                 };
-                let graceful = self
-                    .process_runtime
-                    .request_graceful_stop(&identity, &recipe.shutdown_strategy)?;
+                let (graceful, exited) = self.request_graceful_stop(
+                    &identity,
+                    &recipe.shutdown_strategy,
+                    recipe.elevated,
+                )?;
                 self.application_processes
                     .get_mut(&application_id)
                     .expect("application Process should remain present")
                     .status = ProcessStatus::Stopping;
 
-                if graceful == crate::GracefulStopResult::Requested
-                    && self
-                        .process_runtime
-                        .wait_for_exit(&identity, Duration::from_secs(5))?
-                {
+                if graceful == crate::GracefulStopResult::Requested && exited {
                     let ownership = self.launch_or_adopt(&application_id, recipe)?;
                     Ok(if ownership == ProcessOwnership::PreExisting {
                         CommandOutcome::ApplicationAlreadyRunning { application_id }
@@ -679,6 +717,7 @@ impl FormationLapCore {
                 });
 
                 let ordered_applications = self.ordered_session_applications(&profile)?;
+                self.prepare_elevated_session_launches(&ordered_applications)?;
                 self.session = crate::SessionSnapshot {
                     state: crate::SessionState::Starting,
                     active_profile_id: Some(profile_id.clone()),
@@ -992,19 +1031,56 @@ impl FormationLapCore {
         application_id: &str,
         launch_recipe: crate::LaunchRecipe,
     ) -> Result<ProcessOwnership, CoreError> {
-        let matches = self.process_runtime.matching_processes(&launch_recipe)?;
-        let (status, ownership, identity) = if let Some(identity) = matches.into_iter().next() {
-            (
-                ProcessStatus::RunningPreExisting,
-                ProcessOwnership::PreExisting,
-                identity,
-            )
+        let (status, ownership, identity) = if launch_recipe.elevated {
+            if let Some(prepared) = self.prepared_elevated_launches.remove(application_id) {
+                match prepared {
+                    PreparedElevatedLaunch::SessionOwned(identity) => (
+                        ProcessStatus::Starting,
+                        ProcessOwnership::SessionOwned,
+                        identity,
+                    ),
+                    PreparedElevatedLaunch::PreExisting(identity) => (
+                        ProcessStatus::RunningPreExisting,
+                        ProcessOwnership::PreExisting,
+                        identity,
+                    ),
+                    PreparedElevatedLaunch::Failed(message) => {
+                        return Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                            message,
+                        )));
+                    }
+                }
+            } else {
+                let matches = self.process_runtime.matching_processes(&launch_recipe)?;
+                if let Some(identity) = matches.into_iter().next() {
+                    (
+                        ProcessStatus::RunningPreExisting,
+                        ProcessOwnership::PreExisting,
+                        identity,
+                    )
+                } else {
+                    (
+                        ProcessStatus::Starting,
+                        ProcessOwnership::SessionOwned,
+                        self.execute_elevated_launch(&launch_recipe)?,
+                    )
+                }
+            }
         } else {
-            (
-                ProcessStatus::Starting,
-                ProcessOwnership::SessionOwned,
-                self.process_runtime.launch(&launch_recipe)?,
-            )
+            let matches = self.process_runtime.matching_processes(&launch_recipe)?;
+            if let Some(identity) = matches.into_iter().next() {
+                (
+                    ProcessStatus::RunningPreExisting,
+                    ProcessOwnership::PreExisting,
+                    identity,
+                )
+            } else {
+                (
+                    ProcessStatus::Starting,
+                    ProcessOwnership::SessionOwned,
+                    self.process_runtime.launch(&launch_recipe)?,
+                )
+            }
         };
         self.application_processes.insert(
             application_id.to_owned(),
@@ -1027,6 +1103,155 @@ impl FormationLapCore {
         }
 
         Ok(ownership)
+    }
+
+    fn prepare_elevated_session_launches(
+        &mut self,
+        applications: &[crate::ProfileApplication],
+    ) -> Result<(), CoreError> {
+        self.prepared_elevated_launches.clear();
+        let mut application_ids = Vec::new();
+        let mut operations = Vec::new();
+        for application in applications
+            .iter()
+            .filter(|application| application.launch_recipe.elevated)
+        {
+            self.application_recipes
+                .insert(application.id.clone(), application.launch_recipe.clone());
+            if let Some(identity) = self
+                .process_runtime
+                .matching_processes(&application.launch_recipe)?
+                .into_iter()
+                .next()
+            {
+                self.prepared_elevated_launches.insert(
+                    application.id.clone(),
+                    PreparedElevatedLaunch::PreExisting(identity),
+                );
+                continue;
+            }
+            application_ids.push(application.id.clone());
+            operations.push(elevated_launch_operation(&application.launch_recipe)?);
+        }
+        if operations.is_empty() {
+            return Ok(());
+        }
+
+        let response = self.privilege_broker.execute(&operations)?;
+        if !response.accepted {
+            return Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                response
+                    .error
+                    .unwrap_or_else(|| "elevated helper rejected the launch batch".to_owned()),
+            )));
+        }
+        if response.results.len() != application_ids.len() {
+            return Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                "elevated launch batch returned the wrong number of results",
+            )));
+        }
+        for (application_id, result) in application_ids.into_iter().zip(response.results) {
+            let prepared = match result {
+                ElevatedOperationResult::Launched { process_identity } => {
+                    PreparedElevatedLaunch::SessionOwned(process_identity)
+                }
+                ElevatedOperationResult::Failed { message } => {
+                    PreparedElevatedLaunch::Failed(message)
+                }
+                _ => PreparedElevatedLaunch::Failed(
+                    "elevated launch returned an unexpected result".to_owned(),
+                ),
+            };
+            self.prepared_elevated_launches
+                .insert(application_id, prepared);
+        }
+        Ok(())
+    }
+
+    fn execute_elevated_launch(
+        &mut self,
+        recipe: &crate::LaunchRecipe,
+    ) -> Result<ProcessIdentity, CoreError> {
+        let response = self
+            .privilege_broker
+            .execute(&[elevated_launch_operation(recipe)?])?;
+        match response.results.into_iter().next() {
+            Some(ElevatedOperationResult::Launched { process_identity }) => Ok(process_identity),
+            Some(ElevatedOperationResult::Failed { message }) => Err(CoreError::PrivilegeBroker(
+                PrivilegeBrokerError::new(message),
+            )),
+            _ => Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                "elevated launch returned an unexpected result",
+            ))),
+        }
+    }
+
+    fn request_graceful_stop(
+        &mut self,
+        identity: &ProcessIdentity,
+        strategy: &crate::ShutdownStrategy,
+        elevated: bool,
+    ) -> Result<(crate::GracefulStopResult, bool), CoreError> {
+        if !elevated {
+            let requested = self
+                .process_runtime
+                .request_graceful_stop(identity, strategy)?;
+            let exited = requested == crate::GracefulStopResult::Requested
+                && self
+                    .process_runtime
+                    .wait_for_exit(identity, Duration::from_secs(5))?;
+            return Ok((requested, exited));
+        }
+
+        let response = self
+            .privilege_broker
+            .execute(&[ElevatedOperation::GracefulStop {
+                process_identity: identity.clone(),
+                strategy: strategy.clone(),
+            }])?;
+        match response.results.into_iter().next() {
+            Some(ElevatedOperationResult::GracefulStopRequested { requested, exited }) => Ok((
+                if requested {
+                    crate::GracefulStopResult::Requested
+                } else {
+                    crate::GracefulStopResult::Unavailable
+                },
+                exited,
+            )),
+            Some(ElevatedOperationResult::Failed { message }) => Err(CoreError::PrivilegeBroker(
+                PrivilegeBrokerError::new(message),
+            )),
+            _ => Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                "elevated close returned an unexpected result",
+            ))),
+        }
+    }
+
+    fn force_stop_process(
+        &mut self,
+        identity: &ProcessIdentity,
+        elevated: bool,
+    ) -> Result<(), CoreError> {
+        if !elevated {
+            return self
+                .process_runtime
+                .force_stop(identity)
+                .map_err(Into::into);
+        }
+        let response = self
+            .privilege_broker
+            .execute(&[ElevatedOperation::ForceTerminate {
+                process_identity: identity.clone(),
+            }])?;
+        match response.results.into_iter().next() {
+            Some(ElevatedOperationResult::ForceTerminated) => Ok(()),
+            Some(ElevatedOperationResult::Failed { message }) => Err(CoreError::PrivilegeBroker(
+                PrivilegeBrokerError::new(message),
+            )),
+            _ => Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                "elevated termination returned an unexpected result",
+            ))),
+        }
     }
 
     fn ensure_active_profile_is_editable(&self, profile_id: &str) -> Result<(), CoreError> {
@@ -1104,6 +1329,7 @@ impl FormationLapCore {
             });
         self.session.state = crate::SessionState::Idle;
         self.session.active_profile_id = None;
+        self.prepared_elevated_launches.clear();
     }
 
     fn abort_session_startup(&mut self) -> Result<(), CoreError> {
@@ -1331,19 +1557,14 @@ impl FormationLapCore {
             let Some(identity) = process.identity else {
                 continue;
             };
-            let strategy = self
+            let recipe = self
                 .application_recipes
                 .get(&application_id)
-                .map(|recipe| recipe.shutdown_strategy.clone())
+                .cloned()
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-            let graceful = self
-                .process_runtime
-                .request_graceful_stop(&identity, &strategy)?;
-            if graceful == crate::GracefulStopResult::Requested
-                && self
-                    .process_runtime
-                    .wait_for_exit(&identity, Duration::from_secs(5))?
-            {
+            let (graceful, exited) =
+                self.request_graceful_stop(&identity, &recipe.shutdown_strategy, recipe.elevated)?;
+            if graceful == crate::GracefulStopResult::Requested && exited {
                 let process = self
                     .application_processes
                     .get_mut(&application_id)
@@ -1372,6 +1593,10 @@ impl FormationLapCore {
             return Ok(());
         }
 
+        if !self.cleanup_elevated_session_processes()? {
+            return Ok(());
+        }
+
         for index in (0..self.session.applications.len()).rev() {
             let application_id = self.session.applications[index].application_id.clone();
             let Some(process) = self.application_processes.get(&application_id).cloned() else {
@@ -1388,19 +1613,17 @@ impl FormationLapCore {
                             crate::SessionApplicationState::Stopped;
                         continue;
                     };
-                    let strategy = self
+                    let recipe = self
                         .application_recipes
                         .get(&application_id)
-                        .map(|recipe| recipe.shutdown_strategy.clone())
+                        .cloned()
                         .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                    let graceful = self
-                        .process_runtime
-                        .request_graceful_stop(&identity, &strategy)?;
-                    if graceful == crate::GracefulStopResult::Requested
-                        && self
-                            .process_runtime
-                            .wait_for_exit(&identity, Duration::from_secs(5))?
-                    {
+                    let (graceful, exited) = self.request_graceful_stop(
+                        &identity,
+                        &recipe.shutdown_strategy,
+                        recipe.elevated,
+                    )?;
+                    if graceful == crate::GracefulStopResult::Requested && exited {
                         let process = self
                             .application_processes
                             .get_mut(&application_id)
@@ -1428,4 +1651,150 @@ impl FormationLapCore {
         self.finish_session();
         Ok(())
     }
+
+    fn cleanup_elevated_session_processes(&mut self) -> Result<bool, CoreError> {
+        let mut operation_targets = Vec::new();
+        let mut detached_or_failed = Vec::new();
+        for application in self.session.applications.iter().rev() {
+            let application_id = &application.application_id;
+            let recipe = self.application_recipes.get(application_id);
+            if !recipe.is_some_and(|recipe| recipe.elevated) {
+                continue;
+            }
+            if let Some(process) = self.application_processes.get(application_id)
+                && process.ownership == Some(ProcessOwnership::SessionOwned)
+                && let Some(identity) = process.identity.clone()
+            {
+                operation_targets.push((application_id.clone(), identity));
+                continue;
+            }
+            match self.prepared_elevated_launches.get(application_id) {
+                Some(PreparedElevatedLaunch::SessionOwned(identity)) => {
+                    operation_targets.push((application_id.clone(), identity.clone()));
+                }
+                Some(PreparedElevatedLaunch::PreExisting(_)) => {
+                    detached_or_failed.push((
+                        application_id.clone(),
+                        crate::SessionApplicationState::Detached,
+                    ));
+                }
+                Some(PreparedElevatedLaunch::Failed(_)) => {
+                    detached_or_failed.push((
+                        application_id.clone(),
+                        crate::SessionApplicationState::Failed,
+                    ));
+                }
+                None => {}
+            }
+        }
+
+        for (application_id, state) in detached_or_failed {
+            self.prepared_elevated_launches.remove(&application_id);
+            if let Some(application) = self
+                .session
+                .applications
+                .iter_mut()
+                .find(|application| application.application_id == application_id)
+            {
+                application.state = state;
+            }
+        }
+        if operation_targets.is_empty() {
+            return Ok(true);
+        }
+
+        let operations = operation_targets
+            .iter()
+            .map(|(application_id, identity)| {
+                let strategy = self
+                    .application_recipes
+                    .get(application_id)
+                    .map(|recipe| recipe.shutdown_strategy.clone())
+                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
+                Ok(ElevatedOperation::GracefulStop {
+                    process_identity: identity.clone(),
+                    strategy,
+                })
+            })
+            .collect::<Result<Vec<_>, CoreError>>()?;
+        let response = self.privilege_broker.execute(&operations)?;
+        if response.results.len() != operation_targets.len() {
+            return Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
+                "elevated cancellation returned the wrong number of results",
+            )));
+        }
+
+        let mut all_stopped = true;
+        for ((application_id, identity), result) in
+            operation_targets.into_iter().zip(response.results)
+        {
+            let stopped = matches!(
+                result,
+                ElevatedOperationResult::GracefulStopRequested {
+                    requested: true,
+                    exited: true,
+                }
+            );
+            self.prepared_elevated_launches.remove(&application_id);
+            let session_application = self
+                .session
+                .applications
+                .iter_mut()
+                .find(|application| application.application_id == application_id)
+                .expect("an elevated cleanup target should remain in the Session");
+            if stopped {
+                if let Some(process) = self.application_processes.get_mut(&application_id) {
+                    process.status = ProcessStatus::Stopped;
+                    process.ownership = None;
+                    process.identity = None;
+                }
+                session_application.state = crate::SessionApplicationState::Stopped;
+                self.failed_responsiveness_checks.remove(&application_id);
+            } else {
+                self.application_processes.insert(
+                    application_id.clone(),
+                    ApplicationProcessSnapshot {
+                        application_id: application_id.clone(),
+                        status: ProcessStatus::Stopping,
+                        ownership: Some(ProcessOwnership::SessionOwned),
+                        identity: Some(identity),
+                        output: None,
+                    },
+                );
+                session_application.state = crate::SessionApplicationState::Stopping;
+                all_stopped = false;
+            }
+        }
+        Ok(all_stopped)
+    }
+}
+
+fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOperation, CoreError> {
+    let crate::LaunchSource::DirectExecutable { executable_path } = &recipe.source else {
+        return Err(CoreError::InvalidLaunchRecipe(
+            "Steam launches cannot request elevation".to_owned(),
+        ));
+    };
+    let executable_path = crate::privilege_protocol::canonical_executable_path(executable_path)
+        .map_err(|error| CoreError::InvalidLaunchRecipe(error.to_string()))?;
+    let working_directory = recipe
+        .working_directory
+        .as_deref()
+        .map(std::path::Path::new)
+        .map(std::path::Path::canonicalize)
+        .transpose()
+        .map_err(|error| {
+            CoreError::InvalidLaunchRecipe(format!(
+                "elevated working directory is not accessible: {error}"
+            ))
+        })?
+        .map(|path| path.to_string_lossy().into_owned());
+    Ok(ElevatedOperation::Launch {
+        executable_path,
+        arguments: recipe.arguments.clone(),
+        working_directory,
+        monitored_process: recipe.monitored_process.clone(),
+        console_visibility: recipe.console_visibility.clone(),
+        startup_timeout_seconds: recipe.startup_timeout_seconds,
+    })
 }

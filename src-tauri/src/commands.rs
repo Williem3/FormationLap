@@ -129,6 +129,11 @@ impl From<CoreError> for CommandError {
                 error.to_string(),
                 Some("Check the application path and try again."),
             ),
+            CoreError::PrivilegeBroker(_) => (
+                "privileged_operation_failed",
+                error.to_string(),
+                Some("Approve the Windows prompt and verify the application path."),
+            ),
             CoreError::DiscoveryCatalog(_) => (
                 "invalid_curated_catalog",
                 "Formation Lap could not open its bundled Curated Catalog.".to_owned(),

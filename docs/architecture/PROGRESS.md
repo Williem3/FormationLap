@@ -25,73 +25,18 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M2 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-23 | [M2 evidence](evidence/M2.md), [wizard screenshot](evidence/m2-wizard.jpg), [editor screenshot](evidence/m2-editor.jpg) | Begin M3 |
 | M3 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M3 evidence](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg) | Begin M4 |
 | M4 | `not_started` | — | — | — | — | Ready after M3 |
-| M5 | `in_progress` | Codex `/root` | 2026-07-23 | — | [M5 evidence](evidence/M5.md) | Capture and review recommended/Manual Entry wizard screenshots |
-| M6 | `not_started` | — | — | — | — | Wait for M4 and M5 |
-| M7 | `not_started` | — | — | — | — | Wait for M3 |
+| M5 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M5 evidence](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg) | Continue M4 |
+| M6 | `not_started` | — | — | — | — | Wait for M4 |
+| M7 | `not_started` | — | — | — | — | Ready after M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
 | M9 | `not_started` | — | — | — | — | Wait for M5 and M8 |
 | M10 | `not_started` | — | — | — | — | Wait for M6 and M9 |
 
 ## Current work
 
-M5 is active while its automated behavior is complete and the two required
-wizard screenshots remain.
-
-M5 final wizard evidence slice:
-
-- Delivered: versioned bundled catalogs contain the exact ten Primary Sims and
-  nine Supporting Applications; reviewed Steam IDs are unique; the actionable
-  validator is part of `pnpm verify`.
-- Behavior: FormationLapCore discovers installed curated sims from every Steam
-  library declared by `libraryfolders.vdf`, parses their app manifests, and
-  omits catalog entries whose installations are missing.
-- Test seam: FormationLapCore with real temporary Steam filesystem fixtures;
-  no filesystem mock and no full-drive scan.
-- File scope: `catalog/`, `src-tauri/src/discovery_catalog.rs`,
-  FormationLapCore discovery contracts/commands/tests, generated bindings,
-  discovery-specific React/NativeBridge files, `docs/architecture/evidence/M5.md`,
-  and this ledger.
-- Isolation: M3 owns only its pending Dashboard screenshot/evidence update; M5
-  does not change M3 lifecycle policy or screenshot artifacts.
-- Evidence: a real temporary filesystem fixture declares two Steam libraries,
-  discovers Assetto Corsa and Le Mans Ultimate from separate manifests, and
-  omits a stale Assetto Corsa Competizione manifest with no installation
-  directory.
-- Delivered: bounded production Windows collection for uninstall records,
-  accessible Process images, the Steam registry root, and five known-location
-  roots; signed matchers and existing-file checks decide results.
-- Evidence: standalone and Steam iRacing remain distinct; exact running-process
-  and signed known-location SimHub fixtures pass; the
-  [targeted discovery boundary](../security/M5_DISCOVERY_BOUNDARY.md) documents
-  every read and match scope.
-- Delivered: typed compatibility rankings and notification-only catalog Update
-  Providers; LMUFFB is recommended before compatible SimHub for Le Mans
-  Ultimate and references `coasting-nc/LMUFFB` GitHub Releases.
-- Validation: compatibility rules must reference a bundled Primary Sim and
-  invalid references report their exact JSON location.
-- Delivered: local Steam `.ico` loading, real Windows Shell executable-icon
-  extraction, in-memory typed icon data, and generic fallback without remote
-  art.
-- Repair: M2's durable `path_needs_repair` diagnostic plus editable executable
-  field remains the missing-path repair workflow and is covered by the full
-  suite.
-- Delivered: `discover_applications` and `recommend_applications` are narrow
-  Tauri commands with generated Rust-authoritative TypeScript contracts and
-  matching real/in-memory NativeBridge methods.
-- Delivered: the creation wizard shows only installed Curated Catalog sims in
-  its default picker, identifies Steam and standalone sources, renders ranked
-  installed recommendations, and preserves a distinct Manual Entry escape
-  hatch.
-- Behavior: choosing installed recommendations adds their discovered launch
-  sources to the saved Racing Profile; switching to Manual Entry clears the
-  curated selection and exposes the editable source fields.
-- Test seam: React behavior through InMemoryNativeBridge proves catalog
-  filtering, recommendation order, Manual Entry, and durable creation with a
-  selected Supporting Application.
-- File scope: `src/app`, `src/preview/m5-preview.ts`, `src/main.tsx`,
-  `docs/architecture/evidence/M5.md`, and this ledger.
-- Next action: reload `?preview=m5-wizard`, capture recommended and Manual Entry
-  screenshots, verify scaling and keyboard access, then complete M5.
+No milestone implementation is active. M3 and M5 are complete; M4 is the next
+dependency-ready milestone and should begin with the FormationLapCore Session
+state red test.
 
 Known environment facts:
 
@@ -164,6 +109,7 @@ logs.
 | 2026-07-23 | Codex `/root` | M5 | Exposed discovery and ranked recommendations through two narrow Tauri commands, generated contracts, and matching NativeBridge adapters | [`M5 evidence`](evidence/M5.md): 57 Rust tests, 15 React tests, contracts, Clippy, and fifteen-command capability audit passed | No blocker; build and capture the recommended and Manual Entry wizard paths |
 | 2026-07-23 | Codex `/root` | M5 | Added the installed-sim picker, ranked installed recommendations, saved discovered launch sources, Manual Entry, and a deterministic M5 preview | [`M5 evidence`](evidence/M5.md): 17 React tests, lint, typecheck, and production build passed | Reload `?preview=m5-wizard`; capture and review the required recommended and Manual Entry screenshots |
 | 2026-07-24 | Codex `/root` | M3 | Captured all Dashboard status families and fixed lifecycle-row overflow at a 200% effective viewport | [`M3 evidence`](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg), `pnpm.cmd verify`, and browser measurements at 125%/200% | M3 complete; M4 and M7 are ready |
+| 2026-07-24 | Codex `/root` | M5 | Captured and reviewed the recommended and Manual Entry wizard paths, including selected Supporting Application persistence and scaling | [`M5 evidence`](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg), and `pnpm.cmd verify` | M5 complete; begin M4 with a Session-state red test |
 
 ## Handoff entry template
 

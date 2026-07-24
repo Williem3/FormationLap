@@ -76,4 +76,68 @@ describe("Formation Lap shell", () => {
       screen.getByRole("button", { name: /Le Mans evening/ }),
     ).toHaveAttribute("aria-current", "page");
   });
+
+  it("edits the selected Racing Profile through NativeBridge", async () => {
+    const user = userEvent.setup();
+    const profile = {
+      id: "profile-1",
+      name: "Endurance",
+      primarySim: {
+        id: "sim-1",
+        name: "Le Mans Ultimate",
+        launchRecipe: {
+          source: {
+            kind: "directExecutable" as const,
+            executablePath: "",
+          },
+          arguments: [],
+          workingDirectory: null,
+          monitoredProcess: null,
+          consoleVisibility: "hidden" as const,
+          elevated: false,
+          startupTimeoutSeconds: 30,
+          postStartDelayMilliseconds: 0,
+          shutdownStrategy: { kind: "closeWindows" as const },
+        },
+        pathNeedsRepair: true,
+      },
+      supportingApplications: [],
+      vrEnabled: false,
+      preferredVrLaunchMode: null,
+      closeSession: { stopSteamVr: false },
+    };
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      profiles: [
+        {
+          id: profile.id,
+          name: profile.name,
+          primarySimName: profile.primarySim.name,
+        },
+      ],
+      selectedProfile: profile,
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    const name = screen.getByLabelText("Profile name");
+    await user.clear(name);
+    await user.type(name, "Sunday endurance");
+    await user.click(screen.getByLabelText("VR enabled by default"));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Sunday endurance",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Sunday endurance/ }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.getByLabelText("VR")).toBeChecked();
+  });
 });

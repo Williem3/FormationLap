@@ -1,6 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
-import type { AppSnapshot, LaunchSource } from "../generated/bindings";
+import type {
+  AppSnapshot,
+  LaunchSource,
+  ProfileApplication,
+  RacingProfile,
+  SupportingApplication,
+} from "../generated/bindings";
 import type { NativeBridge } from "../native-bridge/native-bridge";
 import {
   CheckIcon,
@@ -21,7 +27,7 @@ type SnapshotState =
   | { kind: "ready"; snapshot: AppSnapshot }
   | { kind: "error" };
 
-type WorkspaceView = "dashboard" | "new-profile";
+type WorkspaceView = "dashboard" | "new-profile" | "edit-profile";
 type PrimarySimSource = "direct" | "steam";
 
 export function App({ bridge }: AppProps) {
@@ -32,6 +38,7 @@ export function App({ bridge }: AppProps) {
   const [primarySimSource, setPrimarySimSource] =
     useState<PrimarySimSource>("direct");
   const [sourceValue, setSourceValue] = useState("");
+  const [profileDraft, setProfileDraft] = useState<RacingProfile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -72,6 +79,7 @@ export function App({ bridge }: AppProps) {
       });
       setState({ kind: "ready", snapshot: nextSnapshot });
       setView("dashboard");
+      setProfileDraft(null);
     } catch {
       setState({ kind: "error" });
     }
@@ -113,6 +121,38 @@ export function App({ bridge }: AppProps) {
     } catch {
       setFormError(
         "The Racing Profile could not be created. Review the profile details and try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openProfileEditor = () => {
+    if (!selectedProfile) {
+      return;
+    }
+    setFormError(null);
+    setProfileDraft(structuredClone(selectedProfile));
+    setView("edit-profile");
+  };
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!profileDraft) {
+      return;
+    }
+    setIsSaving(true);
+    setFormError(null);
+    try {
+      const nextSnapshot = await bridge.saveProfile({
+        profile: profileDraft,
+      });
+      setState({ kind: "ready", snapshot: nextSnapshot });
+      setProfileDraft(null);
+      setView("dashboard");
+    } catch {
+      setFormError(
+        "The Racing Profile could not be saved. Review the profile details and try again.",
       );
     } finally {
       setIsSaving(false);
@@ -218,12 +258,27 @@ export function App({ bridge }: AppProps) {
             onCancel={() => setView("dashboard")}
             onSubmit={createProfile}
           />
+        ) : view === "edit-profile" &&
+          state.kind === "ready" &&
+          profileDraft ? (
+          <ProfileEditor
+            profile={profileDraft}
+            isSaving={isSaving}
+            error={formError}
+            onChange={setProfileDraft}
+            onCancel={() => {
+              setProfileDraft(null);
+              setView("dashboard");
+            }}
+            onSubmit={saveProfile}
+          />
         ) : (
           <Dashboard
             state={state}
             applicationName={applicationName}
             selectedProfile={selectedProfile}
             onCreateProfile={openNewProfile}
+            onEditProfile={openProfileEditor}
           />
         )}
       </main>
@@ -420,11 +475,633 @@ function ProfileWizard({
   );
 }
 
+interface ProfileEditorProps {
+  profile: RacingProfile;
+  isSaving: boolean;
+  error: string | null;
+  onChange(profile: RacingProfile): void;
+  onCancel(): void;
+  onSubmit(event: FormEvent<HTMLFormElement>): void;
+}
+
+function ProfileEditor({
+  profile,
+  isSaving,
+  error,
+  onChange,
+  onCancel,
+  onSubmit,
+}: ProfileEditorProps) {
+  const update = (change: (next: RacingProfile) => void) => {
+    const next = structuredClone(profile);
+    change(next);
+    onChange(next);
+  };
+
+  const updateSupportingApplication = (
+    index: number,
+    change: (supporting: SupportingApplication) => void,
+  ) => {
+    update((next) => {
+      const supportingApplication = next.supportingApplications[index];
+      if (supportingApplication) {
+        change(supportingApplication);
+      }
+    });
+  };
+
+  const addSupportingApplication = () => {
+    update((next) => {
+      next.supportingApplications.push({
+        application: {
+          id: crypto.randomUUID(),
+          name: "New Supporting Application",
+          launchRecipe: {
+            source: { kind: "directExecutable", executablePath: "" },
+            arguments: [],
+            workingDirectory: null,
+            monitoredProcess: null,
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: true,
+        },
+        requirement: "optional",
+        keepRunning: false,
+      });
+    });
+  };
+
+  const moveSupportingApplication = (index: number, direction: -1 | 1) => {
+    update((next) => {
+      const destination = index + direction;
+      if (
+        destination < 0 ||
+        destination >= next.supportingApplications.length
+      ) {
+        return;
+      }
+      const [application] = next.supportingApplications.splice(index, 1);
+      if (application) {
+        next.supportingApplications.splice(destination, 0, application);
+      }
+    });
+  };
+
+  return (
+    <form className="profile-editor" onSubmit={onSubmit}>
+      <header className="workspace-header editor-header">
+        <div>
+          <p className="eyebrow">Profile editor</p>
+          <h1>{profile.name}</h1>
+          <p className="workspace-summary">
+            Configure launch behavior on the left and keep the Primary Sim
+            locked last on the right.
+          </p>
+        </div>
+        <div className="header-actions">
+          <button type="button" className="secondary-button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="primary-button" disabled={isSaving}>
+            {isSaving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </header>
+
+      <div className="profile-editor-grid">
+        <div className="editor-column">
+          <section className="editor-panel" aria-labelledby="identity-title">
+            <div className="editor-panel-heading">
+              <p className="eyebrow">Profile</p>
+              <h2 id="identity-title">Launch and Session behavior</h2>
+            </div>
+            <label className="field">
+              <span>Profile name</span>
+              <input
+                required
+                value={profile.name}
+                onChange={(event) =>
+                  update((next) => {
+                    next.name = event.currentTarget.value;
+                  })
+                }
+              />
+            </label>
+            <div className="settings-checks">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  aria-label="VR enabled by default"
+                  checked={profile.vrEnabled}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.vrEnabled = event.currentTarget.checked;
+                    })
+                  }
+                />
+                <span>
+                  <strong>VR enabled by default</strong>
+                  <small>Remember this choice on the Dashboard.</small>
+                </span>
+              </label>
+              <label className="field compact-field">
+                <span>Preferred VR Launch Mode</span>
+                <select
+                  value={profile.preferredVrLaunchMode ?? ""}
+                  onChange={(event) =>
+                    update((next) => {
+                      const value = event.currentTarget.value;
+                      next.preferredVrLaunchMode =
+                        value === ""
+                          ? null
+                          : (value as NonNullable<
+                              RacingProfile["preferredVrLaunchMode"]
+                            >);
+                    })
+                  }
+                >
+                  <option value="">Use ordinary recipe</option>
+                  <option value="openXr">OpenXR</option>
+                  <option value="openVr">OpenVR / SteamVR</option>
+                  <option value="oculus">Oculus</option>
+                </select>
+              </label>
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={profile.closeSession.stopSteamVr}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.closeSession.stopSteamVr =
+                        event.currentTarget.checked;
+                    })
+                  }
+                />
+                <span>
+                  <strong>Stop SteamVR on Close Session</strong>
+                  <small>Only when this Session started SteamVR.</small>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section className="editor-panel" aria-labelledby="primary-sim-title">
+            <div className="editor-panel-heading">
+              <p className="eyebrow">Primary Sim</p>
+              <h2 id="primary-sim-title">Game Launch Recipe</h2>
+            </div>
+            <label className="field">
+              <span>Primary Sim name</span>
+              <input
+                required
+                value={profile.primarySim.name}
+                onChange={(event) =>
+                  update((next) => {
+                    next.primarySim.name = event.currentTarget.value;
+                  })
+                }
+              />
+            </label>
+            <ApplicationRecipeFields
+              application={profile.primarySim}
+              label="Primary Sim"
+              onChange={(application) =>
+                update((next) => {
+                  next.primarySim = application;
+                })
+              }
+            />
+          </section>
+        </div>
+
+        <section
+          className="editor-panel startup-editor"
+          aria-labelledby="order-title"
+        >
+          <div className="editor-panel-heading order-heading">
+            <div>
+              <p className="eyebrow">Startup order</p>
+              <h2 id="order-title">Supporting Applications</h2>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={addSupportingApplication}
+            >
+              <PlusIcon />
+              Add application
+            </button>
+          </div>
+
+          <div className="supporting-editor-list">
+            {profile.supportingApplications.length === 0 && (
+              <div className="application-empty">
+                <PlusIcon />
+                <span>
+                  <strong>No Supporting Applications</strong>
+                  <small>Add them in the order they should start.</small>
+                </span>
+              </div>
+            )}
+            {profile.supportingApplications.map(
+              (supportingApplication, index) => (
+                <article
+                  className="supporting-editor-row"
+                  key={supportingApplication.application.id}
+                >
+                  <div className="supporting-row-heading">
+                    <span className="drag-order" aria-hidden="true">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <label className="field inline-name-field">
+                      <span>Supporting Application {index + 1} name</span>
+                      <input
+                        required
+                        value={supportingApplication.application.name}
+                        onChange={(event) =>
+                          updateSupportingApplication(index, (supporting) => {
+                            supporting.application.name =
+                              event.currentTarget.value;
+                          })
+                        }
+                      />
+                    </label>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="tertiary-button"
+                        aria-label={`Move ${supportingApplication.application.name} up`}
+                        disabled={index === 0}
+                        onClick={() => moveSupportingApplication(index, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="tertiary-button"
+                        aria-label={`Move ${supportingApplication.application.name} down`}
+                        disabled={
+                          index === profile.supportingApplications.length - 1
+                        }
+                        onClick={() => moveSupportingApplication(index, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="tertiary-button danger-text"
+                        aria-label={`Remove ${supportingApplication.application.name}`}
+                        onClick={() =>
+                          update((next) => {
+                            next.supportingApplications.splice(index, 1);
+                          })
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="supporting-policy">
+                    <label className="field compact-field">
+                      <span>
+                        Requirement for {supportingApplication.application.name}
+                      </span>
+                      <select
+                        value={supportingApplication.requirement}
+                        onChange={(event) =>
+                          updateSupportingApplication(index, (supporting) => {
+                            supporting.requirement = event.currentTarget
+                              .value as SupportingApplication["requirement"];
+                          })
+                        }
+                      >
+                        <option value="required">Required</option>
+                        <option value="optional">Optional</option>
+                      </select>
+                    </label>
+                    <label className="check-row compact-check">
+                      <input
+                        type="checkbox"
+                        checked={supportingApplication.keepRunning}
+                        onChange={(event) =>
+                          updateSupportingApplication(index, (supporting) => {
+                            supporting.keepRunning =
+                              event.currentTarget.checked;
+                          })
+                        }
+                      />
+                      <span>
+                        <strong>
+                          Keep {supportingApplication.application.name} running
+                        </strong>
+                        <small>Detach it after Close Session.</small>
+                      </span>
+                    </label>
+                  </div>
+
+                  <ApplicationRecipeFields
+                    application={supportingApplication.application}
+                    label={supportingApplication.application.name}
+                    onChange={(application) =>
+                      updateSupportingApplication(index, (supporting) => {
+                        supporting.application = application;
+                      })
+                    }
+                  />
+                </article>
+              ),
+            )}
+          </div>
+
+          <div className="game-divider">
+            <span />
+            <small>Primary Sim · locked last</small>
+          </div>
+          <div className="application-row game-row locked-game-row">
+            <span className="application-icon game-icon">
+              <FlagIcon />
+            </span>
+            <span className="application-copy">
+              <strong>{profile.primarySim.name}</strong>
+              <small>Always launches after Supporting Applications</small>
+            </span>
+            <span className="locked-label">Locked</span>
+          </div>
+        </section>
+      </div>
+
+      {error && (
+        <p className="form-error editor-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+interface ApplicationRecipeFieldsProps {
+  application: ProfileApplication;
+  label: string;
+  onChange(application: ProfileApplication): void;
+}
+
+function ApplicationRecipeFields({
+  application,
+  label,
+  onChange,
+}: ApplicationRecipeFieldsProps) {
+  const update = (change: (next: ProfileApplication) => void) => {
+    const next = structuredClone(application);
+    change(next);
+    onChange(next);
+  };
+  const source = application.launchRecipe.source;
+  const shutdown = application.launchRecipe.shutdownStrategy;
+
+  return (
+    <details className="recipe-details">
+      <summary>Launch Recipe details</summary>
+      <div className="recipe-fields">
+        <div className="field-grid">
+          <label className="field">
+            <span>{label} source</span>
+            <select
+              value={source.kind}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.source =
+                    event.currentTarget.value === "steam"
+                      ? { kind: "steam", appId: 0 }
+                      : { kind: "directExecutable", executablePath: "" };
+                  next.pathNeedsRepair =
+                    next.launchRecipe.source.kind === "directExecutable";
+                })
+              }
+            >
+              <option value="directExecutable">Direct executable</option>
+              <option value="steam">Steam</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>
+              {source.kind === "steam"
+                ? `${label} Steam App ID`
+                : `${label} executable path`}
+            </span>
+            <input
+              value={
+                source.kind === "steam"
+                  ? String(source.appId || "")
+                  : source.executablePath
+              }
+              onChange={(event) =>
+                update((next) => {
+                  const nextSource = next.launchRecipe.source;
+                  if (nextSource.kind === "steam") {
+                    nextSource.appId =
+                      Number.parseInt(event.currentTarget.value, 10) || 0;
+                    next.pathNeedsRepair = false;
+                  } else {
+                    nextSource.executablePath = event.currentTarget.value;
+                    next.pathNeedsRepair =
+                      event.currentTarget.value.length === 0;
+                  }
+                })
+              }
+            />
+          </label>
+        </div>
+        <label className="field">
+          <span>{label} arguments · one per line</span>
+          <textarea
+            rows={2}
+            value={application.launchRecipe.arguments.join("\n")}
+            onChange={(event) =>
+              update((next) => {
+                next.launchRecipe.arguments = event.currentTarget.value
+                  .split("\n")
+                  .filter((argument) => argument.length > 0);
+              })
+            }
+          />
+        </label>
+        <div className="field-grid">
+          <label className="field">
+            <span>{label} working directory</span>
+            <input
+              value={application.launchRecipe.workingDirectory ?? ""}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.workingDirectory =
+                    event.currentTarget.value || null;
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>{label} monitored process</span>
+            <input
+              value={application.launchRecipe.monitoredProcess ?? ""}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.monitoredProcess =
+                    event.currentTarget.value || null;
+                })
+              }
+            />
+          </label>
+        </div>
+        <div className="recipe-number-grid">
+          <label className="field">
+            <span>Startup timeout · seconds</span>
+            <input
+              type="number"
+              min="1"
+              value={application.launchRecipe.startupTimeoutSeconds}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.startupTimeoutSeconds =
+                    event.currentTarget.valueAsNumber || 30;
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Post-start delay · ms</span>
+            <input
+              type="number"
+              min="0"
+              value={application.launchRecipe.postStartDelayMilliseconds}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.postStartDelayMilliseconds =
+                    event.currentTarget.valueAsNumber || 0;
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Console</span>
+            <select
+              value={application.launchRecipe.consoleVisibility}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.consoleVisibility = event.currentTarget
+                    .value as ProfileApplication["launchRecipe"]["consoleVisibility"];
+                })
+              }
+            >
+              <option value="hidden">Hidden</option>
+              <option value="visible">Visible</option>
+            </select>
+          </label>
+        </div>
+        <div className="supporting-policy">
+          <label className="field compact-field">
+            <span>Shutdown strategy</span>
+            <select
+              value={shutdown.kind}
+              onChange={(event) =>
+                update((next) => {
+                  switch (event.currentTarget.value) {
+                    case "consoleInterrupt":
+                      next.launchRecipe.shutdownStrategy = {
+                        kind: "consoleInterrupt",
+                      };
+                      break;
+                    case "customStop":
+                      next.launchRecipe.shutdownStrategy = {
+                        kind: "customStop",
+                        executablePath: "",
+                        arguments: [],
+                      };
+                      break;
+                    case "forceOnly":
+                      next.launchRecipe.shutdownStrategy = {
+                        kind: "forceOnly",
+                      };
+                      break;
+                    default:
+                      next.launchRecipe.shutdownStrategy = {
+                        kind: "closeWindows",
+                      };
+                  }
+                })
+              }
+            >
+              <option value="closeWindows">Close windows</option>
+              <option value="consoleInterrupt">Console interrupt</option>
+              <option value="customStop">Custom stop executable</option>
+              <option value="forceOnly">No graceful strategy</option>
+            </select>
+          </label>
+          <label className="check-row compact-check">
+            <input
+              type="checkbox"
+              checked={application.launchRecipe.elevated}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.elevated = event.currentTarget.checked;
+                })
+              }
+            />
+            <span>
+              <strong>Launch elevated</strong>
+              <small>Uses the one-shot helper in a later milestone.</small>
+            </span>
+          </label>
+        </div>
+        {shutdown.kind === "customStop" && (
+          <div className="field-grid">
+            <label className="field">
+              <span>Stop executable path</span>
+              <input
+                value={shutdown.executablePath}
+                onChange={(event) =>
+                  update((next) => {
+                    const nextShutdown = next.launchRecipe.shutdownStrategy;
+                    if (nextShutdown.kind === "customStop") {
+                      nextShutdown.executablePath = event.currentTarget.value;
+                    }
+                  })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Stop arguments · one per line</span>
+              <textarea
+                rows={2}
+                value={shutdown.arguments.join("\n")}
+                onChange={(event) =>
+                  update((next) => {
+                    const nextShutdown = next.launchRecipe.shutdownStrategy;
+                    if (nextShutdown.kind === "customStop") {
+                      nextShutdown.arguments = event.currentTarget.value
+                        .split("\n")
+                        .filter((argument) => argument.length > 0);
+                    }
+                  })
+                }
+              />
+            </label>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 interface DashboardProps {
   state: SnapshotState;
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
   onCreateProfile(): void;
+  onEditProfile(): void;
 }
 
 function Dashboard({
@@ -432,6 +1109,7 @@ function Dashboard({
   applicationName,
   selectedProfile,
   onCreateProfile,
+  onEditProfile,
 }: DashboardProps) {
   const pageTitle = selectedProfile?.name ?? applicationName;
 
@@ -449,14 +1127,25 @@ function Dashboard({
               : "Prepare every Supporting Application, then launch the Primary Sim."}
           </p>
         </div>
-        <button
-          type="button"
-          className="primary-button"
-          disabled
-          aria-describedby="start-session-requirement"
-        >
-          Start session
-        </button>
+        <div className="header-actions">
+          {selectedProfile && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onEditProfile}
+            >
+              Edit profile
+            </button>
+          )}
+          <button
+            type="button"
+            className="primary-button"
+            disabled
+            aria-describedby="start-session-requirement"
+          >
+            Start session
+          </button>
+        </div>
       </header>
 
       {state.kind === "loading" && (

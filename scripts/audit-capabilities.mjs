@@ -3,11 +3,20 @@ import { readFile } from "node:fs/promises";
 
 const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
 
-const [capability, tauriConfig, packageJson, nativeHost] = await Promise.all([
+const [
+  capability,
+  tauriConfig,
+  sidecarConfig,
+  packageJson,
+  nativeHost,
+  windowsManifest,
+] = await Promise.all([
   readJson("src-tauri/capabilities/main.json"),
   readJson("src-tauri/tauri.conf.json"),
+  readJson("src-tauri/tauri.sidecar.conf.json"),
   readJson("package.json"),
   readFile("src-tauri/src/lib.rs", "utf8"),
+  readFile("src-tauri/windows-app-manifest.xml", "utf8"),
 ]);
 
 assert.equal(capability.identifier, "main-local");
@@ -28,6 +37,14 @@ assert.equal(
   false,
   "the main window must load frontendDist rather than a configured remote URL",
 );
+assert.deepEqual(sidecarConfig.bundle?.externalBin, [
+  "binaries/formation-lap-elevated-helper",
+]);
+assert.match(
+  windowsManifest,
+  /requestedExecutionLevel level="asInvoker" uiAccess="false"/,
+);
+assert.doesNotMatch(windowsManifest, /requireAdministrator/);
 
 const csp = tauriConfig.app?.security?.csp ?? "";
 const devCsp = tauriConfig.app?.security?.devCsp ?? "";
@@ -97,5 +114,5 @@ assert.deepEqual(commands, [
 assert.match(nativeHost, /on_navigation/);
 
 console.log(
-  "Capability audit passed: local main window, zero core/plugin permissions, twenty-one narrow app commands, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
+  "Capability audit passed: local non-administrative main window, zero core/plugin permissions, twenty-one narrow app commands, one bundled helper, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
 );

@@ -44,6 +44,22 @@ authoritative.
 | `cargo test --manifest-path src-tauri/Cargo.toml`                                               | Run Rust seam/security tests                          |
 | `pnpm.cmd tauri build --debug --bundles nsis`                                                   | Build an unsigned per-user debug installer            |
 
+`pnpm.cmd tauri dev` and `pnpm.cmd tauri build` run through
+`scripts/run-tauri.mjs`. The wrapper builds the one-shot helper first and then
+adds `src-tauri/tauri.sidecar.conf.json`, so the helper is copied beside the
+main executable and included in bundles. Direct Cargo checks deliberately use
+the empty sidecar override in `.cargo/config.toml`; they compile and test the
+helper target without trying to package a generated binary.
+
+The ignored M7 smoke test is the only test that displays UAC. Build fixtures,
+run it explicitly, and approve the launch and close prompts:
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml --features process-fixtures --test privileged_operations manual_uac_helper_launches_and_closes_an_elevated_window_fixture -- --ignored --exact --nocapture
+```
+
+All ordinary verification remains non-administrative and prompt-free.
+
 ## Native boundary
 
 Rust owns `AppSnapshot`. The generator in

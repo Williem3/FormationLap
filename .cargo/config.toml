@@ -1,0 +1,4 @@
+[env]
+# Direct Cargo checks do not package Tauri sidecars. The Tauri CLI supplies its
+# merged configuration when bundling, after the helper preparation step.
+TAURI_CONFIG = { value = '{"bundle":{"externalBin":[]}}', force = false }

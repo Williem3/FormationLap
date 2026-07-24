@@ -56,7 +56,9 @@ M2 remains in progress after the profile-management slice:
   Close Session settings through NativeBridge. Another Racing Profile can be
   selected in the sidebar and its authoritative detail replaces the dashboard.
   React also exposes duplication, explicit-target deletion confirmation,
-  portable JSON export, and portable JSON import through NativeBridge.
+  portable JSON export, and portable JSON import through NativeBridge. Profile
+  dialogs use native modal behavior, support Escape, and restore keyboard focus
+  to their triggering action or the surviving New profile action.
 - Next behavior: audit every M2 exit criterion, close any evidence gap, and
   capture the wizard and editor screenshots plus keyboard/scaling results.
 - Test seams: FormationLapCore, Tauri commands and generated contracts, and

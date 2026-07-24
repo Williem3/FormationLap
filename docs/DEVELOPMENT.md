@@ -60,9 +60,9 @@ The Vite development server exposes two development-only NativeBridge previews
 for repeatable visual checks. Production builds remove this branch and always
 use `TauriNativeBridge`.
 
-| URL | State |
-| --- | --- |
-| `http://127.0.0.1:1420/?preview=m2-wizard` | Empty library ready for the first-profile wizard |
+| URL                                        | State                                               |
+| ------------------------------------------ | --------------------------------------------------- |
+| `http://127.0.0.1:1420/?preview=m2-wizard` | Empty library ready for the first-profile wizard    |
 | `http://127.0.0.1:1420/?preview=m2-editor` | Complete sample profile ready to open in the editor |
 
 Start `pnpm.cmd dev`, then use these previews for keyboard navigation,

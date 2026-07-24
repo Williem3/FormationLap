@@ -894,23 +894,21 @@ button:disabled {
   justify-content: flex-end;
 }
 
-.dialog-backdrop {
-  position: fixed;
-  z-index: 20;
-  display: grid;
-  inset: 0;
-  padding: 24px;
-  place-items: center;
-  background: color-mix(in srgb, var(--ink) 42%, transparent);
-}
-
 .profile-dialog {
+  max-height: calc(100% - 48px);
   width: min(440px, 100%);
+  margin: auto;
   padding: 26px;
+  overflow: auto;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
+  color: var(--ink);
   box-shadow: 0 20px 56px color-mix(in srgb, var(--ink) 26%, transparent);
+}
+
+.profile-dialog::backdrop {
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
 }
 
 .profile-dialog h2 {

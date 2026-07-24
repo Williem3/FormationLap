@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
 import type {
   AppSnapshot,
@@ -48,6 +54,9 @@ export function App({ bridge }: AppProps) {
   const [importDocument, setImportDocument] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
+  const newProfileButton = useRef<HTMLButtonElement | null>(null);
+  const wasDialogOpen = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -73,6 +82,22 @@ export function App({ bridge }: AppProps) {
   const snapshot = state.kind === "ready" ? state.snapshot : null;
   const selectedProfile = snapshot?.selectedProfile ?? null;
   const applicationName = snapshot?.applicationName ?? "Formation Lap";
+  const isDialogOpen =
+    isDuplicateOpen || isDeleteOpen || isExportOpen || isImportOpen;
+
+  useEffect(() => {
+    if (wasDialogOpen.current && !isDialogOpen) {
+      dialogReturnFocus.current?.focus();
+      dialogReturnFocus.current = null;
+    }
+    wasDialogOpen.current = isDialogOpen;
+  }, [isDialogOpen]);
+
+  const rememberDialogTrigger = () => {
+    if (document.activeElement instanceof HTMLElement) {
+      dialogReturnFocus.current = document.activeElement;
+    }
+  };
 
   const openNewProfile = () => {
     setFormError(null);
@@ -170,6 +195,7 @@ export function App({ bridge }: AppProps) {
     if (!selectedProfile) {
       return;
     }
+    rememberDialogTrigger();
     setFormError(null);
     setDuplicateName(`${selectedProfile.name} Copy`);
     setIsDuplicateOpen(true);
@@ -209,6 +235,7 @@ export function App({ bridge }: AppProps) {
       const nextSnapshot = await bridge.deleteProfile({
         profileId: selectedProfile.id,
       });
+      dialogReturnFocus.current = newProfileButton.current;
       setState({ kind: "ready", snapshot: nextSnapshot });
       setIsDeleteOpen(false);
     } catch {
@@ -224,6 +251,7 @@ export function App({ bridge }: AppProps) {
     if (!selectedProfile) {
       return;
     }
+    rememberDialogTrigger();
     setIsSaving(true);
     setFormError(null);
     setExportDocument("");
@@ -323,6 +351,7 @@ export function App({ bridge }: AppProps) {
           )}
 
           <button
+            ref={newProfileButton}
             type="button"
             className="new-profile-button"
             disabled={state.kind !== "ready"}
@@ -336,6 +365,7 @@ export function App({ bridge }: AppProps) {
             className="import-profile-button"
             disabled={state.kind !== "ready"}
             onClick={() => {
+              rememberDialogTrigger();
               setFormError(null);
               setImportDocument("");
               setIsImportOpen(true);
@@ -394,6 +424,7 @@ export function App({ bridge }: AppProps) {
             selectedProfile={selectedProfile}
             onCreateProfile={openNewProfile}
             onDeleteProfile={() => {
+              rememberDialogTrigger();
               setFormError(null);
               setIsDeleteOpen(true);
             }}
@@ -405,120 +436,25 @@ export function App({ bridge }: AppProps) {
       </main>
 
       {isDuplicateOpen && selectedProfile && (
-        <div className="dialog-backdrop">
-          <section
-            className="profile-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="duplicate-profile-title"
-          >
-            <p className="eyebrow">Profile action</p>
-            <h2 id="duplicate-profile-title">
-              Duplicate {selectedProfile.name}
-            </h2>
-            <p>
-              Create an independent copy with the same startup order and
-              settings.
-            </p>
-            <form onSubmit={duplicateProfile}>
-              <label className="field">
-                <span>Duplicate name</span>
-                <input
-                  autoFocus
-                  required
-                  value={duplicateName}
-                  onChange={(event) =>
-                    setDuplicateName(event.currentTarget.value)
-                  }
-                />
-              </label>
-              {formError && (
-                <p className="form-error" role="alert">
-                  {formError}
-                </p>
-              )}
-              <div className="dialog-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsDuplicateOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={isSaving}
-                >
-                  {isSaving ? "Duplicating…" : "Create duplicate"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-
-      {isDeleteOpen && selectedProfile && (
-        <div className="dialog-backdrop">
-          <section
-            className="profile-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-profile-title"
-          >
-            <p className="eyebrow">Destructive action</p>
-            <h2 id="delete-profile-title">Delete {selectedProfile.name}?</h2>
-            <p>
-              This removes the Racing Profile from your library. Formation Lap
-              keeps a bounded local backup for recovery.
-            </p>
-            {formError && (
-              <p className="form-error" role="alert">
-                {formError}
-              </p>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setIsDeleteOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={isSaving}
-                onClick={() => void deleteProfile()}
-              >
-                {isSaving ? "Deleting…" : `Delete ${selectedProfile.name}`}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {isExportOpen && selectedProfile && (
-        <div className="dialog-backdrop">
-          <section
-            className="profile-dialog transfer-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-profile-title"
-          >
-            <p className="eyebrow">Portable profile</p>
-            <h2 id="export-profile-title">Export {selectedProfile.name}</h2>
-            <p>
-              Copy this JSON into a local text file. Machine-specific paths are
-              marked for repair when imported elsewhere.
-            </p>
+        <ModalDialog
+          labelledBy="duplicate-profile-title"
+          onClose={() => setIsDuplicateOpen(false)}
+        >
+          <p className="eyebrow">Profile action</p>
+          <h2 id="duplicate-profile-title">Duplicate {selectedProfile.name}</h2>
+          <p>
+            Create an independent copy with the same startup order and settings.
+          </p>
+          <form onSubmit={duplicateProfile}>
             <label className="field">
-              <span>Portable profile JSON</span>
-              <textarea
-                readOnly
-                rows={12}
-                value={exportDocument}
-                aria-busy={isSaving}
+              <span>Duplicate name</span>
+              <input
+                autoFocus
+                required
+                value={duplicateName}
+                onChange={(event) =>
+                  setDuplicateName(event.currentTarget.value)
+                }
               />
             </label>
             {formError && (
@@ -529,69 +465,202 @@ export function App({ bridge }: AppProps) {
             <div className="dialog-actions">
               <button
                 type="button"
-                className="primary-button"
-                onClick={() => setIsExportOpen(false)}
+                className="secondary-button"
+                onClick={() => setIsDuplicateOpen(false)}
               >
-                Close export
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={isSaving}
+              >
+                {isSaving ? "Duplicating…" : "Create duplicate"}
               </button>
             </div>
-          </section>
-        </div>
+          </form>
+        </ModalDialog>
+      )}
+
+      {isDeleteOpen && selectedProfile && (
+        <ModalDialog
+          labelledBy="delete-profile-title"
+          onClose={() => setIsDeleteOpen(false)}
+        >
+          <p className="eyebrow">Destructive action</p>
+          <h2 id="delete-profile-title">Delete {selectedProfile.name}?</h2>
+          <p>
+            This removes the Racing Profile from your library. Formation Lap
+            keeps a bounded local backup for recovery.
+          </p>
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setIsDeleteOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              disabled={isSaving}
+              onClick={() => void deleteProfile()}
+            >
+              {isSaving ? "Deleting…" : `Delete ${selectedProfile.name}`}
+            </button>
+          </div>
+        </ModalDialog>
+      )}
+
+      {isExportOpen && selectedProfile && (
+        <ModalDialog
+          className="transfer-dialog"
+          labelledBy="export-profile-title"
+          onClose={() => setIsExportOpen(false)}
+        >
+          <p className="eyebrow">Portable profile</p>
+          <h2 id="export-profile-title">Export {selectedProfile.name}</h2>
+          <p>
+            Copy this JSON into a local text file. Machine-specific paths are
+            marked for repair when imported elsewhere.
+          </p>
+          <label className="field">
+            <span>Portable profile JSON</span>
+            <textarea
+              readOnly
+              rows={12}
+              value={exportDocument}
+              aria-busy={isSaving}
+            />
+          </label>
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setIsExportOpen(false)}
+            >
+              Close export
+            </button>
+          </div>
+        </ModalDialog>
       )}
 
       {isImportOpen && (
-        <div className="dialog-backdrop">
-          <section
-            className="profile-dialog transfer-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="import-profile-title"
-          >
-            <p className="eyebrow">Portable profile</p>
-            <h2 id="import-profile-title">Import Racing Profile</h2>
-            <p>
-              Paste a Formation Lap profile document. A fresh local identity is
-              assigned and missing paths remain visible for repair.
-            </p>
-            <form onSubmit={importProfile}>
-              <label className="field">
-                <span>Portable profile JSON</span>
-                <textarea
-                  autoFocus
-                  required
-                  rows={12}
-                  value={importDocument}
-                  onChange={(event) =>
-                    setImportDocument(event.currentTarget.value)
-                  }
-                />
-              </label>
-              {formError && (
-                <p className="form-error" role="alert">
-                  {formError}
-                </p>
-              )}
-              <div className="dialog-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsImportOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={isSaving}
-                >
-                  {isSaving ? "Importing…" : "Import Racing Profile"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
+        <ModalDialog
+          className="transfer-dialog"
+          labelledBy="import-profile-title"
+          onClose={() => setIsImportOpen(false)}
+        >
+          <p className="eyebrow">Portable profile</p>
+          <h2 id="import-profile-title">Import Racing Profile</h2>
+          <p>
+            Paste a Formation Lap profile document. A fresh local identity is
+            assigned and missing paths remain visible for repair.
+          </p>
+          <form onSubmit={importProfile}>
+            <label className="field">
+              <span>Portable profile JSON</span>
+              <textarea
+                autoFocus
+                required
+                rows={12}
+                value={importDocument}
+                onChange={(event) =>
+                  setImportDocument(event.currentTarget.value)
+                }
+              />
+            </label>
+            {formError && (
+              <p className="form-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsImportOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={isSaving}
+              >
+                {isSaving ? "Importing…" : "Import Racing Profile"}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
       )}
     </div>
+  );
+}
+
+interface ModalDialogProps {
+  children: ReactNode;
+  className?: string;
+  labelledBy: string;
+  onClose(): void;
+}
+
+function ModalDialog({
+  children,
+  className,
+  labelledBy,
+  onClose,
+}: ModalDialogProps) {
+  const dialog = useRef<HTMLDialogElement | null>(null);
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) {
+      return;
+    }
+
+    try {
+      element.showModal();
+    } catch {
+      element.setAttribute("open", "");
+    }
+
+    return () => {
+      if (element.open && typeof element.close === "function") {
+        element.close();
+      }
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={dialog}
+      className={`profile-dialog ${className ?? ""}`}
+      aria-labelledby={labelledBy}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      {children}
+    </dialog>
   );
 }
 

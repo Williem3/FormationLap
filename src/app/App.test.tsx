@@ -239,9 +239,18 @@ describe("Formation Lap shell", () => {
     });
     render(<App bridge={bridge} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Duplicate profile" }),
-    );
+    const duplicateAction = await screen.findByRole("button", {
+      name: "Duplicate profile",
+    });
+    duplicateAction.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByLabelText("Duplicate name")).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(duplicateAction).toHaveFocus();
+
+    await user.keyboard("{Enter}");
     const name = screen.getByLabelText("Duplicate name");
     await user.clear(name);
     await user.type(name, "Endurance test");

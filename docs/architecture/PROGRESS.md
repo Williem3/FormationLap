@@ -26,7 +26,7 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 | M3 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M3 evidence](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg) | Begin M4 |
 | M4 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M4 evidence](evidence/M4.md), [pre-start](evidence/m4-pre-start.jpg), [starting](evidence/m4-starting.jpg), [active](evidence/m4-active.jpg), [failed](evidence/m4-failed.jpg), [closing](evidence/m4-closing.jpg) | Begin M6 |
 | M5 | `complete` | Codex `/root` | 2026-07-23 | 2026-07-24 | [M5 evidence](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg) | Continue M4 |
-| M6 | `not_started` | — | — | — | — | Ready after M4 and M5 |
+| M6 | `complete` | Codex `/root` | 2026-07-24 | 2026-07-24 | [M6 evidence](evidence/M6.md), [sanitized diagnostic](evidence/m6-test-game-launch.json) | Begin M7 |
 | M7 | `not_started` | — | — | — | — | Ready after M3 |
 | M8 | `not_started` | — | — | — | — | Wait for M4 and M7 |
 | M9 | `not_started` | — | — | — | — | Wait for M5 and M8 |
@@ -34,13 +34,15 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 ## Current work
 
-No milestone implementation is active.
+M6 is complete; no implementation slice is active.
 
-- M6 is ready because M4 Session orchestration and M5 discovery/catalog are
-  complete.
-- M7 is independently ready after M3.
-- Next action: begin M6 with a failing FormationLapCore test for an explicit
-  Steam Primary Sim recipe that never opens a mode-choice dialog.
+- Delivered explicit no-dialog Steam selectors and direct Primary Sim recipes,
+  remembered VR, per-profile overrides, Test Game Launch diagnostics and
+  monitored-Process learning, plus ownership-aware SteamVR cleanup.
+- Verified every curated ordinary and VR recipe through FormationLapCore and
+  all locally available Windows direct-launch behavior through real fixtures.
+- Next action: begin M7 with a failing privileged-operation validation test at
+  the approved one-shot helper seam.
 
 Known environment facts:
 
@@ -115,6 +117,7 @@ logs.
 | 2026-07-24 | Codex `/root` | M3 | Captured all Dashboard status families and fixed lifecycle-row overflow at a 200% effective viewport | [`M3 evidence`](evidence/M3.md), [Dashboard screenshot](evidence/m3-dashboard.jpg), `pnpm.cmd verify`, and browser measurements at 125%/200% | M3 complete; M4 and M7 are ready |
 | 2026-07-24 | Codex `/root` | M5 | Captured and reviewed the recommended and Manual Entry wizard paths, including selected Supporting Application persistence and scaling | [`M5 evidence`](evidence/M5.md), [recommended path](evidence/m5-recommended.jpg), [Manual Entry](evidence/m5-manual-entry.jpg), and `pnpm.cmd verify` | M5 complete; begin M4 with a Session-state red test |
 | 2026-07-24 | Codex `/root` | M4 | Delivered serialized Session orchestration, ordered startup/cleanup, ownership-aware recovery, quiet summaries, profile locking, and an authoritative dynamic Formation Rail; serialized Windows shell icon extraction after full-suite verification exposed an API race | [`M4 evidence`](evidence/M4.md): 15 orchestration tests, all-target Rust tests/Clippy, 20 React tests, production build, capability audit, five captures, and 125%/200% measurements passed | No blocker; begin M6 with a red explicit Steam-recipe test |
+| 2026-07-24 | Codex `/root` | M6 | Delivered curated no-dialog Steam/direct recipes, remembered VR and overrides, Test Game Launch with local sanitized evidence and monitored-Process learning, plus ownership-aware SteamVR cleanup | [`M6 evidence`](evidence/M6.md): 84 Rust tests, 22 React tests, all-feature Clippy, production build, contracts, catalog validation, and twenty-one-command capability audit passed | No blocker; begin M7 with one-shot helper request validation |
 
 ## Handoff entry template
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "profileName": "Le Mans Ultimate",
+  "vrEnabled": false,
+  "vrLaunchMode": null,
+  "target": {
+    "kind": "steam",
+    "uri": "steam://launch/2399420/option0"
+  },
+  "arguments": [],
+  "monitoredProcess": "Le Mans Ultimate.exe",
+  "observedProcess": "Le Mans Ultimate.exe"
+}

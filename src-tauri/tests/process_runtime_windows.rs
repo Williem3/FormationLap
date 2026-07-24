@@ -119,13 +119,18 @@ fn direct_launch_preserves_arguments_working_directory_and_stable_identity() {
         report["arguments"],
         serde_json::to_value(expected_arguments).expect("arguments should serialize")
     );
+    let reported_working_directory = PathBuf::from(
+        report["workingDirectory"]
+            .as_str()
+            .expect("working directory should be a string"),
+    )
+    .canonicalize()
+    .expect("reported working directory should canonicalize");
     assert_eq!(
-        PathBuf::from(
-            report["workingDirectory"]
-                .as_str()
-                .expect("working directory should be a string")
-        ),
+        reported_working_directory,
         working_directory
+            .canonicalize()
+            .expect("expected working directory should canonicalize")
     );
 }
 

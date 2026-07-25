@@ -25,6 +25,9 @@ cloud sync, analytics, or telemetry.
   support; and race-safe suppression of unsolicited UI.
 - Signed Formation Lap Stable and opt-in Beta updates. Third-party updates are
   notification-only.
+- Before signed version one, explicitly labeled unsigned `v0.x` technical
+  previews may be offered for early evaluation with updater signatures,
+  checksums, SBOM, licenses, and provenance intact.
 
 The accepted behavior and trust boundaries are documented in
 [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) and
@@ -34,7 +37,14 @@ The accepted behavior and trust boundaries are documented in
 
 Download the current Windows installer and `SHA256SUMS.txt` from the
 [official GitHub Releases page](https://github.com/Williem3/FormationLap/releases).
-Verify the checksum, then run the per-user NSIS installer:
+First identify its release tier:
+
+- Signed Beta/Stable installers must report Authenticode status `Valid`.
+- An unsigned `v0.x` technical preview must be a GitHub prerelease whose title,
+  notes, and `UNSIGNED-PREVIEW.txt` all disclose the missing Windows publisher
+  signature. Expect SmartScreen and unknown-publisher warnings.
+
+Verify the checksum, then inspect the per-user NSIS installer:
 
 ```powershell
 $version = "1.0.0"
@@ -46,12 +56,16 @@ if ($actual -ne $expected) { throw "Checksum mismatch" }
 Get-AuthenticodeSignature $installer | Format-List Status,SignerCertificate
 ```
 
-Install only when the checksum matches and Authenticode status is `Valid`.
+Install a signed release only when the checksum matches and Authenticode status
+is `Valid`. Install an unsigned technical preview only when the checksum,
+official tag, disclosure, and GitHub provenance all match and you deliberately
+accept the Windows warnings.
 Formation Lap installs for the current Windows user and creates a Start Menu
 entry. Windows maintains the WebView2 runtime used by the interface.
 
-If no signed release is published yet, clone the repository and use the
-development instructions below; do not redistribute development builds.
+If neither a signed release nor an approved technical preview is published,
+clone the repository and use the development instructions below; do not
+redistribute development builds.
 
 ## Development
 
@@ -89,8 +103,8 @@ reference, [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing changes, and
 - [`SECURITY.md`](SECURITY.md) explains supported versions and vulnerability
   reporting.
 - [`PRIVACY.md`](PRIVACY.md) lists every category of local and network data.
-- [`docs/RELEASE.md`](docs/RELEASE.md) defines the signed Stable/Beta process,
-  artifacts, and verification gates.
+- [`docs/RELEASE.md`](docs/RELEASE.md) defines the unsigned-preview and signed
+  Stable/Beta processes, artifacts, and verification gates.
 - [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) explains generated
   dependency notices.
 - [`LICENSE`](LICENSE) contains the MIT license.

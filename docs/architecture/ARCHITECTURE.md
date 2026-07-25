@@ -183,23 +183,27 @@ applications and without interrupting an Active Session.
 
 **Interface capabilities:**
 
-- Check Formation Lap's signed Stable or Beta channel.
+- Check Formation Lap's Stable or opt-in prerelease channel.
 - Check configured third-party Update Providers.
 - Return Current, Update Available, or Unknown.
 
 Provider adapters include GitHub Releases, Winget, and official-page links.
 The official Formation Lap Stable feed is the latest signed release in
-`Williem3/FormationLap`; Beta uses bounded host-side prerelease discovery in
-the same repository. Network activity is disabled while race-safe behavior
+`Williem3/FormationLap`; the opt-in prerelease channel uses bounded host-side
+prerelease discovery in the same repository. A `v0.x` technical preview lacks
+Windows Authenticode but still requires the embedded Tauri trust root and a
+valid updater signature. Network activity is disabled while race-safe behavior
 applies. Update results are exposed only after the Session returns to Idle.
 
 ### PrivilegeBroker
 
 **Responsibility:** Validate and execute the smallest possible elevated batch.
 
-The normal adapter launches a signed one-shot helper through UAC. Tests use an
-in-process adapter that records validated operations. The helper does not
-accept arbitrary shell text and cannot remain resident.
+The normal adapter launches the fixed one-shot helper through UAC. Signed
+version-one artifacts verify its Windows publisher during release packaging;
+an explicitly disclosed `v0.x` technical preview may show an unknown publisher.
+Tests use an in-process adapter that records validated operations. The helper
+does not accept arbitrary shell text and cannot remain resident.
 
 ### NativeBridge
 
@@ -381,10 +385,16 @@ modules, inspect private state, or assert internal call counts.
 - CI runs formatting, linting, type checking, Rust tests, React tests, Windows
   integration fixtures, contract generation checks, dependency audits, and a
   packaged-app smoke test.
-- Tagged Stable and Beta releases create Windows installers, Tauri update
-  bundles, signatures, checksums, SBOM, license report, and provenance.
-- Public release artifacts require Authenticode; development builds may remain
-  unsigned and are clearly labeled.
+- The manually dispatched technical-preview workflow accepts only existing
+  `v0.x` tags and publishes an unsigned-Authenticode GitHub prerelease with a
+  Tauri updater signature, explicit disclosure, checksums, SBOM, license
+  report, and provenance.
+- The Stable/Beta release workflow remains separate and fail-closed. It creates
+  Authenticode-signed Windows installers, Tauri update signatures, checksums,
+  SBOM, license report, and provenance.
+- Version one and later public artifacts require Authenticode. Development
+  builds and approved `v0.x` technical previews may remain unsigned only under
+  their respective non-public or explicitly disclosed contracts.
 
 ## Architectural guardrails
 

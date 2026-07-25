@@ -8,6 +8,9 @@ This matrix must be completed against the published signed Beta before the
 Stable `v1.0.0` tag. Record machine/VM identifiers and link screenshots or logs
 without including personal data.
 
+An unsigned `v0.x` technical preview does not satisfy or replace any row in
+this checklist.
+
 ## Local unsigned preflight
 
 Completed on the development Windows 11 machine on 2026-07-24. This validates

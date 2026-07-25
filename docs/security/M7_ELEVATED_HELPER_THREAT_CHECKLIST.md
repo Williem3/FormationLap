@@ -33,6 +33,10 @@ accepts one bounded request, returns one structured response, and exits.
   exact `formation-lap-elevated-helper.exe` file name before requesting UAC.
 - Debug helpers and installers are intentionally unsigned and are never public
   artifacts.
+- An approved `v0.x` technical preview is a separate public exception: its
+  helper remains protected by the complete typed protocol boundary above, but
+  Windows displays an unknown publisher. The preview workflow and release
+  assets must disclose that fact and cannot publish or promote a Stable tag.
 
 Public version-one artifacts must complete this signature gate:
 

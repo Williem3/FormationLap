@@ -1,12 +1,73 @@
 # Signed release procedure
 
-Official Formation Lap releases are built from a clean Git tag by
-`.github/workflows/release.yml`. The workflow is the only supported public
-packaging path. It Authenticode-signs every shipped executable before signing
-the final installer for Tauri updates, verifies the artifact contract, attests
-provenance, and publishes to the official GitHub repository.
+Formation Lap has two public packaging paths:
 
-## One-time protected environment setup
+- `.github/workflows/preview.yml` manually publishes an existing `v0.x` tag as
+  an explicitly unsigned-Authenticode technical prerelease. It retains Tauri
+  updater signing and the complete non-Authenticode supply-chain evidence.
+- `.github/workflows/release.yml` publishes signed Beta and Stable candidates.
+  It Authenticode-signs every shipped executable before signing the final
+  installer for Tauri updates.
+
+Both workflows build from an immutable tag, verify an exact artifact contract,
+attest provenance, and publish only to the official GitHub repository. Neither
+workflow creates a tag.
+
+## No-cost technical previews
+
+Technical previews gather early-adopter evidence without paying for a Windows
+publisher certificate before version one. They are not Stable releases.
+
+The repository must be public before configuring the protected preview
+environment. Create a GitHub environment named `preview`, add a required
+reviewer, and allow only `v0.*` deployment tags. Configure:
+
+| Kind     | Name                                 | Purpose                                  |
+| -------- | ------------------------------------ | ---------------------------------------- |
+| Variable | `FORMATION_LAP_UPDATE_PUBLIC_KEY`    | Base64 Tauri Minisign public-key content |
+| Secret   | `TAURI_SIGNING_PRIVATE_KEY`          | Tauri Minisign private-key content       |
+| Secret   | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Private-key password, when configured    |
+
+Generate the updater key in an isolated, backed-up operator environment. Keep
+the encrypted private key offline and in the environment secret; do not place
+it in the repository or release artifacts. The same trust root should be used
+for later signed releases unless an explicit rotation plan is shipped first.
+
+Prepare and publish a preview:
+
+1. Choose a `0.x` SemVer such as `0.9.0-preview.1`.
+2. Synchronize `package.json`, `src-tauri/Cargo.toml`,
+   `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`.
+3. Add `docs/releases/<version>.md`. Its heading and first paragraph must state
+   **unsigned technical preview** and explain the SmartScreen and
+   unknown-publisher warnings.
+4. Run the complete candidate verification commands below.
+5. Review and approve the exact commit, then create and push its lightweight
+   `v0.x` tag. Pushing the tag does not publish anything.
+6. Manually dispatch **Unsigned Windows technical preview** with that existing
+   tag and approve the `preview` environment deployment.
+7. Verify the checksum, Tauri signature, SBOM, licenses, disclosure, and GitHub
+   provenance. Confirm that the GitHub release is a prerelease and is not
+   marked latest.
+
+The preview artifact set is:
+
+- `Formation-Lap_<version>_x64-setup.exe`
+- `Formation-Lap_<version>_x64-setup.exe.sig`
+- `latest.json`
+- `SHA256SUMS.txt`
+- `UNSIGNED-PREVIEW.txt`
+- `Formation-Lap_<version>.spdx.json`
+- `THIRD-PARTY-LICENSES.json`
+- `THIRD-PARTY-NOTICES.txt`
+- GitHub build-provenance attestation
+
+The workflow rejects a `v1` tag, Stable publication, automatic tag-triggered
+publication, missing updater signature, missing disclosure, or unexpected
+asset. Do not upload `AUTHENTICODE.txt` or imply that the preview has a Windows
+publisher signature.
+
+## One-time signed-release environment setup
 
 Create a GitHub environment named `release` with required reviewers and restrict
 deployment branches/tags to the release policy. Configure:
@@ -33,7 +94,7 @@ variable above and keep the encrypted private key offline plus in the GitHub
 environment secret. A changed updater public key requires an explicit
 key-rotation release plan; old clients cannot silently trust it.
 
-## Candidate preparation
+## Signed candidate preparation
 
 1. Start from a clean `master` synchronized with `origin/master`.
 2. Complete every prior milestone and resolve all high/critical security
@@ -63,7 +124,7 @@ pnpm.cmd tauri build --debug --no-bundle
 Do not create a Stable tag until the same source behavior has passed the signed
 Beta workflow and the Windows 10/11 candidate matrix.
 
-## Automated signing and publication order
+## Signed publication order
 
 The workflow:
 
@@ -82,7 +143,7 @@ The workflow:
 The workflow fails if a signing input is missing or any signature is not
 `Valid`. No unsigned binary is uploaded as a public artifact.
 
-## Required release assets
+## Required signed-release assets
 
 For `<version>` and tag `v<version>`:
 

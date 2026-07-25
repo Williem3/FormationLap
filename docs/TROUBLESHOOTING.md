@@ -5,8 +5,10 @@
 1. Confirm 64-bit Windows 10 22H2 or Windows 11 and install current Windows
    updates.
 2. Install or repair Microsoft Edge WebView2 Runtime.
-3. Verify the installer with `Get-AuthenticodeSignature`; do not bypass
-   SmartScreen for an unsigned or invalid file.
+3. Identify the release tier. A signed Beta/Stable installer must pass
+   `Get-AuthenticodeSignature`. An official `v0.x` technical preview is
+   intentionally unsigned and must instead match its checksum, GitHub
+   provenance, prerelease tag, and `UNSIGNED-PREVIEW.txt` disclosure.
 4. Launch Formation Lap from the Start Menu. If it is already running, use its
    system-tray icon to reopen the window.
 5. Export diagnostics from Settings if the interface opens.
@@ -36,16 +38,20 @@ by the current Session.
 ## Elevation fails
 
 The main application never runs as administrator. An explicit elevated launch
-or close request starts the signed one-shot helper and displays Windows UAC.
-Canceling UAC cancels that operation. If Windows reports an invalid signature,
-stop and report it through [`../SECURITY.md`](../SECURITY.md).
+or close request starts the one-shot helper and displays Windows UAC. Signed
+Beta/Stable builds show the verified publisher. An unsigned `v0.x` technical
+preview shows **Unknown publisher** by design; confirm that the installed build
+matches the official preview evidence before accepting. Canceling UAC cancels
+the operation. Any invalid signature on a release claiming to be signed must
+be reported through [`../SECURITY.md`](../SECURITY.md).
 
 ## Updates are Unknown
 
 Check the network connection, system clock, and GitHub availability. Corporate
 TLS interception or blocked GitHub endpoints can make the check fail closed.
 Beta is opt-in and considers only published prereleases from the official
-repository. Formation Lap never substitutes an unsigned download.
+repository. Formation Lap never substitutes a download that lacks the required
+Tauri updater signature.
 
 Third-party update advice is notification-only. Provider throttling, changed
 pages, unavailable versions, or Winget errors intentionally produce Unknown.

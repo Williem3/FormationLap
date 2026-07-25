@@ -77,7 +77,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --features process-fixtures --te
 
 All ordinary verification remains non-administrative and prompt-free.
 
-## Signed updater development
+## Updater-signing development
 
 Stable and Beta metadata resolves only from the official
 [`Williem3/FormationLap`](https://github.com/Williem3/FormationLap) repository.
@@ -91,8 +91,10 @@ pnpm.cmd tauri build --no-bundle
 
 The private key is never stored in the repository. A development build without
 the public key fails closed: the self-update state is Unknown and an update
-cannot be installed. See [`RELEASE.md`](RELEASE.md) for key generation,
-GitHub/Azure configuration, artifact verification, and channel promotion.
+cannot be installed. The Tauri key is required for both unsigned-Authenticode
+`v0.x` previews and signed Beta/Stable releases. See
+[`RELEASE.md`](RELEASE.md) for key generation, GitHub environment
+configuration, artifact verification, and channel promotion.
 
 ## Visual and accessibility checks
 
@@ -109,3 +111,8 @@ SHAs and no signing secrets. It verifies a frozen install, frontend and release
 contracts, generated bindings, catalog and capability audits, production
 dependency advisories/licenses, Rust formatting/Clippy/tests, and a native
 debug build. Pull requests also run GitHub's dependency review.
+
+Public packaging is manual and tag-based. `.github/workflows/preview.yml`
+accepts only an existing `v0.x` tag and publishes a disclosed
+unsigned-Authenticode prerelease. `.github/workflows/release.yml` remains the
+fail-closed Authenticode path for signed Beta and Stable releases.

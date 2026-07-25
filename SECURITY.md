@@ -2,9 +2,11 @@
 
 ## Supported versions
 
-Only the latest signed Stable release and the newest signed Beta prerelease are
-supported. Development builds and older releases may be useful for diagnosis
-but do not receive security fixes.
+Only the latest signed Stable release and newest signed Beta prerelease receive
+normal support. Before version one, the newest official `v0.x` unsigned
+technical preview receives best-effort security fixes and is explicitly not a
+trusted Stable release. Development builds and older releases may be useful for
+diagnosis but do not receive security fixes.
 
 ## Report a vulnerability
 
@@ -30,11 +32,13 @@ capability. Rust validates frontend payloads and owns Session policy. A PID
 alone is not trusted as process identity. Automatic cleanup is limited to
 Session-owned Processes.
 
-Elevated work uses a typed, signed, one-shot helper and requires explicit user
-intent; there is no persistent privileged service. Official updates are
-published only through `Williem3/FormationLap`, Authenticode-signed, signed
-again for the Tauri updater, checksummed, and accompanied by SBOM, dependency
-license, and provenance evidence.
+Elevated work uses a typed, authenticated, one-shot helper and requires
+explicit user intent; there is no persistent privileged service. Signed Beta
+and Stable artifacts use the same Authenticode identity for the application,
+helper, and installer. A `v0.x` technical preview may omit Authenticode only
+under the separate disclosure contract, so Windows identifies its helper as an
+unknown publisher. Every public installer remains Tauri-signed, checksummed,
+and accompanied by SBOM, dependency-license, and provenance evidence.
 
 The detailed boundaries are in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md), the

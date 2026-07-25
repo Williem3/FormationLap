@@ -262,6 +262,11 @@ Elevated operations use a signed, one-shot helper:
 - The helper exits after the requested batch.
 - No persistent privileged service is installed.
 
+Unsigned `v0.x` technical previews use the same typed, authenticated, one-shot
+helper protocol, but Windows identifies the preview helper as an unknown
+publisher. That exception never applies to version one or later Stable
+releases.
+
 ## Updates
 
 ### Formation Lap
@@ -272,6 +277,11 @@ Elevated operations use a signed, one-shot helper:
 - Allow update checks to be disabled.
 - Support Stable and opt-in Beta channels.
 - Verify Tauri update signatures before installation.
+
+The updater signature is required independently of Windows Authenticode.
+Unsigned `v0.x` technical previews may therefore update only to another
+Tauri-signed official prerelease and must retain their unsigned-preview
+disclosure.
 
 ### Other applications
 
@@ -319,12 +329,35 @@ Key interface rules:
 - Open source under the MIT license.
 - Official source and releases on GitHub.
 - Per-user Windows installer for version one.
-- Authenticode-signed application, helper, and installer before public release.
+- Authenticode-signed application, helper, and installer before a version-one
+  Beta or Stable public release.
 - Tauri-signed update bundles.
 - SHA-256 checksums, SBOM, dependency-license report, and build provenance for
   every tagged release.
 - SignPath Foundation is the preferred open-source signing path; Azure Artifact
   Signing is the fallback.
+
+### Pre-version-one technical previews
+
+Formation Lap may publish an unsigned-Authenticode Windows installer only as a
+`v0.x` GitHub prerelease for technical evaluation. This is an explicit,
+temporary distribution tier rather than a Stable release:
+
+- Publication uses a separate manually dispatched workflow; pushing a tag does
+  not publish a preview.
+- The release title, notes, and `UNSIGNED-PREVIEW.txt` state that the
+  application, one-shot helper, and installer have no Windows publisher
+  signature and may trigger SmartScreen or unknown-publisher warnings.
+- The installer still has a Tauri updater signature. Checksums, SPDX SBOM,
+  dependency licenses/notices, and GitHub build provenance remain mandatory.
+- Only matching `v0.x` tags are accepted, and previews are always GitHub
+  prereleases rather than the latest Stable release.
+- The signed release workflow remains fail-closed. No unsigned preview may be
+  relabeled, promoted, or reused as version one.
+
+This exception does not change the version-one requirement: the application,
+helper, installer, and update bundle must be signed and qualified before the
+Stable `v1.0.0` tag.
 
 ## Explicitly out of scope for version one
 

@@ -428,6 +428,8 @@ installable through the official GitHub release path.
 - Tauri updater signatures.
 - SHA-256 checksums, SBOM, dependency-license report, and build provenance.
 - Stable and Beta release procedures.
+- Separately gated, clearly disclosed unsigned `v0.x` technical-preview
+  procedure that retains updater signatures and supply-chain evidence.
 - Release candidate test pass on Windows 10 22H2 and Windows 11.
 
 ### Exit criteria
@@ -435,12 +437,17 @@ installable through the official GitHub release path.
 - Every earlier milestone is complete with evidence.
 - All automated release gates pass from a clean checkout.
 - Installer, launch, update, and uninstall are manually verified.
-- No unsigned binary ships in a public artifact.
+- No unsigned binary ships in a version-one Beta or Stable artifact; the
+  separately disclosed `v0.x` technical-preview exception is the only earlier
+  public binary tier.
 - Accessibility checks cover keyboard, contrast, screen scaling, and reduced
   motion.
 - Threat checklist has no unresolved critical or high-severity issue.
 - Product specification and UI system match shipped behavior.
 - A signed Beta candidate is tested before the Stable version-one tag.
+- Any earlier public technical preview is a `v0.x` prerelease, cannot trigger
+  from a tag push alone, and cannot weaken or satisfy the signed version-one
+  gates.
 
 ### Required evidence
 

@@ -1086,6 +1086,115 @@ describe("Formation Lap shell", () => {
     ).toEqual({ kind: "consoleInterrupt" });
   });
 
+  it("keeps one Supporting Application editor open while retaining its unsaved draft", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: {
+          id: "simhub-accordion",
+          name: "SimHub",
+          launchRecipe: {
+            source: {
+              kind: "directExecutable",
+              executablePath: "C:\\Fixtures\\SimHub.exe",
+            },
+            arguments: [],
+            workingDirectory: "C:\\Fixtures",
+            monitoredProcess: "SimHub.exe",
+            monitoredExecutablePath: "C:\\Fixtures\\SimHub.exe",
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        requirement: "optional",
+        keepRunning: false,
+      },
+      {
+        application: {
+          id: "crew-chief-accordion",
+          name: "Crew Chief",
+          launchRecipe: {
+            source: {
+              kind: "directExecutable",
+              executablePath: "C:\\Fixtures\\CrewChief.exe",
+            },
+            arguments: [],
+            workingDirectory: "C:\\Fixtures",
+            monitoredProcess: "CrewChief.exe",
+            monitoredExecutablePath: "C:\\Fixtures\\CrewChief.exe",
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        requirement: "required",
+        keepRunning: false,
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    const simHubToggle = screen.getByRole("button", {
+      name: /SimHub.*Supporting Application editor/,
+    });
+    const crewChiefToggle = screen.getByRole("button", {
+      name: /Crew Chief.*Supporting Application editor/,
+    });
+    const crewChiefEditor = crewChiefToggle.closest(".supporting-editor-row");
+    if (!(crewChiefEditor instanceof HTMLElement)) {
+      throw new Error("Crew Chief should be contained in its editor row");
+    }
+    expect(simHubToggle).toHaveAttribute("aria-expanded", "true");
+    expect(crewChiefToggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(crewChiefEditor).queryByText("Launch Recipe details"),
+    ).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Supporting Application 1 name"));
+    await user.type(
+      screen.getByLabelText("Supporting Application 1 name"),
+      "SimHub draft",
+    );
+    await user.click(crewChiefToggle);
+
+    expect(simHubToggle).toHaveAttribute("aria-expanded", "false");
+    expect(crewChiefToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.queryByLabelText("Supporting Application 1 name"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(crewChiefEditor).getByText("Launch Recipe details"),
+    ).toBeVisible();
+    expect(
+      within(crewChiefEditor)
+        .getByText("Launch Recipe details")
+        .closest("details"),
+    ).not.toHaveAttribute("open");
+
+    await user.click(simHubToggle);
+    expect(screen.getByLabelText("Supporting Application 1 name")).toHaveValue(
+      "SimHub draft",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    const savedProfile = (await bridge.getAppSnapshot()).selectedProfile;
+    expect(savedProfile?.supportingApplications[0]?.application.name).toBe(
+      "SimHub draft",
+    );
+  });
+
   it("shows profile save failures beside the editor save action", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

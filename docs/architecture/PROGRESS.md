@@ -127,6 +127,11 @@ M10 security hardening is in progress, owned by Codex `/root`.
   keep-running together; use row-based arguments, compact elevation controls,
   and disclose startup timing and console visibility as advanced settings.
   There is no active implementation file scope.
+- Supporting Applications in the Racing Profile editor now use compact,
+  recognizable application headers with a single-open accordion. Each open
+  application contains a closed-by-default nested Launch Recipe disclosure;
+  changes continue to accumulate in the shared profile draft for the existing
+  page-level Save Changes action. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -282,3 +287,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Separated Dashboard lifecycle-row Requirement, Status, and Output/action columns; every app now exposes `View Output` when captured output exists or a disabled `No Output` placeholder | Red/green React coverage for unavailable output; `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (41 tests), production build, and `git diff --check` passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Fixed Dashboard lifecycle-row geometry: centered Requirement pills and fixed Requirement, Status, and action tracks prevent long labels from offsetting a row | `pnpm.cmd format`, ESLint, TypeScript typecheck, `pnpm.cmd test -- src/app/App.test.tsx` (41 tests), production build, and `git diff --check` passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Streamlined Racing Profile launch controls with compact keep-running/elevation checks, row-based launch and stop arguments, advanced timing/console settings, and shutdown strategy beside Requirement | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test` (42 tests), production build, and `git diff --check` passed; regression coverage saves each new control through NativeBridge | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Replaced the always-expanded Supporting Applications editor with a compact single-open accordion and a closed-by-default nested Launch Recipe disclosure, retaining the shared profile draft and one page-level Save Changes flow | Red/green React interaction coverage; `pnpm.cmd format:write`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (43 tests), production build, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |

@@ -2448,6 +2448,10 @@ function ProfileEditor({
   onSubmit,
 }: ProfileEditorProps) {
   const [configurationReviewed, setConfigurationReviewed] = useState(false);
+  const [openSupportingApplicationId, setOpenSupportingApplicationId] =
+    useState<string | null>(
+      profile.supportingApplications[0]?.application.id ?? null,
+    );
   const [
     approvedPrivilegedApplicationIds,
     setApprovedPrivilegedApplicationIds,
@@ -2494,28 +2498,44 @@ function ProfileEditor({
   };
 
   const addSupportingApplication = () => {
+    const application: ProfileApplication = {
+      id: crypto.randomUUID(),
+      name: "New Supporting Application",
+      launchRecipe: {
+        source: { kind: "directExecutable", executablePath: "" },
+        arguments: [],
+        workingDirectory: null,
+        monitoredProcess: null,
+        monitoredExecutablePath: null,
+        consoleVisibility: "hidden",
+        elevated: false,
+        startupTimeoutSeconds: 30,
+        postStartDelayMilliseconds: 0,
+        shutdownStrategy: { kind: "closeWindows" },
+      },
+      pathNeedsRepair: true,
+    };
     update((next) => {
       next.supportingApplications.push({
-        application: {
-          id: crypto.randomUUID(),
-          name: "New Supporting Application",
-          launchRecipe: {
-            source: { kind: "directExecutable", executablePath: "" },
-            arguments: [],
-            workingDirectory: null,
-            monitoredProcess: null,
-            monitoredExecutablePath: null,
-            consoleVisibility: "hidden",
-            elevated: false,
-            startupTimeoutSeconds: 30,
-            postStartDelayMilliseconds: 0,
-            shutdownStrategy: { kind: "closeWindows" },
-          },
-          pathNeedsRepair: true,
-        },
+        application,
         requirement: "optional",
         keepRunning: false,
       });
+    });
+    setOpenSupportingApplicationId(application.id);
+  };
+
+  const removeSupportingApplication = (index: number) => {
+    const removed = profile.supportingApplications[index];
+    if (removed?.application.id === openSupportingApplicationId) {
+      setOpenSupportingApplicationId(
+        profile.supportingApplications[index + 1]?.application.id ??
+          profile.supportingApplications[index - 1]?.application.id ??
+          null,
+      );
+    }
+    update((next) => {
+      next.supportingApplications.splice(index, 1);
     });
   };
 
@@ -2804,164 +2824,215 @@ function ProfileEditor({
               </div>
             )}
             {profile.supportingApplications.map(
-              (supportingApplication, index) => (
-                <article
-                  className="supporting-editor-row"
-                  key={supportingApplication.application.id}
-                >
-                  <div className="supporting-row-heading">
-                    <span className="drag-order" aria-hidden="true">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <label className="field inline-name-field">
-                      <span>Supporting Application {index + 1} name</span>
-                      <input
-                        required
-                        value={supportingApplication.application.name}
-                        onChange={(event) =>
-                          updateSupportingApplication(index, (supporting) => {
-                            supporting.application.name =
-                              event.currentTarget.value;
-                          })
-                        }
-                      />
-                    </label>
-                    <div className="row-actions">
+              (supportingApplication, index) => {
+                const isOpen =
+                  supportingApplication.application.id ===
+                  openSupportingApplicationId;
+                return (
+                  <article
+                    className={`supporting-editor-row${isOpen ? " is-open" : ""}`}
+                    key={supportingApplication.application.id}
+                  >
+                    <div className="supporting-row-heading">
                       <button
                         type="button"
-                        className="tertiary-button"
-                        aria-label={`Move ${supportingApplication.application.name} up`}
-                        disabled={index === 0}
-                        onClick={() => moveSupportingApplication(index, -1)}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="tertiary-button"
-                        aria-label={`Move ${supportingApplication.application.name} down`}
-                        disabled={
-                          index === profile.supportingApplications.length - 1
-                        }
-                        onClick={() => moveSupportingApplication(index, 1)}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        className="tertiary-button danger-text"
-                        aria-label={`Remove ${supportingApplication.application.name}`}
+                        className="supporting-editor-toggle"
+                        aria-expanded={isOpen}
+                        aria-label={`${supportingApplication.application.name} Supporting Application editor`}
                         onClick={() =>
-                          update((next) => {
-                            next.supportingApplications.splice(index, 1);
-                          })
+                          setOpenSupportingApplicationId((current) =>
+                            current === supportingApplication.application.id
+                              ? null
+                              : supportingApplication.application.id,
+                          )
                         }
                       >
-                        Remove
+                        <span className="drag-order" aria-hidden="true">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <span className="supporting-editor-toggle-copy">
+                          <strong>
+                            {supportingApplication.application.name}
+                          </strong>
+                          <small>
+                            {supportingApplication.requirement === "required"
+                              ? "Required application"
+                              : "Optional application"}
+                          </small>
+                        </span>
+                        <span
+                          className="accordion-chevron"
+                          aria-hidden="true"
+                        />
                       </button>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="tertiary-button"
+                          aria-label={`Move ${supportingApplication.application.name} up`}
+                          disabled={index === 0}
+                          onClick={() => moveSupportingApplication(index, -1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="tertiary-button"
+                          aria-label={`Move ${supportingApplication.application.name} down`}
+                          disabled={
+                            index === profile.supportingApplications.length - 1
+                          }
+                          onClick={() => moveSupportingApplication(index, 1)}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="tertiary-button danger-text"
+                          aria-label={`Remove ${supportingApplication.application.name}`}
+                          onClick={() => removeSupportingApplication(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="supporting-policy">
-                    <label className="field compact-field">
-                      <span>
-                        Requirement for {supportingApplication.application.name}
-                      </span>
-                      <select
-                        value={supportingApplication.requirement}
-                        onChange={(event) =>
-                          updateSupportingApplication(index, (supporting) => {
-                            supporting.requirement = event.currentTarget
-                              .value as SupportingApplication["requirement"];
-                          })
-                        }
-                      >
-                        <option value="required">Required</option>
-                        <option value="optional">Optional</option>
-                      </select>
-                    </label>
-                    <label className="field compact-field">
-                      <span>Shutdown strategy</span>
-                      <select
-                        value={
-                          supportingApplication.application.launchRecipe
-                            .shutdownStrategy.kind
-                        }
-                        onChange={(event) =>
-                          updateSupportingApplication(index, (supporting) => {
-                            switch (event.currentTarget.value) {
-                              case "consoleInterrupt":
-                                supporting.application.launchRecipe.shutdownStrategy =
-                                  {
-                                    kind: "consoleInterrupt",
-                                  };
-                                break;
-                              case "customStop":
-                                supporting.application.launchRecipe.shutdownStrategy =
-                                  {
-                                    kind: "customStop",
-                                    executablePath: "",
-                                    arguments: [],
-                                  };
-                                break;
-                              case "forceOnly":
-                                supporting.application.launchRecipe.shutdownStrategy =
-                                  {
-                                    kind: "forceOnly",
-                                  };
-                                break;
-                              default:
-                                supporting.application.launchRecipe.shutdownStrategy =
-                                  {
-                                    kind: "closeWindows",
-                                  };
+                    {isOpen && (
+                      <div className="supporting-editor-content">
+                        <label className="field inline-name-field">
+                          <span>Supporting Application {index + 1} name</span>
+                          <input
+                            required
+                            value={supportingApplication.application.name}
+                            onChange={(event) =>
+                              updateSupportingApplication(
+                                index,
+                                (supporting) => {
+                                  supporting.application.name =
+                                    event.currentTarget.value;
+                                },
+                              )
                             }
-                          })
-                        }
-                      >
-                        <option value="closeWindows">Close windows</option>
-                        <option value="consoleInterrupt">
-                          Console interrupt
-                        </option>
-                        <option value="customStop">
-                          Custom stop executable
-                        </option>
-                        <option value="forceOnly">No graceful strategy</option>
-                      </select>
-                    </label>
-                    <label className="check-row compact-check">
-                      <input
-                        type="checkbox"
-                        checked={supportingApplication.keepRunning}
-                        onChange={(event) =>
-                          updateSupportingApplication(index, (supporting) => {
-                            supporting.keepRunning =
-                              event.currentTarget.checked;
-                          })
-                        }
-                      />
-                      <span>
-                        <strong>
-                          Keep {supportingApplication.application.name} running
-                        </strong>
-                        <small>Detach it after Close Session.</small>
-                      </span>
-                    </label>
-                  </div>
+                          />
+                        </label>
+                        <div className="supporting-policy">
+                          <label className="field compact-field">
+                            <span>
+                              Requirement for{" "}
+                              {supportingApplication.application.name}
+                            </span>
+                            <select
+                              value={supportingApplication.requirement}
+                              onChange={(event) =>
+                                updateSupportingApplication(
+                                  index,
+                                  (supporting) => {
+                                    supporting.requirement = event.currentTarget
+                                      .value as SupportingApplication["requirement"];
+                                  },
+                                )
+                              }
+                            >
+                              <option value="required">Required</option>
+                              <option value="optional">Optional</option>
+                            </select>
+                          </label>
+                          <label className="field compact-field">
+                            <span>Shutdown strategy</span>
+                            <select
+                              value={
+                                supportingApplication.application.launchRecipe
+                                  .shutdownStrategy.kind
+                              }
+                              onChange={(event) =>
+                                updateSupportingApplication(
+                                  index,
+                                  (supporting) => {
+                                    switch (event.currentTarget.value) {
+                                      case "consoleInterrupt":
+                                        supporting.application.launchRecipe.shutdownStrategy =
+                                          {
+                                            kind: "consoleInterrupt",
+                                          };
+                                        break;
+                                      case "customStop":
+                                        supporting.application.launchRecipe.shutdownStrategy =
+                                          {
+                                            kind: "customStop",
+                                            executablePath: "",
+                                            arguments: [],
+                                          };
+                                        break;
+                                      case "forceOnly":
+                                        supporting.application.launchRecipe.shutdownStrategy =
+                                          {
+                                            kind: "forceOnly",
+                                          };
+                                        break;
+                                      default:
+                                        supporting.application.launchRecipe.shutdownStrategy =
+                                          {
+                                            kind: "closeWindows",
+                                          };
+                                    }
+                                  },
+                                )
+                              }
+                            >
+                              <option value="closeWindows">
+                                Close windows
+                              </option>
+                              <option value="consoleInterrupt">
+                                Console interrupt
+                              </option>
+                              <option value="customStop">
+                                Custom stop executable
+                              </option>
+                              <option value="forceOnly">
+                                No graceful strategy
+                              </option>
+                            </select>
+                          </label>
+                          <label className="check-row compact-check">
+                            <input
+                              type="checkbox"
+                              checked={supportingApplication.keepRunning}
+                              onChange={(event) =>
+                                updateSupportingApplication(
+                                  index,
+                                  (supporting) => {
+                                    supporting.keepRunning =
+                                      event.currentTarget.checked;
+                                  },
+                                )
+                              }
+                            />
+                            <span>
+                              <strong>
+                                Keep {supportingApplication.application.name}{" "}
+                                running
+                              </strong>
+                              <small>Detach it after Close Session.</small>
+                            </span>
+                          </label>
+                        </div>
 
-                  <ApplicationRecipeFields
-                    application={supportingApplication.application}
-                    label={supportingApplication.application.name}
-                    includeShutdownStrategy={false}
-                    onPickExecutablePath={onPickExecutablePath}
-                    onChange={(application) =>
-                      updateSupportingApplication(index, (supporting) => {
-                        supporting.application = application;
-                      })
-                    }
-                  />
-                </article>
-              ),
+                        <ApplicationRecipeFields
+                          application={supportingApplication.application}
+                          label={supportingApplication.application.name}
+                          includeShutdownStrategy={false}
+                          onPickExecutablePath={onPickExecutablePath}
+                          onChange={(application) =>
+                            updateSupportingApplication(index, (supporting) => {
+                              supporting.application = application;
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                  </article>
+                );
+              },
             )}
           </div>
 

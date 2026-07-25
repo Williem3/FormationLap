@@ -228,7 +228,9 @@ a current-user-only named pipe, and launches the helper through UAC. The helper
 derives the pipe server PID from Windows and verifies the same user and
 interactive Session, exact canonical sibling `formation-lap.exe`, release
 identity, protocol version, and nonce before typed request validation. Signed
-Beta/Stable artifacts require WinVerifyTrust and signer-certificate equality.
+Beta/Stable artifacts hold the canonical main/helper files against replacement,
+require WinVerifyTrust and signer-certificate equality, and match the
+certificate SHA-256 approved by the release-key-signed identity manifest.
 Unsigned previews require a release-identity-key-signed manifest plus exact
 main/helper hashes. Tests use an in-process adapter that records validated
 operations. The helper does not accept arbitrary shell text and cannot remain

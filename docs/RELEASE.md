@@ -132,16 +132,22 @@ The workflow:
 2. runs the complete CI, dependency advisory, and license gates;
 3. compiles the public updater key into the application;
 4. builds and Authenticode-signs the main executable and one-shot helper;
-5. bundles those signed binaries in a per-user branded NSIS installer;
-6. Authenticode-signs and verifies the installer;
-7. Tauri-signs the final Authenticode installer bytes;
-8. generates dependency notices, SPDX SBOM, update metadata, and checksums;
-9. verifies the exact official artifact set and URL;
-10. creates a GitHub build-provenance attestation; and
-11. publishes the release only after every preceding gate passes.
+5. requires both signatures to be `Valid`, hashes the exact signer
+   certificates, requires equality, and seals that approved SHA-256 plus both
+   executable hashes into the release-key-signed identity manifest;
+6. bundles those signed binaries in a per-user branded NSIS installer;
+7. Authenticode-signs and verifies the installer;
+8. Tauri-signs the final Authenticode installer bytes;
+9. generates dependency notices, SPDX SBOM, update metadata, and checksums;
+10. verifies the exact official artifact set and URL;
+11. creates a GitHub build-provenance attestation; and
+12. publishes the release only after every preceding gate passes.
 
 The workflow fails if a signing input is missing or any signature is not
-`Valid`. No unsigned binary is uploaded as a public artifact.
+`Valid`. It also fails if the main/helper signer certificates differ. At
+runtime, both sides repeat WinVerifyTrust and require their signer certificate
+SHA-256 to equal the value approved by the signed release-identity manifest.
+No unsigned binary is uploaded as a public artifact.
 
 ## Required signed-release assets
 

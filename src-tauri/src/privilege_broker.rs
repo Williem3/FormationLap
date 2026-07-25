@@ -617,17 +617,24 @@ mod platform {
                 "an elevated batch must contain at least one operation",
             ));
         }
-        if !allow_test_caller {
+        let _release_identity_guard = if !allow_test_caller {
             let main_executable = std::env::current_exe().map_err(|error| {
                 broker_error("Formation Lap executable could not be located", error)
             })?;
-            crate::release_identity::verify_runtime_release_identity(&main_executable, helper_path)
+            Some(
+                crate::release_identity::verify_runtime_release_identity(
+                    &main_executable,
+                    helper_path,
+                )
                 .map_err(|error| {
                     PrivilegeBrokerError::new(format!(
                         "elevated helper release identity was rejected: {error}"
                     ))
-                })?;
-        }
+                })?,
+            )
+        } else {
+            None
+        };
         let current_user_id = current_user_id()?;
         let nonce = Uuid::new_v4().to_string();
         let pipe_name = format!("{PIPE_PREFIX}{nonce}");
@@ -779,24 +786,29 @@ mod platform {
             ),
             (Ok(server), Ok(helper)) if server == helper
         );
-        let (expected_application_path, release_identity_verified) = if allow_test_caller {
-            (true, true)
-        } else {
-            let main_executable =
-                Path::new(&parent_identity.canonical_executable_path).to_path_buf();
-            let expected = crate::release_identity::validate_expected_application_pair(
-                &main_executable,
-                &helper_executable,
-            )
-            .is_ok();
-            let release = expected
-                && crate::release_identity::verify_runtime_release_identity(
+        let (expected_application_path, release_identity_verified, _release_identity_guard) =
+            if allow_test_caller {
+                (true, true, None)
+            } else {
+                let main_executable =
+                    Path::new(&parent_identity.canonical_executable_path).to_path_buf();
+                let expected = crate::release_identity::validate_expected_application_pair(
                     &main_executable,
                     &helper_executable,
                 )
                 .is_ok();
-            (expected, release)
-        };
+                let release_identity = expected
+                    .then(|| {
+                        crate::release_identity::verify_runtime_release_identity(
+                            &main_executable,
+                            &helper_executable,
+                        )
+                    })
+                    .transpose()
+                    .ok()
+                    .flatten();
+                (expected, release_identity.is_some(), release_identity)
+            };
         let operation_process_identities = request
             .operations
             .iter()

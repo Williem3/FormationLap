@@ -151,17 +151,26 @@ jobs:
           description-url: https://github.com/Williem3/FormationLap
 
       - name: Verify application and helper Authenticode
+        id: authenticode
         shell: pwsh
         run: |
+          $fingerprints = @()
           foreach ($path in @(
             "src-tauri\target\release\formation-lap.exe",
             "src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe"
           )) {
             $signature = Get-AuthenticodeSignature -LiteralPath $path
-            if ($signature.Status -ne "Valid") {
+            if ($signature.Status -ne "Valid" -or $null -eq $signature.SignerCertificate) {
               throw "Authenticode verification failed for $path`: $($signature.Status)"
             }
+            $fingerprints += $signature.SignerCertificate.GetCertHashString(
+              [System.Security.Cryptography.HashAlgorithmName]::SHA256
+            ).ToLowerInvariant()
           }
+          if ($fingerprints.Count -ne 2 -or $fingerprints[0] -ne $fingerprints[1]) {
+            throw "Formation Lap and its elevated helper do not have the same signer certificate."
+          }
+          "signer-sha256=$($fingerprints[0])" >> $env:GITHUB_OUTPUT
 
       - name: Bind and sign the signed helper release identity
         shell: pwsh
@@ -176,9 +185,9 @@ jobs:
           $main = "src-tauri\target\release\formation-lap.exe"
           $helper = "src-tauri\target\release\formation-lap-elevated-helper.exe"
           Copy-Item -LiteralPath "src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe" -Destination $helper -Force
-          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --payload $payload
+          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --authenticode-signer-sha256 "${{ steps.authenticode.outputs.signer-sha256 }}" --payload $payload
           pnpm tauri signer sign $payload
-          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --payload $payload --signature "$payload.sig" --output $manifest
+          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --authenticode-signer-sha256 "${{ steps.authenticode.outputs.signer-sha256 }}" --payload $payload --signature "$payload.sig" --output $manifest
 
       - name: Bundle the signed binaries without updater signing
         id: bundle

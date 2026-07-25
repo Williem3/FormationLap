@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::{
     error::Error,
     fmt, fs,
-    io::Read,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
 
@@ -40,12 +40,14 @@ struct ReleaseIdentityManifest {
     version: String,
     protocol_version: u16,
     release_channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    authenticode_signer_sha256: Option<String>,
     signature: String,
 }
 
 impl ReleaseIdentityManifest {
     fn signing_payload(&self) -> String {
-        format!(
+        let mut payload = format!(
             concat!(
                 "formation-lap-release-identity-v1\n",
                 "mainExecutableSha256={}\n",
@@ -59,8 +61,17 @@ impl ReleaseIdentityManifest {
             self.version,
             self.protocol_version,
             self.release_channel,
-        )
+        );
+        if let Some(signer) = &self.authenticode_signer_sha256 {
+            payload.push_str(&format!("authenticodeSignerSha256={signer}\n"));
+        }
+        payload
     }
+}
+
+pub(crate) struct VerifiedReleaseIdentity {
+    _main_executable: fs::File,
+    _helper_executable: fs::File,
 }
 
 pub(crate) fn validate_expected_application_pair(
@@ -90,30 +101,44 @@ pub(crate) fn validate_expected_application_pair(
 pub(crate) fn verify_runtime_release_identity(
     main_executable: &Path,
     helper_executable: &Path,
-) -> Result<(), ReleaseIdentityError> {
+) -> Result<VerifiedReleaseIdentity, ReleaseIdentityError> {
     let (main, helper) = validate_expected_application_pair(main_executable, helper_executable)?;
+    let mut main_file = open_locked_executable(&main, "Formation Lap executable")?;
+    let mut helper_file = open_locked_executable(&helper, "elevated helper")?;
 
     if cfg!(debug_assertions) {
-        return Ok(());
+        return Ok(VerifiedReleaseIdentity {
+            _main_executable: main_file,
+            _helper_executable: helper_file,
+        });
     }
 
     let channel = option_env!("FORMATION_LAP_RELEASE_CHANNEL").ok_or_else(|| {
         ReleaseIdentityError::new("release channel is not compiled into this build")
     })?;
     match channel {
-        "preview" => verify_preview_release_identity(&main, &helper),
-        "beta" | "stable" => Err(ReleaseIdentityError::new(
-            "signed release identity verification is not available",
-        )),
+        "preview" => verify_preview_release_identity(&main, &mut main_file, &mut helper_file)?,
+        "beta" | "stable" => verify_signed_release_identity(
+            &main,
+            &mut main_file,
+            &helper,
+            &mut helper_file,
+            channel,
+        )?,
         _ => Err(ReleaseIdentityError::new(
             "compiled release channel is not recognized",
-        )),
+        ))?,
     }
+    Ok(VerifiedReleaseIdentity {
+        _main_executable: main_file,
+        _helper_executable: helper_file,
+    })
 }
 
 fn verify_preview_release_identity(
     main_executable: &Path,
-    helper_executable: &Path,
+    main_file: &mut fs::File,
+    helper_file: &mut fs::File,
 ) -> Result<(), ReleaseIdentityError> {
     let public_key = decode_public_key(
         option_env!("FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY")
@@ -123,10 +148,10 @@ fn verify_preview_release_identity(
         ReleaseIdentityError::new("Formation Lap executable has no installation directory")
     })?;
     let manifest_path = installation_directory.join(RELEASE_IDENTITY_FILE);
-    verify_preview_manifest_with(
+    let manifest = verify_release_manifest_with(
         &manifest_path,
-        main_executable,
-        helper_executable,
+        main_file,
+        helper_file,
         env!("CARGO_PKG_VERSION"),
         "preview",
         |payload, signature| {
@@ -134,17 +159,114 @@ fn verify_preview_release_identity(
                 .verify(payload, signature, true)
                 .map_err(|_| ReleaseIdentityError::new("release identity signature was rejected"))
         },
-    )
+    )?;
+    if manifest.authenticode_signer_sha256.is_some() {
+        return Err(ReleaseIdentityError::new(
+            "preview release identity must not claim an Authenticode signer",
+        ));
+    }
+    Ok(())
 }
 
-fn verify_preview_manifest_with(
+fn verify_signed_release_identity(
+    main_executable: &Path,
+    main_file: &mut fs::File,
+    helper_executable: &Path,
+    helper_file: &mut fs::File,
+    expected_channel: &str,
+) -> Result<(), ReleaseIdentityError> {
+    #[cfg(windows)]
+    {
+        let public_key = decode_public_key(
+            option_env!("FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY").ok_or_else(|| {
+                ReleaseIdentityError::new("release identity public key is missing")
+            })?,
+        )?;
+        let installation_directory = main_executable.parent().ok_or_else(|| {
+            ReleaseIdentityError::new("Formation Lap executable has no installation directory")
+        })?;
+        let manifest_path = installation_directory.join(RELEASE_IDENTITY_FILE);
+        verify_signed_release_identity_with(
+            &manifest_path,
+            main_executable,
+            main_file,
+            helper_executable,
+            helper_file,
+            env!("CARGO_PKG_VERSION"),
+            expected_channel,
+            |payload, signature| {
+                public_key.verify(payload, signature, true).map_err(|_| {
+                    ReleaseIdentityError::new("release identity signature was rejected")
+                })
+            },
+            authenticode_signer_sha256,
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (
+            main_executable,
+            main_file,
+            helper_executable,
+            helper_file,
+            expected_channel,
+        );
+        Err(ReleaseIdentityError::new(
+            "signed release identity requires Windows trust policy",
+        ))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_signed_release_identity_with(
     manifest_path: &Path,
     main_executable: &Path,
+    main_file: &mut fs::File,
     helper_executable: &Path,
+    helper_file: &mut fs::File,
     expected_version: &str,
     expected_channel: &str,
     verify_signature: impl FnOnce(&[u8], &Signature) -> Result<(), ReleaseIdentityError>,
+    mut verify_authenticode: impl FnMut(&Path, &fs::File) -> Result<String, ReleaseIdentityError>,
 ) -> Result<(), ReleaseIdentityError> {
+    let manifest = verify_release_manifest_with(
+        manifest_path,
+        main_file,
+        helper_file,
+        expected_version,
+        expected_channel,
+        verify_signature,
+    )?;
+    let approved_signer = manifest.authenticode_signer_sha256.ok_or_else(|| {
+        ReleaseIdentityError::new("signed release identity has no approved Authenticode signer")
+    })?;
+    validate_sha256(&approved_signer)?;
+
+    let main_signer = verify_authenticode(main_executable, main_file)?;
+    let helper_signer = verify_authenticode(helper_executable, helper_file)?;
+    validate_sha256(&main_signer)?;
+    validate_sha256(&helper_signer)?;
+    if main_signer != helper_signer {
+        return Err(ReleaseIdentityError::new(
+            "Formation Lap and its elevated helper have different Authenticode signers",
+        ));
+    }
+    if main_signer != approved_signer {
+        return Err(ReleaseIdentityError::new(
+            "Authenticode signer is not approved by the release identity",
+        ));
+    }
+    Ok(())
+}
+
+fn verify_release_manifest_with(
+    manifest_path: &Path,
+    main_file: &mut fs::File,
+    helper_file: &mut fs::File,
+    expected_version: &str,
+    expected_channel: &str,
+    verify_signature: impl FnOnce(&[u8], &Signature) -> Result<(), ReleaseIdentityError>,
+) -> Result<ReleaseIdentityManifest, ReleaseIdentityError> {
     let manifest_bytes = read_bounded_file(manifest_path, MAX_RELEASE_IDENTITY_BYTES)?;
     let manifest: ReleaseIdentityManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|_| ReleaseIdentityError::new("release identity manifest is invalid"))?;
@@ -162,17 +284,145 @@ fn verify_preview_manifest_with(
     let signature = decode_signature(&manifest.signature)?;
     verify_signature(manifest.signing_payload().as_bytes(), &signature)?;
 
-    if sha256_file(main_executable)? != manifest.main_executable_sha256 {
+    if sha256_open_file(main_file)? != manifest.main_executable_sha256 {
         return Err(ReleaseIdentityError::new(
             "Formation Lap executable hash does not match the release identity",
         ));
     }
-    if sha256_file(helper_executable)? != manifest.helper_sha256 {
+    if sha256_open_file(helper_file)? != manifest.helper_sha256 {
         return Err(ReleaseIdentityError::new(
             "elevated helper hash does not match the release identity",
         ));
     }
-    Ok(())
+    Ok(manifest)
+}
+
+fn open_locked_executable(path: &Path, label: &str) -> Result<fs::File, ReleaseIdentityError> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+        options.share_mode(FILE_SHARE_READ);
+    }
+    options.open(path).map_err(|error| {
+        ReleaseIdentityError::new(format!(
+            "{label} could not be locked for verification: {error}"
+        ))
+    })
+}
+
+#[cfg(windows)]
+fn authenticode_signer_sha256(
+    path: &Path,
+    file: &fs::File,
+) -> Result<String, ReleaseIdentityError> {
+    use std::{
+        ffi::c_void,
+        os::windows::{ffi::OsStrExt, io::AsRawHandle},
+    };
+    use windows_sys::Win32::Security::WinTrust::{
+        WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_FILE_INFO,
+        WTD_CACHE_ONLY_URL_RETRIEVAL, WTD_CHOICE_FILE, WTD_REVOCATION_CHECK_NONE, WTD_REVOKE_NONE,
+        WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY, WTD_UI_NONE, WTD_UICONTEXT_EXECUTE,
+        WTHelperGetProvCertFromChain, WTHelperGetProvSignerFromChain,
+        WTHelperProvDataFromStateData, WinVerifyTrust,
+    };
+
+    let wide_path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut file_info = WINTRUST_FILE_INFO {
+        cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+        pcwszFilePath: wide_path.as_ptr(),
+        hFile: file.as_raw_handle(),
+        pgKnownSubject: std::ptr::null_mut(),
+    };
+    let mut trust_data = WINTRUST_DATA {
+        cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+        dwUIChoice: WTD_UI_NONE,
+        fdwRevocationChecks: WTD_REVOKE_NONE,
+        dwUnionChoice: WTD_CHOICE_FILE,
+        Anonymous: windows_sys::Win32::Security::WinTrust::WINTRUST_DATA_0 {
+            pFile: &mut file_info,
+        },
+        dwStateAction: WTD_STATEACTION_VERIFY,
+        dwProvFlags: WTD_REVOCATION_CHECK_NONE | WTD_CACHE_ONLY_URL_RETRIEVAL,
+        dwUIContext: WTD_UICONTEXT_EXECUTE,
+        ..WINTRUST_DATA::default()
+    };
+    let mut action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    // SAFETY: `trust_data` points to a stable WINTRUST_FILE_INFO whose path and
+    // verified read-only file handle remain live through verification and
+    // state cleanup. The generic Authenticode policy GUID is mutable only
+    // because WinVerifyTrust's ABI predates const-correctness.
+    let status = unsafe {
+        WinVerifyTrust(
+            std::ptr::null_mut(),
+            &mut action,
+            (&mut trust_data as *mut WINTRUST_DATA).cast::<c_void>(),
+        )
+    };
+    let signer = if status == 0 {
+        // SAFETY: Successful stateful WinVerifyTrust verification owns the
+        // provider chain until WTD_STATEACTION_CLOSE below. Every pointer and
+        // encoded length is checked before constructing the certificate view.
+        unsafe {
+            let provider = WTHelperProvDataFromStateData(trust_data.hWVTStateData);
+            if provider.is_null() {
+                Err(ReleaseIdentityError::new(
+                    "WinVerifyTrust did not return provider data",
+                ))
+            } else {
+                let signer = WTHelperGetProvSignerFromChain(provider, 0, 0, 0);
+                if signer.is_null() {
+                    Err(ReleaseIdentityError::new(
+                        "WinVerifyTrust did not return a primary signer",
+                    ))
+                } else {
+                    let provider_certificate = WTHelperGetProvCertFromChain(signer, 0);
+                    if provider_certificate.is_null()
+                        || (*provider_certificate).pCert.is_null()
+                        || (*(*provider_certificate).pCert).pbCertEncoded.is_null()
+                        || (*(*provider_certificate).pCert).cbCertEncoded == 0
+                    {
+                        Err(ReleaseIdentityError::new(
+                            "WinVerifyTrust did not return a signer certificate",
+                        ))
+                    } else {
+                        let certificate = &*(*provider_certificate).pCert;
+                        let encoded = std::slice::from_raw_parts(
+                            certificate.pbCertEncoded,
+                            certificate.cbCertEncoded as usize,
+                        );
+                        Ok(format!("{:x}", Sha256::digest(encoded)))
+                    }
+                }
+            }
+        }
+    } else {
+        Err(ReleaseIdentityError::new(format!(
+            "WinVerifyTrust rejected {} with status 0x{:08x}",
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("release executable"),
+            status as u32
+        )))
+    };
+    trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
+    // SAFETY: This closes only the state allocated by the matching
+    // WinVerifyTrust call above; all backing structures are still alive.
+    unsafe {
+        WinVerifyTrust(
+            std::ptr::null_mut(),
+            &mut action,
+            (&mut trust_data as *mut WINTRUST_DATA).cast::<c_void>(),
+        );
+    }
+    signer
 }
 
 fn canonical_file(path: &Path, label: &str) -> Result<PathBuf, ReleaseIdentityError> {
@@ -218,9 +468,17 @@ fn read_bounded_file(path: &Path, maximum: u64) -> Result<Vec<u8>, ReleaseIdenti
     Ok(bytes)
 }
 
+#[cfg(test)]
 fn sha256_file(path: &Path) -> Result<String, ReleaseIdentityError> {
     let mut file = fs::File::open(path).map_err(|error| {
         ReleaseIdentityError::new(format!("release executable could not be opened: {error}"))
+    })?;
+    sha256_open_file(&mut file)
+}
+
+fn sha256_open_file(file: &mut fs::File) -> Result<String, ReleaseIdentityError> {
+    file.seek(SeekFrom::Start(0)).map_err(|error| {
+        ReleaseIdentityError::new(format!("release executable could not be rewound: {error}"))
     })?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
@@ -233,6 +491,9 @@ fn sha256_file(path: &Path) -> Result<String, ReleaseIdentityError> {
         }
         hasher.update(&buffer[..read]);
     }
+    file.seek(SeekFrom::Start(0)).map_err(|error| {
+        ReleaseIdentityError::new(format!("release executable could not be rewound: {error}"))
+    })?;
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -329,6 +590,7 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
             version: "0.9.0-preview.1".to_owned(),
             protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
             release_channel: "preview".to_owned(),
+            authenticode_signer_sha256: None,
             signature: RELEASE_IDENTITY_SIGNATURE.to_owned(),
         };
         assert_eq!(
@@ -343,10 +605,14 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
 
         let public_key =
             decode_public_key(RELEASE_IDENTITY_PUBLIC_KEY).expect("fixture key should decode");
-        verify_preview_manifest_with(
+        let mut main_file =
+            open_locked_executable(&main, "main fixture").expect("main fixture should open");
+        let mut helper_file =
+            open_locked_executable(&helper, "helper fixture").expect("helper fixture should open");
+        let verified = verify_release_manifest_with(
             &manifest_path,
-            &main,
-            &helper,
+            &mut main_file,
+            &mut helper_file,
             "0.9.0-preview.1",
             "preview",
             |payload, signature| {
@@ -356,13 +622,19 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
             },
         )
         .expect("matching executable bytes and metadata should be accepted");
+        assert!(verified.authenticode_signer_sha256.is_none());
 
+        drop((main_file, helper_file));
         fs::write(&helper, b"tampered helper bytes").expect("helper fixture should be tampered");
+        let mut main_file =
+            open_locked_executable(&main, "main fixture").expect("main fixture should reopen");
+        let mut helper_file = open_locked_executable(&helper, "helper fixture")
+            .expect("helper fixture should reopen");
         assert!(
-            verify_preview_manifest_with(
+            verify_release_manifest_with(
                 &manifest_path,
-                &main,
-                &helper,
+                &mut main_file,
+                &mut helper_file,
                 "0.9.0-preview.1",
                 "preview",
                 |_payload, _signature| Ok(()),
@@ -371,6 +643,112 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
             .to_string()
             .contains("helper hash")
         );
+    }
+
+    #[test]
+    fn signed_manifest_requires_the_same_release_approved_authenticode_signer() {
+        let temporary = TempDirectory::new();
+        let main = temporary.0.join("formation-lap.exe");
+        let helper = temporary.0.join("formation-lap-elevated-helper.exe");
+        let manifest_path = temporary.0.join(RELEASE_IDENTITY_FILE);
+        fs::write(&main, b"signed main release bytes").expect("main fixture should write");
+        fs::write(&helper, b"signed helper release bytes").expect("helper fixture should write");
+        let approved_signer = "a".repeat(64);
+        let manifest = ReleaseIdentityManifest {
+            schema_version: RELEASE_IDENTITY_SCHEMA_VERSION,
+            main_executable_sha256: sha256_file(&main).expect("main fixture should hash"),
+            helper_sha256: sha256_file(&helper).expect("helper fixture should hash"),
+            version: "1.0.0-beta.1".to_owned(),
+            protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+            release_channel: "beta".to_owned(),
+            authenticode_signer_sha256: Some(approved_signer.clone()),
+            signature: RELEASE_IDENTITY_SIGNATURE.to_owned(),
+        };
+        assert!(
+            manifest
+                .signing_payload()
+                .contains(&format!("authenticodeSignerSha256={approved_signer}\n"))
+        );
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec(&manifest).expect("manifest should serialize"),
+        )
+        .expect("manifest fixture should write");
+
+        let open_pair = || {
+            (
+                open_locked_executable(&main, "main fixture").expect("main fixture should open"),
+                open_locked_executable(&helper, "helper fixture")
+                    .expect("helper fixture should open"),
+            )
+        };
+        let (mut main_file, mut helper_file) = open_pair();
+        verify_signed_release_identity_with(
+            &manifest_path,
+            &main,
+            &mut main_file,
+            &helper,
+            &mut helper_file,
+            "1.0.0-beta.1",
+            "beta",
+            |_payload, _signature| Ok(()),
+            |_path, _file| Ok(approved_signer.clone()),
+        )
+        .expect("equal trusted signers approved by the manifest should pass");
+        drop((main_file, helper_file));
+
+        let (mut main_file, mut helper_file) = open_pair();
+        let error = verify_signed_release_identity_with(
+            &manifest_path,
+            &main,
+            &mut main_file,
+            &helper,
+            &mut helper_file,
+            "1.0.0-beta.1",
+            "beta",
+            |_payload, _signature| Ok(()),
+            |path, _file| {
+                if file_name_matches(path, "formation-lap.exe") {
+                    Ok(approved_signer.clone())
+                } else {
+                    Ok("b".repeat(64))
+                }
+            },
+        )
+        .expect_err("different trusted signer certificates must be rejected");
+        assert!(error.to_string().contains("different Authenticode signers"));
+        drop((main_file, helper_file));
+
+        let (mut main_file, mut helper_file) = open_pair();
+        let error = verify_signed_release_identity_with(
+            &manifest_path,
+            &main,
+            &mut main_file,
+            &helper,
+            &mut helper_file,
+            "1.0.0-beta.1",
+            "beta",
+            |_payload, _signature| Ok(()),
+            |_path, _file| Ok("b".repeat(64)),
+        )
+        .expect_err("an equal but unapproved trusted signer must be rejected");
+        assert!(error.to_string().contains("not approved"));
+        drop((main_file, helper_file));
+
+        let (mut main_file, mut helper_file) = open_pair();
+        let error = verify_signed_release_identity_with(
+            &manifest_path,
+            &main,
+            &mut main_file,
+            &helper,
+            &mut helper_file,
+            "1.0.0-beta.1",
+            "beta",
+            |_payload, _signature| Ok(()),
+            |_path, _file| Err(ReleaseIdentityError::new("WinVerifyTrust rejected fixture")),
+        )
+        .expect_err("an untrusted signature must be rejected before equality");
+        assert!(error.to_string().contains("WinVerifyTrust rejected"));
     }
 
     #[test]
@@ -386,5 +764,32 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
         let renamed = temporary.0.join("renamed-main.exe");
         fs::write(&renamed, b"main").expect("renamed fixture should write");
         assert!(validate_expected_application_pair(&renamed, &helper).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verified_pair_handles_prevent_sibling_replacement_through_launch() {
+        let temporary = TempDirectory::new();
+        let main = temporary.0.join("formation-lap.exe");
+        let helper = temporary.0.join("formation-lap-elevated-helper.exe");
+        fs::write(&main, b"main").expect("main fixture should write");
+        fs::write(&helper, b"helper").expect("helper fixture should write");
+
+        let verified = verify_runtime_release_identity(&main, &helper)
+            .expect("debug identity pair should lock");
+        assert!(
+            fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(&helper)
+                .is_err(),
+            "the helper must not be replaceable between verification and UAC launch"
+        );
+        drop(verified);
+        fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&helper)
+            .expect("dropping the verified pair should release the test lock");
     }
 }

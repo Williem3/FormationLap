@@ -61,6 +61,19 @@ function identityFor(values) {
   if (!["preview", "beta", "stable"].includes(values.channel)) {
     throw new Error("Release identity channel is not recognized.");
   }
+  if (values.channel === "preview" && values["authenticode-signer-sha256"]) {
+    throw new Error(
+      "A preview release identity cannot claim an Authenticode signer.",
+    );
+  }
+  if (
+    values.channel !== "preview" &&
+    !/^[a-f0-9]{64}$/.test(values["authenticode-signer-sha256"] ?? "")
+  ) {
+    throw new Error(
+      "A signed release identity requires the lowercase SHA-256 of its approved Authenticode signer certificate.",
+    );
+  }
   const main = requireExecutable(values.main, "formation-lap.exe");
   const helper = requireExecutable(
     values.helper,
@@ -69,7 +82,7 @@ function identityFor(values) {
   if (dirname(main).toLowerCase() !== dirname(helper).toLowerCase()) {
     throw new Error("Final Formation Lap executables are not siblings.");
   }
-  return {
+  const identity = {
     schemaVersion,
     mainExecutableSha256: sha256(main),
     helperSha256: sha256(helper),
@@ -77,17 +90,24 @@ function identityFor(values) {
     protocolVersion,
     releaseChannel: values.channel,
   };
+  if (values.channel !== "preview") {
+    identity.authenticodeSignerSha256 = values["authenticode-signer-sha256"];
+  }
+  return identity;
 }
 
 function signingPayload(identity) {
-  return (
+  let payload =
     "formation-lap-release-identity-v1\n" +
     `mainExecutableSha256=${identity.mainExecutableSha256}\n` +
     `helperSha256=${identity.helperSha256}\n` +
     `version=${identity.version}\n` +
     `protocolVersion=${identity.protocolVersion}\n` +
-    `releaseChannel=${identity.releaseChannel}\n`
-  );
+    `releaseChannel=${identity.releaseChannel}\n`;
+  if (identity.authenticodeSignerSha256) {
+    payload += `authenticodeSignerSha256=${identity.authenticodeSignerSha256}\n`;
+  }
+  return payload;
 }
 
 function generate() {

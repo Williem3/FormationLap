@@ -30,6 +30,8 @@ matrix.
 - [ ] Release workflow completed after protected-environment approval.
 - [ ] Main executable Authenticode status is `Valid`.
 - [ ] One-shot helper Authenticode status is `Valid`.
+- [ ] Main and helper signer-certificate SHA-256 values are identical and
+      match `authenticodeSignerSha256` in the release-identity manifest.
 - [ ] Installer Authenticode status is `Valid` and timestamped.
 - [ ] Installer SHA-256 matches `SHA256SUMS.txt`.
 - [ ] Tauri updater accepts the candidate signature and rejects altered bytes.

@@ -367,6 +367,53 @@ creation, closing the replacement race.
   - built the native application and branded NSIS installer after exercising
     the build-only updater configuration with no updater runtime plugin.
 
+## Signed signer equality and adversarial qualification
+
+Signed Beta/Stable release identity now requires three independent facts:
+
+1. the release-key-signed manifest binds the final main/helper hashes, build
+   version, protocol, channel, and approved signer-certificate SHA-256;
+2. WinVerifyTrust succeeds independently for both binaries; and
+3. the signer certificate extracted from each successful Windows trust chain is
+   equal and matches the manifest-approved SHA-256.
+
+Both sides open the canonical sibling pair once with write/delete sharing
+denied. The main process retains that verified pair through UAC helper process
+creation; the helper retains it through request validation and execution. This
+prevents a user-writable installation path from reopening a
+verification-to-launch replacement window.
+
+The signed workflow calculates SHA-256 directly from each valid signer
+certificate, fails if they differ, and passes the common value into the release
+identity generator before release-key signing. The preview workflow cannot
+supply or serialize that field and continues to use only its explicitly
+approved unsigned-preview manifest path.
+
+### Adversarial evidence
+
+- Runtime unit tests reject a different trusted signer on the helper, the same
+  unapproved trusted signer on both binaries, a simulated WinVerifyTrust
+  failure, changed signed bytes, invalid release metadata, and replacement
+  attempts while the verified pair is held.
+- Release-contract tests reject a signed identity without the approved signer
+  digest and reject any preview identity that claims Authenticode.
+- Workflow contracts require valid main/helper signatures, SHA-256 certificate
+  extraction, exact signer equality, and the sealed signer argument before
+  bundling.
+
+### Verification
+
+- `pnpm.cmd verify`
+  - formatting, lint, type checking, 29 React tests, 3 accessibility tests, 27
+    release contracts, version/contracts/catalog checks, and the twenty-seven
+    command zero-permission capability audit passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 145 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+- `pnpm.cmd tauri build --debug --bundles nsis --no-sign --ci`
+  - built the native application and branded unsigned-preview NSIS installer.
+
 ## Publication boundary
 
 No candidate commit was pushed, no tag was created, no workflow was dispatched,

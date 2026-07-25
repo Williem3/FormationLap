@@ -34,7 +34,11 @@ function fixture() {
   return { directory, main, helper, payload, signature, output };
 }
 
-function runGenerator(paths, extraArguments = []) {
+function runGenerator(
+  paths,
+  extraArguments = [],
+  { version = "0.9.0-preview.1", channel = "preview" } = {},
+) {
   return spawnSync(
     process.execPath,
     [
@@ -44,9 +48,9 @@ function runGenerator(paths, extraArguments = []) {
       "--helper",
       paths.helper,
       "--version",
-      "0.9.0-preview.1",
+      version,
       "--channel",
-      "preview",
+      channel,
       "--payload",
       paths.payload,
       ...extraArguments,
@@ -121,6 +125,74 @@ test("release identity refuses to seal after either executable changes", () => {
     ]);
     assert.notEqual(sealed.status, 0);
     assert.match(`${sealed.stderr}${sealed.stdout}`, /final executable bytes/i);
+  } finally {
+    rmSync(paths.directory, { recursive: true, force: true });
+  }
+});
+
+test("signed identity requires and seals one approved signer certificate", () => {
+  const paths = fixture();
+  const signed = {
+    version: "1.0.0-beta.1",
+    channel: "beta",
+  };
+  const signer = "a".repeat(64);
+  try {
+    const missingSigner = runGenerator(paths, [], signed);
+    assert.notEqual(missingSigner.status, 0);
+    assert.match(
+      `${missingSigner.stderr}${missingSigner.stdout}`,
+      /approved Authenticode signer certificate/i,
+    );
+
+    const prepared = runGenerator(
+      paths,
+      ["--authenticode-signer-sha256", signer],
+      signed,
+    );
+    assert.equal(prepared.status, 0, prepared.stderr);
+    assert.match(
+      readFileSync(paths.payload, "utf8"),
+      new RegExp(`^authenticodeSignerSha256=${signer}$`, "m"),
+    );
+    writeFileSync(
+      paths.signature,
+      Buffer.from("fixture minisign signature").toString("base64"),
+    );
+    const sealed = runGenerator(
+      paths,
+      [
+        "--authenticode-signer-sha256",
+        signer,
+        "--signature",
+        paths.signature,
+        "--output",
+        paths.output,
+      ],
+      signed,
+    );
+    assert.equal(sealed.status, 0, sealed.stderr);
+    assert.equal(
+      JSON.parse(readFileSync(paths.output, "utf8")).authenticodeSignerSha256,
+      signer,
+    );
+  } finally {
+    rmSync(paths.directory, { recursive: true, force: true });
+  }
+});
+
+test("preview identity rejects an Authenticode signer claim", () => {
+  const paths = fixture();
+  try {
+    const result = runGenerator(paths, [
+      "--authenticode-signer-sha256",
+      "a".repeat(64),
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      `${result.stderr}${result.stdout}`,
+      /preview release identity cannot claim/i,
+    );
   } finally {
     rmSync(paths.directory, { recursive: true, force: true });
   }

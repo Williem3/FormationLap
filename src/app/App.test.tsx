@@ -789,6 +789,22 @@ describe("Formation Lap shell", () => {
     expect(screen.getByLabelText("VR")).toBeChecked();
   });
 
+  it("shows profile save failures beside the editor save action", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    vi.spyOn(bridge, "saveProfile").mockRejectedValueOnce(new Error("Denied"));
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("The Racing Profile could not be saved");
+    expect(error.closest(".editor-header")).not.toBeNull();
+  });
+
   it("selects an executable through the native file picker instead of requiring a typed path", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

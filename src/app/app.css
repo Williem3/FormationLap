@@ -1655,6 +1655,17 @@ button:disabled {
   align-items: center;
 }
 
+.editor-header-actions {
+  display: grid;
+  justify-items: end;
+  min-width: min(100%, 360px);
+}
+
+.editor-header-error {
+  max-width: 360px;
+  margin-top: 10px;
+}
+
 .profile-editor-grid {
   display: grid;
   grid-template-columns: minmax(320px, 0.82fr) minmax(420px, 1.18fr);
@@ -1882,12 +1893,6 @@ button:disabled {
 
 .locked-game-row {
   margin-top: 0;
-}
-
-.editor-error {
-  max-width: 1280px;
-  width: calc(100% - var(--workspace-gutter) - var(--workspace-gutter));
-  margin: -10px auto 28px;
 }
 
 .workspace-status {

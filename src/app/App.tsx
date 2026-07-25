@@ -2480,21 +2480,32 @@ function ProfileEditor({
             locked last on the right.
           </p>
         </div>
-        <div className="header-actions">
-          <button type="button" className="secondary-button" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={isSaving || (needsReview && !approvalComplete)}
-          >
-            {isSaving
-              ? "Saving…"
-              : needsReview
-                ? "Save and approve profile"
-                : "Save changes"}
-          </button>
+        <div className="editor-header-actions">
+          <div className="header-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={isSaving || (needsReview && !approvalComplete)}
+            >
+              {isSaving
+                ? "Saving…"
+                : needsReview
+                  ? "Save and approve profile"
+                  : "Save changes"}
+            </button>
+          </div>
+          {error && (
+            <p className="form-error editor-header-error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
       </header>
 
@@ -2834,12 +2845,6 @@ function ProfileEditor({
           </div>
         </section>
       </div>
-
-      {error && (
-        <p className="form-error editor-error" role="alert">
-          {error}
-        </p>
-      )}
     </form>
   );
 }

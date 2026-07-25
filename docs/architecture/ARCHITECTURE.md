@@ -258,6 +258,7 @@ The WebView receives narrow commands such as:
 - `delete_profile`
 - `import_profile`
 - `approve_profile`
+- `pick_executable_path`
 - `export_profile`
 - `start_session`
 - `cancel_startup`
@@ -269,6 +270,10 @@ The WebView receives narrow commands such as:
 
 Each command accepts a typed payload, validates it in Rust, and delegates to a
 deep module. Commands contain no lifecycle rules.
+
+`pick_executable_path` has no payload and opens only after an explicit Browse
+action. It uses the native Windows dialog, canonicalizes the selected existing
+file, and returns that one path; it is not a generic filesystem capability.
 
 The frontend is never granted generic shell, filesystem, process, or HTTP
 capabilities.

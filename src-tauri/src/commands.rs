@@ -741,6 +741,18 @@ pub fn approve_profile(
     commands.approve_profile(payload)
 }
 
+/// Opens the native Windows picker after an explicit user request and returns
+/// only the selected executable path.
+#[tauri::command]
+pub fn pick_executable_path() -> Result<Option<String>, CommandError> {
+    crate::native_file_picker::pick_executable_path().map_err(|_| CommandError {
+        code: "executable_picker_unavailable".to_owned(),
+        message: "Formation Lap could not open the executable picker.".to_owned(),
+        recovery: Some("Type the executable path or try again.".to_owned()),
+        diagnostic_id: None,
+    })
+}
+
 #[tauri::command]
 pub fn start_application(
     commands: tauri::State<'_, NativeCommandHost>,

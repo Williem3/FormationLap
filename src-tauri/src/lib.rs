@@ -9,6 +9,7 @@ mod diagnostics;
 mod discovery_catalog;
 mod game_launch_diagnostics;
 mod launch_recipe;
+mod native_file_picker;
 mod native_updater;
 mod privilege_broker;
 mod privilege_protocol;
@@ -30,8 +31,9 @@ pub use commands::{
     approve_profile, cancel_startup, close_session, create_profile, delete_profile,
     discover_applications, dismiss_recovery, duplicate_profile, exit_application,
     export_diagnostics, export_profile, force_stop_application, get_app_snapshot, import_profile,
-    recommend_applications, refresh_processes, request_quit, restart_application, save_profile,
-    select_profile, start_application, test_game_launch, update_settings,
+    pick_executable_path, recommend_applications, refresh_processes, request_quit,
+    restart_application, save_profile, select_profile, start_application, test_game_launch,
+    update_settings,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
@@ -290,6 +292,7 @@ pub fn run() {
             commands::export_profile,
             commands::import_profile,
             commands::approve_profile,
+            commands::pick_executable_path,
             commands::start_application,
             commands::refresh_processes,
             commands::exit_application,

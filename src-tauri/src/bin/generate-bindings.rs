@@ -135,6 +135,10 @@ export function approveProfile(payload: ApproveProfilePayload): Promise<AppSnaps
   return invoke<AppSnapshot>("approve_profile", {{ payload }});
 }}
 
+export function pickExecutablePath(): Promise<string | null> {{
+  return invoke<string | null>("pick_executable_path");
+}}
+
 export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("start_application", {{ payload }});
 }}

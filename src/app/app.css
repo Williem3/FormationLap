@@ -899,6 +899,21 @@ button:disabled {
   color: color-mix(in srgb, var(--muted) 72%, transparent);
 }
 
+.path-input {
+  display: flex;
+  gap: 8px;
+}
+
+.path-input input {
+  min-width: 0;
+}
+
+.path-browse-button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
 .field textarea {
   resize: vertical;
   line-height: 18px;

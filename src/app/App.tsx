@@ -417,6 +417,17 @@ export function App({ bridge }: AppProps) {
     setView("edit-profile");
   };
 
+  const pickExecutablePath = async (): Promise<string | null> => {
+    try {
+      return await bridge.pickExecutablePath();
+    } catch {
+      setFormError(
+        "Formation Lap could not open the executable picker. Type the path or try again.",
+      );
+      return null;
+    }
+  };
+
   const saveProfile = async (
     event: FormEvent<HTMLFormElement>,
     approval?: ProfileApproval,
@@ -1009,6 +1020,7 @@ export function App({ bridge }: AppProps) {
             onPrimarySimNameChange={setPrimarySimName}
             onPrimarySimSourceChange={setPrimarySimSource}
             onSourceValueChange={setSourceValue}
+            onPickExecutablePath={pickExecutablePath}
             onSelectPrimarySim={selectDiscoveredPrimarySim}
             onEnterManual={enterManualPrimarySim}
             onToggleSupporting={toggleSupportingApplication}
@@ -1028,6 +1040,7 @@ export function App({ bridge }: AppProps) {
             needsReview={selectedProfileNeedsReview}
             isSaving={isSaving}
             error={formError}
+            onPickExecutablePath={pickExecutablePath}
             onChange={setProfileDraft}
             onCancel={() => {
               setProfileDraft(null);
@@ -1823,13 +1836,12 @@ function installationWorkingDirectory(
     return installation.install_directory;
   }
 
-  const lastSeparator = Math.max(
-    installation.executablePath.lastIndexOf("\\"),
-    installation.executablePath.lastIndexOf("/"),
-  );
-  return lastSeparator > 0
-    ? installation.executablePath.slice(0, lastSeparator)
-    : null;
+  return directoryFromPath(installation.executablePath);
+}
+
+function directoryFromPath(path: string): string | null {
+  const lastSeparator = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  return lastSeparator > 0 ? path.slice(0, lastSeparator) : null;
 }
 
 function discoveredSupportingApplicationToProfile(
@@ -1893,6 +1905,7 @@ interface ProfileWizardProps {
   onPrimarySimNameChange(value: string): void;
   onPrimarySimSourceChange(value: PrimarySimSource): void;
   onSourceValueChange(value: string): void;
+  onPickExecutablePath(): Promise<string | null>;
   onSelectPrimarySim(primarySim: DiscoveredPrimarySim): void;
   onEnterManual(): void;
   onToggleSupporting(applicationId: string): void;
@@ -1916,6 +1929,7 @@ function ProfileWizard({
   onPrimarySimNameChange,
   onPrimarySimSourceChange,
   onSourceValueChange,
+  onPickExecutablePath,
   onSelectPrimarySim,
   onEnterManual,
   onToggleSupporting,
@@ -2098,25 +2112,43 @@ function ProfileWizard({
                         ? "Steam App ID"
                         : "Executable path"}
                     </span>
-                    <input
-                      aria-label={
-                        primarySimSource === "steam"
-                          ? "Steam App ID"
-                          : "Executable path"
-                      }
-                      inputMode={
-                        primarySimSource === "steam" ? "numeric" : "text"
-                      }
-                      value={sourceValue}
-                      onChange={(event) =>
-                        onSourceValueChange(event.currentTarget.value)
-                      }
-                      placeholder={
-                        primarySimSource === "steam"
-                          ? "2399420"
-                          : String.raw`C:\Games\Le Mans Ultimate\LMU.exe`
-                      }
-                    />
+                    <div className="path-input">
+                      <input
+                        aria-label={
+                          primarySimSource === "steam"
+                            ? "Steam App ID"
+                            : "Executable path"
+                        }
+                        inputMode={
+                          primarySimSource === "steam" ? "numeric" : "text"
+                        }
+                        value={sourceValue}
+                        onChange={(event) =>
+                          onSourceValueChange(event.currentTarget.value)
+                        }
+                        placeholder={
+                          primarySimSource === "steam"
+                            ? "2399420"
+                            : String.raw`C:\Games\Le Mans Ultimate\LMU.exe`
+                        }
+                      />
+                      {primarySimSource === "direct" && (
+                        <button
+                          type="button"
+                          className="secondary-button path-browse-button"
+                          aria-label="Browse for Primary Sim executable"
+                          onClick={() =>
+                            void onPickExecutablePath().then((path) => {
+                              if (path) {
+                                onSourceValueChange(path);
+                              }
+                            })
+                          }
+                        >
+                          Browseâ€¦
+                        </button>
+                      )}
+                    </div>
                     <small>
                       You can leave this blank and repair the path in the
                       profile editor.
@@ -2323,6 +2355,7 @@ interface ProfileEditorProps {
   needsReview: boolean;
   isSaving: boolean;
   error: string | null;
+  onPickExecutablePath(): Promise<string | null>;
   onChange(profile: RacingProfile): void;
   onCancel(): void;
   onSubmit(event: FormEvent<HTMLFormElement>, approval?: ProfileApproval): void;
@@ -2333,6 +2366,7 @@ function ProfileEditor({
   needsReview,
   isSaving,
   error,
+  onPickExecutablePath,
   onChange,
   onCancel,
   onSubmit,
@@ -2633,6 +2667,7 @@ function ProfileEditor({
             <ApplicationRecipeFields
               application={profile.primarySim}
               label="Primary Sim"
+              onPickExecutablePath={onPickExecutablePath}
               onChange={(application) =>
                 update((next) => {
                   next.primarySim = application;
@@ -2771,6 +2806,7 @@ function ProfileEditor({
                   <ApplicationRecipeFields
                     application={supportingApplication.application}
                     label={supportingApplication.application.name}
+                    onPickExecutablePath={onPickExecutablePath}
                     onChange={(application) =>
                       updateSupportingApplication(index, (supporting) => {
                         supporting.application = application;
@@ -2811,12 +2847,14 @@ function ProfileEditor({
 interface ApplicationRecipeFieldsProps {
   application: ProfileApplication;
   label: string;
+  onPickExecutablePath(): Promise<string | null>;
   onChange(application: ProfileApplication): void;
 }
 
 function ApplicationRecipeFields({
   application,
   label,
+  onPickExecutablePath,
   onChange,
 }: ApplicationRecipeFieldsProps) {
   const update = (change: (next: ProfileApplication) => void) => {
@@ -2826,6 +2864,14 @@ function ApplicationRecipeFields({
   };
   const source = application.launchRecipe.source;
   const shutdown = application.launchRecipe.shutdownStrategy;
+  const selectExecutable = async (
+    change: (next: ProfileApplication, path: string) => void,
+  ) => {
+    const path = await onPickExecutablePath();
+    if (path) {
+      update((next) => change(next, path));
+    }
+  };
 
   return (
     <details className="recipe-details">
@@ -2857,27 +2903,50 @@ function ApplicationRecipeFields({
                 ? `${label} Steam App ID`
                 : `${label} executable path`}
             </span>
-            <input
-              value={
-                source.kind === "steam"
-                  ? String(source.appId || "")
-                  : source.executablePath
-              }
-              onChange={(event) =>
-                update((next) => {
-                  const nextSource = next.launchRecipe.source;
-                  if (nextSource.kind === "steam") {
-                    nextSource.appId =
-                      Number.parseInt(event.currentTarget.value, 10) || 0;
-                    next.pathNeedsRepair = false;
-                  } else {
-                    nextSource.executablePath = event.currentTarget.value;
-                    next.pathNeedsRepair =
-                      event.currentTarget.value.length === 0;
+            <div className="path-input">
+              <input
+                value={
+                  source.kind === "steam"
+                    ? String(source.appId || "")
+                    : source.executablePath
+                }
+                onChange={(event) =>
+                  update((next) => {
+                    const nextSource = next.launchRecipe.source;
+                    if (nextSource.kind === "steam") {
+                      nextSource.appId =
+                        Number.parseInt(event.currentTarget.value, 10) || 0;
+                      next.pathNeedsRepair = false;
+                    } else {
+                      nextSource.executablePath = event.currentTarget.value;
+                      next.pathNeedsRepair =
+                        event.currentTarget.value.length === 0;
+                    }
+                  })
+                }
+              />
+              {source.kind === "directExecutable" && (
+                <button
+                  type="button"
+                  className="secondary-button path-browse-button"
+                  aria-label={`Browse for ${label} executable`}
+                  onClick={() =>
+                    void selectExecutable((next, path) => {
+                      const nextSource = next.launchRecipe.source;
+                      if (nextSource.kind !== "directExecutable") {
+                        return;
+                      }
+                      nextSource.executablePath = path;
+                      next.pathNeedsRepair = false;
+                      next.launchRecipe.workingDirectory ??=
+                        directoryFromPath(path);
+                    })
                   }
-                })
-              }
-            />
+                >
+                  Browseâ€¦
+                </button>
+              )}
+            </div>
           </label>
         </div>
         {source.kind === "steam" && (
@@ -2988,15 +3057,29 @@ function ApplicationRecipeFields({
         </div>
         <label className="field">
           <span>{label} monitored executable path</span>
-          <input
-            value={application.launchRecipe.monitoredExecutablePath ?? ""}
-            onChange={(event) =>
-              update((next) => {
-                next.launchRecipe.monitoredExecutablePath =
-                  event.currentTarget.value || null;
-              })
-            }
-          />
+          <div className="path-input">
+            <input
+              value={application.launchRecipe.monitoredExecutablePath ?? ""}
+              onChange={(event) =>
+                update((next) => {
+                  next.launchRecipe.monitoredExecutablePath =
+                    event.currentTarget.value || null;
+                })
+              }
+            />
+            <button
+              type="button"
+              className="secondary-button path-browse-button"
+              aria-label={`Browse for ${label} monitored executable`}
+              onClick={() =>
+                void selectExecutable((next, path) => {
+                  next.launchRecipe.monitoredExecutablePath = path;
+                })
+              }
+            >
+              Browseâ€¦
+            </button>
+          </div>
           <small>
             Required before a launcher-discovered process can be Session-owned.
             Test Game Launch can learn this path for review.
@@ -3106,17 +3189,34 @@ function ApplicationRecipeFields({
           <div className="field-grid">
             <label className="field">
               <span>Stop executable path</span>
-              <input
-                value={shutdown.executablePath}
-                onChange={(event) =>
-                  update((next) => {
-                    const nextShutdown = next.launchRecipe.shutdownStrategy;
-                    if (nextShutdown.kind === "customStop") {
-                      nextShutdown.executablePath = event.currentTarget.value;
-                    }
-                  })
-                }
-              />
+              <div className="path-input">
+                <input
+                  value={shutdown.executablePath}
+                  onChange={(event) =>
+                    update((next) => {
+                      const nextShutdown = next.launchRecipe.shutdownStrategy;
+                      if (nextShutdown.kind === "customStop") {
+                        nextShutdown.executablePath = event.currentTarget.value;
+                      }
+                    })
+                  }
+                />
+                <button
+                  type="button"
+                  className="secondary-button path-browse-button"
+                  aria-label={`Browse for ${label} stop executable`}
+                  onClick={() =>
+                    void selectExecutable((next, path) => {
+                      const nextShutdown = next.launchRecipe.shutdownStrategy;
+                      if (nextShutdown.kind === "customStop") {
+                        nextShutdown.executablePath = path;
+                      }
+                    })
+                  }
+                >
+                  Browseâ€¦
+                </button>
+              </div>
             </label>
             <label className="field">
               <span>Stop arguments · one per line</span>

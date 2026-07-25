@@ -16,6 +16,7 @@ import {
   getAppSnapshot,
   importProfile,
   installFormationLapUpdate,
+  pickExecutablePath,
   refreshProcesses,
   recommendApplications,
   requestQuit,
@@ -40,6 +41,7 @@ export class TauriNativeBridge implements NativeBridge {
   exportProfile = exportProfile;
   importProfile = importProfile;
   approveProfile = approveProfile;
+  pickExecutablePath = pickExecutablePath;
   startApplication = startApplication;
   refreshProcesses = refreshProcesses;
   exitApplication = exitApplication;

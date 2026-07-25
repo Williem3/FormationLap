@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { App } from "./App";
 import { InMemoryNativeBridge } from "../native-bridge/in-memory-native-bridge";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import type {
   ApplicationProcessSnapshot,
@@ -787,6 +787,31 @@ describe("Formation Lap shell", () => {
       screen.getByRole("button", { name: /Sunday endurance/ }),
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByLabelText("VR")).toBeChecked();
+  });
+
+  it("selects an executable through the native file picker instead of requiring a typed path", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    const pickExecutablePath = vi
+      .fn()
+      .mockResolvedValue(String.raw`C:\Racing\iRacing\iRacingSim64DX11.exe`);
+    Object.assign(bridge, { pickExecutablePath });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    await user.click(screen.getByText("Launch Recipe details"));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Browse for Primary Sim executable",
+      }),
+    );
+
+    expect(pickExecutablePath).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText("Primary Sim executable path")).toHaveValue(
+      String.raw`C:\Racing\iRacing\iRacingSim64DX11.exe`,
+    );
   });
 
   it("selects another Racing Profile from the sidebar", async () => {

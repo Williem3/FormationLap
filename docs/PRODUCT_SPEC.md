@@ -122,6 +122,10 @@ An executable Launch Recipe includes:
 - Visible or hidden console mode.
 - Normal or elevated launch.
 
+Manual Entry and Racing Profile editing offer a native Windows file picker for
+direct, monitored, and custom-stop executable paths. The picker returns only a
+user-selected local path; typed paths remain available for advanced cases.
+
 Long-running console applications are first-class Supporting Applications.
 Formation Lap can hide or show the console, capture a bounded local output log,
 and use a console interrupt as a graceful stop strategy.

@@ -62,10 +62,10 @@ pub use privilege_broker::{
 };
 pub use privilege_protocol::{
     ELEVATED_HELPER_PROTOCOL_VERSION, ElevatedHelperRequest, ElevatedHelperResponse,
-    ElevatedOperation, ElevatedOperationResult, ElevatedRequestValidator, HelperProtocolError,
-    HelperValidationContext, MAX_ELEVATED_ARGUMENT_BYTES, MAX_ELEVATED_ARGUMENTS,
-    MAX_ELEVATED_OPERATIONS, MAX_HELPER_MESSAGE_BYTES, decode_helper_request,
-    encode_helper_message,
+    ElevatedOperation, ElevatedOperationResult, ElevatedOwnershipAcknowledgement,
+    ElevatedOwnershipOffer, ElevatedRequestValidator, HelperProtocolError, HelperValidationContext,
+    MAX_ELEVATED_ARGUMENT_BYTES, MAX_ELEVATED_ARGUMENTS, MAX_ELEVATED_OPERATIONS,
+    MAX_HELPER_MESSAGE_BYTES, decode_helper_request, encode_helper_message,
 };
 pub use process_runtime::{
     GracefulStopResult, ProcessObservation, ProcessResponsiveness, ProcessRuntime,

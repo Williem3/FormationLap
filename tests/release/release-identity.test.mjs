@@ -69,7 +69,10 @@ test("release identity binds the final main and helper bytes before sealing", ()
     assert.match(payload, /^mainExecutableSha256=[a-f0-9]{64}$/m);
     assert.match(payload, /^helperSha256=[a-f0-9]{64}$/m);
     assert.match(payload, /^version=0\.9\.0-preview\.1$/m);
-    assert.match(payload, /^protocolVersion=1$/m);
+    assert.match(
+      payload,
+      new RegExp(`^protocolVersion=${protocolVersion}$`, "m"),
+    );
     assert.match(payload, /^releaseChannel=preview$/m);
 
     writeFileSync(

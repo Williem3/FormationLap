@@ -8,7 +8,7 @@ use std::{
 };
 use uuid::Uuid;
 
-pub const ELEVATED_HELPER_PROTOCOL_VERSION: u16 = 1;
+pub const ELEVATED_HELPER_PROTOCOL_VERSION: u16 = 2;
 pub const MAX_ELEVATED_OPERATIONS: usize = 32;
 pub const MAX_ELEVATED_ARGUMENTS: usize = 32;
 pub const MAX_ELEVATED_ARGUMENT_BYTES: usize = 16_384;
@@ -32,6 +32,7 @@ pub enum ElevatedOperation {
         arguments: Vec<String>,
         working_directory: Option<String>,
         monitored_process: Option<String>,
+        monitored_executable_path: Option<String>,
         console_visibility: ConsoleVisibility,
         startup_timeout_seconds: u32,
     },
@@ -52,6 +53,24 @@ pub struct ElevatedHelperResponse {
     pub accepted: bool,
     pub error: Option<String>,
     pub results: Vec<ElevatedOperationResult>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ElevatedOwnershipOffer {
+    pub protocol_version: u16,
+    pub nonce: String,
+    pub operation_index: usize,
+    pub process_identity: ProcessIdentity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ElevatedOwnershipAcknowledgement {
+    pub protocol_version: u16,
+    pub nonce: String,
+    pub operation_index: usize,
+    pub process_identity: ProcessIdentity,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -257,6 +276,7 @@ fn validate_operation(
             arguments,
             working_directory,
             monitored_process,
+            monitored_executable_path,
             startup_timeout_seconds,
             ..
         } => {
@@ -274,6 +294,18 @@ fn validate_operation(
                 {
                     return Err(HelperProtocolError::InvalidExecutable(
                         "monitored Process must be an executable file name".to_owned(),
+                    ));
+                }
+            }
+            if let Some(monitored_executable_path) = monitored_executable_path {
+                let canonical = validate_canonical_file(monitored_executable_path)?;
+                if !canonical
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+                {
+                    return Err(HelperProtocolError::InvalidExecutable(
+                        "monitored executable path must identify an .exe file".to_owned(),
                     ));
                 }
             }

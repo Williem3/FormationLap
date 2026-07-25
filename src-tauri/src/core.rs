@@ -828,7 +828,6 @@ impl FormationLapCore {
                 });
 
                 let ordered_applications = self.ordered_session_applications(&profile)?;
-                self.prepare_elevated_session_launches(&ordered_applications)?;
                 self.session = crate::SessionSnapshot {
                     state: crate::SessionState::Starting,
                     active_profile_id: Some(profile_id.clone()),
@@ -837,6 +836,7 @@ impl FormationLapCore {
                 };
                 self.session_events.clear();
                 for (index, application) in ordered_applications.iter().enumerate() {
+                    self.prepare_elevated_session_launches(&ordered_applications, index)?;
                     let ownership = match self
                         .launch_or_adopt(&application.id, application.launch_recipe.clone())
                     {
@@ -1318,12 +1318,13 @@ impl FormationLapCore {
                         identity,
                     )
                 } else {
-                    let identity = self.execute_elevated_launch(&launch_recipe)?;
                     let ownership = if launch_identity_is_unambiguous(&launch_recipe) {
                         ProcessOwnership::SessionOwned
                     } else {
                         ProcessOwnership::PreExisting
                     };
+                    let identity =
+                        self.execute_elevated_launch(application_id, &launch_recipe, &ownership)?;
                     (
                         if ownership == ProcessOwnership::SessionOwned {
                             ProcessStatus::Starting
@@ -1387,13 +1388,22 @@ impl FormationLapCore {
     fn prepare_elevated_session_launches(
         &mut self,
         applications: &[crate::ProfileApplication],
+        start_index: usize,
     ) -> Result<(), CoreError> {
-        self.prepared_elevated_launches.clear();
+        let Some(first) = applications.get(start_index) else {
+            return Ok(());
+        };
+        if !first.launch_recipe.elevated || self.prepared_elevated_launches.contains_key(&first.id)
+        {
+            return Ok(());
+        }
+
         let mut application_ids = Vec::new();
         let mut operations = Vec::new();
         for application in applications
             .iter()
-            .filter(|application| application.launch_recipe.elevated)
+            .skip(start_index)
+            .take_while(|application| application.launch_recipe.elevated)
         {
             self.application_recipes
                 .insert(application.id.clone(), application.launch_recipe.clone());
@@ -1419,7 +1429,59 @@ impl FormationLapCore {
             return Ok(());
         }
 
-        let response = self.privilege_broker.execute(&operations)?;
+        let session = &self.session;
+        let journal = &self.session_journal;
+        let application_processes = &mut self.application_processes;
+        let acknowledgement_applications = &application_ids;
+        let mut acknowledge = |operation_index: usize,
+                               identity: &ProcessIdentity|
+         -> Result<(), PrivilegeBrokerError> {
+            let Some((application_id, identity_is_unambiguous)) =
+                acknowledgement_applications.get(operation_index)
+            else {
+                return Err(PrivilegeBrokerError::new(
+                    "helper acknowledged an unknown elevated launch",
+                ));
+            };
+            let ownership = if *identity_is_unambiguous {
+                ProcessOwnership::SessionOwned
+            } else {
+                ProcessOwnership::PreExisting
+            };
+            let previous = application_processes.insert(
+                application_id.clone(),
+                ApplicationProcessSnapshot {
+                    application_id: application_id.clone(),
+                    status: if ownership == ProcessOwnership::SessionOwned {
+                        ProcessStatus::Starting
+                    } else {
+                        ProcessStatus::RunningPreExisting
+                    },
+                    ownership: Some(ownership),
+                    identity: Some(identity.clone()),
+                    output: None,
+                },
+            );
+            let journal_processes = application_processes
+                .values()
+                .filter(|process| process.identity.is_some())
+                .cloned()
+                .collect::<Vec<_>>();
+            if let Err(error) = journal.persist(session, &journal_processes) {
+                if let Some(previous) = previous {
+                    application_processes.insert(application_id.clone(), previous);
+                } else {
+                    application_processes.remove(application_id);
+                }
+                return Err(PrivilegeBrokerError::new(format!(
+                    "elevated Process ownership could not be journaled: {error}"
+                )));
+            }
+            Ok(())
+        };
+        let response = self
+            .privilege_broker
+            .execute_launch_batch(&operations, &mut acknowledge)?;
         if !response.accepted {
             return Err(CoreError::PrivilegeBroker(PrivilegeBrokerError::new(
                 response
@@ -1459,11 +1521,61 @@ impl FormationLapCore {
 
     fn execute_elevated_launch(
         &mut self,
+        application_id: &str,
         recipe: &crate::LaunchRecipe,
+        ownership: &ProcessOwnership,
     ) -> Result<ProcessIdentity, CoreError> {
+        let operation = elevated_launch_operation(recipe)?;
+        let session = &self.session;
+        let journal = &self.session_journal;
+        let application_processes = &mut self.application_processes;
+        let expected_application_id = application_id.to_owned();
+        let expected_ownership = ownership.clone();
+        let mut acknowledge = |operation_index: usize,
+                               identity: &ProcessIdentity|
+         -> Result<(), PrivilegeBrokerError> {
+            if operation_index != 0 {
+                return Err(PrivilegeBrokerError::new(
+                    "helper acknowledged an unknown elevated launch",
+                ));
+            }
+            let previous = application_processes.insert(
+                expected_application_id.clone(),
+                ApplicationProcessSnapshot {
+                    application_id: expected_application_id.clone(),
+                    status: if expected_ownership == ProcessOwnership::SessionOwned {
+                        ProcessStatus::Starting
+                    } else {
+                        ProcessStatus::RunningPreExisting
+                    },
+                    ownership: Some(expected_ownership.clone()),
+                    identity: Some(identity.clone()),
+                    output: None,
+                },
+            );
+            if session.state == crate::SessionState::Idle {
+                return Ok(());
+            }
+            let journal_processes = application_processes
+                .values()
+                .filter(|process| process.identity.is_some())
+                .cloned()
+                .collect::<Vec<_>>();
+            if let Err(error) = journal.persist(session, &journal_processes) {
+                if let Some(previous) = previous {
+                    application_processes.insert(expected_application_id.clone(), previous);
+                } else {
+                    application_processes.remove(&expected_application_id);
+                }
+                return Err(PrivilegeBrokerError::new(format!(
+                    "elevated Process ownership could not be journaled: {error}"
+                )));
+            }
+            Ok(())
+        };
         let response = self
             .privilege_broker
-            .execute(&[elevated_launch_operation(recipe)?])?;
+            .execute_launch_batch(&[operation], &mut acknowledge)?;
         match response.results.into_iter().next() {
             Some(ElevatedOperationResult::Launched { process_identity }) => Ok(process_identity),
             Some(ElevatedOperationResult::Failed { message }) => Err(CoreError::PrivilegeBroker(
@@ -1687,6 +1799,7 @@ impl FormationLapCore {
 
             let application = &ordered_applications[next_index];
             let application_id = application.id.clone();
+            self.prepare_elevated_session_launches(&ordered_applications, next_index)?;
             let ownership =
                 match self.launch_or_adopt(&application_id, application.launch_recipe.clone()) {
                     Ok(ownership) => ownership,
@@ -2083,6 +2196,7 @@ fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOpe
         arguments: recipe.arguments.clone(),
         working_directory,
         monitored_process: recipe.monitored_process.clone(),
+        monitored_executable_path: recipe.monitored_executable_path.clone(),
         console_visibility: recipe.console_visibility.clone(),
         startup_timeout_seconds: recipe.startup_timeout_seconds,
     })

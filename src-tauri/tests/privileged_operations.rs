@@ -6,11 +6,12 @@ use formation_lap_lib::{
     LaunchRecipe, LaunchSource, MAX_ELEVATED_OPERATIONS, PrivilegeBroker, ProcessIdentity,
     ProcessObservation, ProcessOutput, ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError,
     RacingProfile, SessionState, ShutdownStrategy, SupportingApplication, WindowsPrivilegeBroker,
-    decode_helper_request,
+    WindowsProcessRuntime, decode_helper_request,
 };
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -46,6 +47,7 @@ fn valid_request() -> (ElevatedHelperRequest, HelperValidationContext) {
                         .into_owned(),
                 ),
                 monitored_process: None,
+                monitored_executable_path: None,
                 console_visibility: ConsoleVisibility::Hidden,
                 startup_timeout_seconds: 30,
             }],
@@ -172,6 +174,7 @@ fn helper_rejects_noncanonical_and_shell_targets() {
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         startup_timeout_seconds: 30,
     };
@@ -188,6 +191,7 @@ fn helper_rejects_noncanonical_and_shell_targets() {
         arguments: vec!["/c".to_owned(), "echo unsafe".to_owned()],
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         startup_timeout_seconds: 30,
     };
@@ -240,6 +244,7 @@ fn helper_rejects_oversized_batches_and_line_bearing_arguments() {
         arguments: vec!["safe\r\nwhoami".to_owned()],
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         startup_timeout_seconds: 30,
     };
@@ -343,6 +348,88 @@ impl ProcessRuntime for PrivilegedStartupRuntime {
     }
 }
 
+#[derive(Default)]
+struct OrderedStartupState {
+    launches: Vec<String>,
+    next_pid: u32,
+}
+
+#[derive(Clone, Default)]
+struct OrderedStartupRuntime {
+    state: Arc<Mutex<OrderedStartupState>>,
+}
+
+impl OrderedStartupRuntime {
+    fn launches(&self) -> Vec<String> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .launches
+            .clone()
+    }
+}
+
+impl ProcessRuntime for OrderedStartupRuntime {
+    fn matching_processes(
+        &mut self,
+        _recipe: &LaunchRecipe,
+    ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
+        Ok(Vec::new())
+    }
+
+    fn launch(&mut self, recipe: &LaunchRecipe) -> Result<ProcessIdentity, ProcessRuntimeError> {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let label = recipe
+            .arguments
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "unlabeled".to_owned());
+        state.launches.push(label);
+        state.next_pid += 1;
+        Ok(ProcessIdentity {
+            pid: 12_000 + state.next_pid,
+            creation_time: format!("normal-{}", state.next_pid),
+            canonical_executable_path: canonical_current_executable(),
+        })
+    }
+
+    fn observe(
+        &mut self,
+        _identity: &ProcessIdentity,
+    ) -> Result<ProcessObservation, ProcessRuntimeError> {
+        Ok(ProcessObservation::Running {
+            responsiveness: ProcessResponsiveness::Responsive,
+        })
+    }
+
+    fn request_graceful_stop(
+        &mut self,
+        _identity: &ProcessIdentity,
+        _strategy: &ShutdownStrategy,
+    ) -> Result<GracefulStopResult, ProcessRuntimeError> {
+        Ok(GracefulStopResult::Requested)
+    }
+
+    fn wait_for_exit(
+        &mut self,
+        _identity: &ProcessIdentity,
+        _timeout: Duration,
+    ) -> Result<bool, ProcessRuntimeError> {
+        Ok(true)
+    }
+
+    fn force_stop(&mut self, _identity: &ProcessIdentity) -> Result<(), ProcessRuntimeError> {
+        Ok(())
+    }
+
+    fn read_output(
+        &mut self,
+        _identity: &ProcessIdentity,
+    ) -> Result<ProcessOutput, ProcessRuntimeError> {
+        Ok(ProcessOutput::default())
+    }
+}
+
 struct TempStorage(PathBuf);
 
 impl TempStorage {
@@ -368,34 +455,145 @@ impl Drop for TempStorage {
     }
 }
 
+struct JournalInspectingBroker {
+    acknowledgement_observed: Arc<Mutex<bool>>,
+    identity: ProcessIdentity,
+    journal_path: PathBuf,
+}
+
+impl PrivilegeBroker for JournalInspectingBroker {
+    fn execute(
+        &mut self,
+        _operations: &[ElevatedOperation],
+    ) -> Result<ElevatedHelperResponse, formation_lap_lib::PrivilegeBrokerError> {
+        Err(formation_lap_lib::PrivilegeBrokerError::new(
+            "journal fixture accepts only launch batches",
+        ))
+    }
+
+    fn execute_launch_batch(
+        &mut self,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(
+            usize,
+            &ProcessIdentity,
+        ) -> Result<(), formation_lap_lib::PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, formation_lap_lib::PrivilegeBrokerError> {
+        assert_eq!(operations.len(), 1);
+        assert!(
+            !self.journal_path.exists(),
+            "ownership must not be fabricated before the helper offers an identity"
+        );
+        acknowledge(0, &self.identity)?;
+        let journal = fs::read_to_string(&self.journal_path)
+            .expect("the acknowledgement callback must durably write the Session journal");
+        assert!(journal.contains(&self.identity.creation_time));
+        *self
+            .acknowledgement_observed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = true;
+        Ok(ElevatedHelperResponse {
+            protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+            nonce: "journal-inspection".to_owned(),
+            accepted: true,
+            error: None,
+            results: vec![ElevatedOperationResult::Launched {
+                process_identity: self.identity.clone(),
+            }],
+        })
+    }
+}
+
 #[test]
-fn one_session_startup_batches_all_elevated_launches_through_one_broker_request() {
+fn elevated_ownership_is_journaled_before_the_helper_is_acknowledged() {
     let storage = TempStorage::new();
-    let broker = DevelopmentPrivilegeBroker::default();
-    let observed_broker = broker.clone();
     let executable_path = canonical_current_executable();
-    let identities = [11_001, 11_002].map(|pid| ProcessIdentity {
-        pid,
-        creation_time: format!("created-{pid}"),
-        canonical_executable_path: executable_path.clone(),
-    });
-    broker.queue_response(Ok(ElevatedHelperResponse {
-        protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
-        nonce: "development-adapter".to_owned(),
-        accepted: true,
-        error: None,
-        results: identities
-            .iter()
-            .cloned()
-            .map(|process_identity| ElevatedOperationResult::Launched { process_identity })
-            .collect(),
-    }));
+    let acknowledgement_observed = Arc::new(Mutex::new(false));
+    let broker = JournalInspectingBroker {
+        acknowledgement_observed: acknowledgement_observed.clone(),
+        identity: ProcessIdentity {
+            pid: 11_050,
+            creation_time: "journaled-before-ack".to_owned(),
+            canonical_executable_path: executable_path.clone(),
+        },
+        journal_path: storage.path().join("active-session.json"),
+    };
     let mut core = FormationLapCore::open_with_runtime_and_privilege_broker(
         storage.path(),
         PrivilegedStartupRuntime,
         broker,
     )
-    .expect("the core should open with the approved test adapters");
+    .expect("the core should open with the journal-inspecting broker");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Journaled Elevation".to_owned(),
+            primary_sim_name: "Primary".to_owned(),
+        })
+        .expect("the profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("unexpected create outcome: {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the created profile should be selected");
+    profile.primary_sim.launch_recipe = direct_recipe(&executable_path, false);
+    profile.supporting_applications = vec![SupportingApplication {
+        application: formation_lap_lib::ProfileApplication {
+            id: "elevated-support".to_owned(),
+            name: "Elevated Support".to_owned(),
+            launch_recipe: direct_recipe(&executable_path, true),
+            path_needs_repair: false,
+        },
+        requirement: ApplicationRequirement::Required,
+        keep_running: false,
+    }];
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the elevated profile should save");
+
+    core.execute(AppCommand::StartSession { profile_id })
+        .expect("the elevated launch should be acknowledged");
+    assert!(
+        *acknowledgement_observed
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    );
+}
+
+#[test]
+fn startup_preserves_saved_order_and_batches_only_adjacent_elevated_entries() {
+    let storage = TempStorage::new();
+    let broker = DevelopmentPrivilegeBroker::default();
+    let observed_broker = broker.clone();
+    let runtime = OrderedStartupRuntime::default();
+    let observed_runtime = runtime.clone();
+    let executable_path = canonical_current_executable();
+    let identities = [11_001, 11_002, 11_003].map(|pid| ProcessIdentity {
+        pid,
+        creation_time: format!("created-{pid}"),
+        canonical_executable_path: executable_path.clone(),
+    });
+    for (nonce, batch) in [
+        ("development-adjacent", identities[..2].to_vec()),
+        ("development-primary", identities[2..].to_vec()),
+    ] {
+        broker.queue_response(Ok(ElevatedHelperResponse {
+            protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+            nonce: nonce.to_owned(),
+            accepted: true,
+            error: None,
+            results: batch
+                .into_iter()
+                .map(|process_identity| ElevatedOperationResult::Launched { process_identity })
+                .collect(),
+        }));
+    }
+    let mut core =
+        FormationLapCore::open_with_runtime_and_privilege_broker(storage.path(), runtime, broker)
+            .expect("the core should open with the approved test adapters");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
             name: "Elevated Rig".to_owned(),
@@ -410,20 +608,25 @@ fn one_session_startup_batches_all_elevated_launches_through_one_broker_request(
         .snapshot()
         .selected_profile
         .expect("the created profile should be selected");
-    profile.primary_sim.launch_recipe = direct_recipe(&executable_path, false);
-    profile.supporting_applications = ["Telemetry", "Switcher"]
-        .into_iter()
-        .map(|name| SupportingApplication {
-            application: formation_lap_lib::ProfileApplication {
-                id: name.to_ascii_lowercase(),
-                name: name.to_owned(),
-                launch_recipe: direct_recipe(&executable_path, true),
-                path_needs_repair: false,
-            },
-            requirement: ApplicationRequirement::Required,
-            keep_running: false,
-        })
-        .collect();
+    profile.primary_sim.launch_recipe = labeled_recipe(&executable_path, true, "Elevated E");
+    profile.supporting_applications = [
+        ("normal-a", "Normal A", false),
+        ("elevated-b", "Elevated B", true),
+        ("elevated-c", "Elevated C", true),
+        ("normal-d", "Normal D", false),
+    ]
+    .into_iter()
+    .map(|(id, name, elevated)| SupportingApplication {
+        application: formation_lap_lib::ProfileApplication {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            launch_recipe: labeled_recipe(&executable_path, elevated, name),
+            path_needs_repair: false,
+        },
+        requirement: ApplicationRequirement::Required,
+        keep_running: false,
+    })
+    .collect();
     core.execute(AppCommand::SaveProfile {
         profile: Box::new(RacingProfile {
             id: profile_id.clone(),
@@ -436,24 +639,34 @@ fn one_session_startup_batches_all_elevated_launches_through_one_broker_request(
         core.execute(AppCommand::StartSession {
             profile_id: profile_id.clone(),
         })
-        .expect("the Session should request its elevated batch"),
+        .expect("the Session should start with its first normal entry"),
         CommandOutcome::SessionStartRequested { profile_id }
     );
-
-    let batches = observed_broker.recorded_batches();
-    assert_eq!(batches.len(), 1, "one Session should request UAC once");
-    assert_eq!(batches[0].len(), 2);
+    assert_eq!(observed_runtime.launches(), ["Normal A"]);
     assert!(
-        batches[0]
-            .iter()
-            .all(|operation| matches!(operation, ElevatedOperation::Launch { .. }))
+        observed_broker.recorded_batches().is_empty(),
+        "the first elevated run must wait for Normal A"
     );
-    let snapshot = core.snapshot();
-    assert_eq!(snapshot.application_processes.len(), 1);
-    assert_eq!(
-        snapshot.application_processes[0].identity,
-        Some(identities[0].clone())
-    );
+
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("Normal A should release the adjacent elevated run");
+    let batches = observed_broker.recorded_batches();
+    assert_eq!(batches.len(), 1);
+    assert_eq!(launch_labels(&batches[0]), ["Elevated B", "Elevated C"]);
+
+    for _ in 0..6 {
+        core.execute(AppCommand::RefreshProcesses)
+            .expect("the saved sequence should keep advancing");
+        if core.snapshot().session.state == SessionState::Active {
+            break;
+        }
+    }
+    assert_eq!(core.snapshot().session.state, SessionState::Active);
+    assert_eq!(observed_runtime.launches(), ["Normal A", "Normal D"]);
+    let batches = observed_broker.recorded_batches();
+    assert_eq!(batches.len(), 2);
+    assert_eq!(launch_labels(&batches[0]), ["Elevated B", "Elevated C"]);
+    assert_eq!(launch_labels(&batches[1]), ["Elevated E"]);
 }
 
 #[test]
@@ -574,6 +787,23 @@ fn direct_recipe(executable_path: &str, elevated: bool) -> LaunchRecipe {
     }
 }
 
+fn labeled_recipe(executable_path: &str, elevated: bool, label: &str) -> LaunchRecipe {
+    LaunchRecipe {
+        arguments: vec![label.to_owned()],
+        ..direct_recipe(executable_path, elevated)
+    }
+}
+
+fn launch_labels(operations: &[ElevatedOperation]) -> Vec<String> {
+    operations
+        .iter()
+        .filter_map(|operation| match operation {
+            ElevatedOperation::Launch { arguments, .. } => arguments.first().cloned(),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 #[ignore = "manual Windows UAC evidence; run explicitly after building the helper and fixtures"]
 fn manual_uac_helper_launches_and_closes_an_elevated_window_fixture() {
@@ -602,32 +832,36 @@ fn manual_uac_helper_launches_and_closes_an_elevated_window_fixture() {
 
     write_receipt("launchPrompt", None);
     println!("manual M7 smoke: approve elevated fixture launch");
-    let launch = match broker.execute(&[ElevatedOperation::Launch {
-        executable_path: fixture_path
-            .canonicalize()
-            .expect("the fixture should be built")
-            .to_string_lossy()
-            .into_owned(),
-        arguments: vec![
-            "--report".to_owned(),
-            report_path.to_string_lossy().into_owned(),
-            "--lifetime-ms".to_owned(),
-            "60000".to_owned(),
-            "--window-state".to_owned(),
-            "responsive".to_owned(),
-        ],
-        working_directory: Some(
-            storage
-                .path()
+    let launch = match broker.execute_launch_batch(
+        &[ElevatedOperation::Launch {
+            executable_path: fixture_path
                 .canonicalize()
-                .expect("temporary storage should canonicalize")
+                .expect("the fixture should be built")
                 .to_string_lossy()
                 .into_owned(),
-        ),
-        monitored_process: None,
-        console_visibility: ConsoleVisibility::Hidden,
-        startup_timeout_seconds: 10,
-    }]) {
+            arguments: vec![
+                "--report".to_owned(),
+                report_path.to_string_lossy().into_owned(),
+                "--lifetime-ms".to_owned(),
+                "60000".to_owned(),
+                "--window-state".to_owned(),
+                "responsive".to_owned(),
+            ],
+            working_directory: Some(
+                storage
+                    .path()
+                    .canonicalize()
+                    .expect("temporary storage should canonicalize")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            monitored_process: None,
+            monitored_executable_path: None,
+            console_visibility: ConsoleVisibility::Hidden,
+            startup_timeout_seconds: 10,
+        }],
+        &mut |_operation_index, _identity| Ok(()),
+    ) {
         Ok(response) => response,
         Err(error) => {
             write_receipt("launchFailed", Some(&error.to_string()));
@@ -702,6 +936,7 @@ fn one_shot_helper_exits_after_an_accepted_or_rejected_request() {
                     .into_owned(),
             ),
             monitored_process: None,
+            monitored_executable_path: None,
             console_visibility: ConsoleVisibility::Hidden,
             startup_timeout_seconds: 10,
         }])
@@ -741,11 +976,82 @@ fn one_shot_helper_exits_after_an_accepted_or_rejected_request() {
             arguments: Vec::new(),
             working_directory: None,
             monitored_process: None,
+            monitored_executable_path: None,
             console_visibility: ConsoleVisibility::Hidden,
             startup_timeout_seconds: 10,
         }])
         .expect_err("the helper should reject the whole invalid request and exit");
     assert!(error.to_string().contains("not canonical"));
+}
+
+#[cfg(feature = "process-fixtures")]
+#[test]
+fn missing_ownership_acknowledgement_stops_the_just_launched_process() {
+    let storage = TempStorage::new();
+    let target_debug = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("debug");
+    let helper_path = target_debug.join("formation-lap-elevated-helper.exe");
+    let fixture_path = target_debug
+        .join("formation-lap-process-fixture.exe")
+        .canonicalize()
+        .expect("the fixture should be built");
+    let mut broker = WindowsPrivilegeBroker::from_helper_path(&helper_path)
+        .expect("the separately built helper should be available");
+    let offered_identity = Arc::new(Mutex::new(None));
+    let captured_identity = offered_identity.clone();
+
+    let error = broker
+        .execute_launch_batch_without_elevation_for_test(
+            &[ElevatedOperation::Launch {
+                executable_path: fixture_path.to_string_lossy().into_owned(),
+                arguments: vec![
+                    "--report".to_owned(),
+                    storage
+                        .path()
+                        .join("unacknowledged-report.json")
+                        .to_string_lossy()
+                        .into_owned(),
+                    "--lifetime-ms".to_owned(),
+                    "60000".to_owned(),
+                ],
+                working_directory: Some(
+                    storage
+                        .path()
+                        .canonicalize()
+                        .expect("temporary storage should canonicalize")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                monitored_process: None,
+                monitored_executable_path: None,
+                console_visibility: ConsoleVisibility::Hidden,
+                startup_timeout_seconds: 10,
+            }],
+            &mut |_operation_index, identity| {
+                *captured_identity
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner()) = Some(identity.clone());
+                Err(formation_lap_lib::PrivilegeBrokerError::new(
+                    "simulated journal failure",
+                ))
+            },
+        )
+        .expect_err("the launch must fail when ownership cannot be journaled");
+    assert!(error.to_string().contains("simulated journal failure"));
+
+    let identity = offered_identity
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+        .expect("the helper should offer the launched identity before compensation");
+    assert!(
+        !matches!(
+            WindowsProcessRuntime::new().observe(&identity),
+            Ok(ProcessObservation::Running { .. })
+        ),
+        "the unacknowledged elevated Process must not remain running"
+    );
 }
 
 #[test]

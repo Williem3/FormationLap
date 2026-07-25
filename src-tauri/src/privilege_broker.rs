@@ -1,9 +1,10 @@
 use crate::{
     ELEVATED_HELPER_PROTOCOL_VERSION, ElevatedHelperRequest, ElevatedHelperResponse,
-    ElevatedOperation, ElevatedOperationResult,
+    ElevatedOperation, ElevatedOperationResult, ElevatedOwnershipAcknowledgement,
+    ElevatedOwnershipOffer, ProcessIdentity,
 };
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
     error::Error,
     fmt,
     path::{Path, PathBuf},
@@ -31,11 +32,20 @@ impl fmt::Display for PrivilegeBrokerError {
 
 impl Error for PrivilegeBrokerError {}
 
+type LaunchAcknowledgement<'a> =
+    &'a mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>;
+
 /// Executes one fully typed privileged batch and returns one result per operation.
 pub trait PrivilegeBroker: Send {
     fn execute(
         &mut self,
         operations: &[ElevatedOperation],
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError>;
+
+    fn execute_launch_batch(
+        &mut self,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError>;
 }
 
@@ -81,6 +91,28 @@ impl PrivilegeBroker for DevelopmentPrivilegeBroker {
                 "development PrivilegeBroker does not have a queued response",
             ))
         })
+    }
+
+    fn execute_launch_batch(
+        &mut self,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        if operations
+            .iter()
+            .any(|operation| !matches!(operation, ElevatedOperation::Launch { .. }))
+        {
+            return Err(PrivilegeBrokerError::new(
+                "ownership acknowledgement accepts only launch operations",
+            ));
+        }
+        let response = self.execute(operations)?;
+        for (operation_index, result) in response.results.iter().enumerate() {
+            if let ElevatedOperationResult::Launched { process_identity } = result {
+                acknowledge(operation_index, process_identity)?;
+            }
+        }
+        Ok(response)
     }
 }
 
@@ -132,6 +164,24 @@ impl WindowsPrivilegeBroker {
         })?;
         platform::execute_without_uac_for_test(Path::new(&helper_path), operations)
     }
+
+    #[cfg(feature = "process-fixtures")]
+    #[doc(hidden)]
+    pub fn execute_launch_batch_without_elevation_for_test(
+        &mut self,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        let helper_path = crate::privilege_protocol::canonical_executable_path(&self.helper_path)
+            .map_err(|error| {
+            PrivilegeBrokerError::new(format!("elevated helper is unavailable: {error}"))
+        })?;
+        platform::execute_launch_batch_without_uac_for_test(
+            Path::new(&helper_path),
+            operations,
+            acknowledge,
+        )
+    }
 }
 
 impl PrivilegeBroker for WindowsPrivilegeBroker {
@@ -144,6 +194,18 @@ impl PrivilegeBroker for WindowsPrivilegeBroker {
             PrivilegeBrokerError::new(format!("elevated helper is unavailable: {error}"))
         })?;
         platform::execute_with_uac(Path::new(&helper_path), operations)
+    }
+
+    fn execute_launch_batch(
+        &mut self,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        let helper_path = crate::privilege_protocol::canonical_executable_path(&self.helper_path)
+            .map_err(|error| {
+            PrivilegeBrokerError::new(format!("elevated helper is unavailable: {error}"))
+        })?;
+        platform::execute_launch_batch_with_uac(Path::new(&helper_path), operations, acknowledge)
     }
 }
 
@@ -175,6 +237,16 @@ mod platform {
         ))
     }
 
+    pub(super) fn execute_launch_batch_with_uac(
+        _helper_path: &Path,
+        _operations: &[ElevatedOperation],
+        _acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        Err(PrivilegeBrokerError::new(
+            "privileged operations require Windows",
+        ))
+    }
+
     pub(super) fn run_helper(
         _pipe_name: &str,
         _allow_test_caller: bool,
@@ -188,6 +260,17 @@ mod platform {
     pub(super) fn execute_without_uac_for_test(
         _helper_path: &Path,
         _operations: &[ElevatedOperation],
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        Err(PrivilegeBrokerError::new(
+            "the helper process fixture requires Windows",
+        ))
+    }
+
+    #[cfg(feature = "process-fixtures")]
+    pub(super) fn execute_launch_batch_without_uac_for_test(
+        _helper_path: &Path,
+        _operations: &[ElevatedOperation],
+        _acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
         Err(PrivilegeBrokerError::new(
             "the helper process fixture requires Windows",
@@ -444,7 +527,37 @@ mod platform {
         helper_path: &Path,
         operations: &[ElevatedOperation],
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
-        execute_request(helper_path, operations, launch_helper, false)
+        if operations
+            .iter()
+            .any(|operation| matches!(operation, ElevatedOperation::Launch { .. }))
+        {
+            return Err(PrivilegeBrokerError::new(
+                "elevated launches require an ownership acknowledgement",
+            ));
+        }
+        execute_request(helper_path, operations, launch_helper, false, None)
+    }
+
+    pub(super) fn execute_launch_batch_with_uac(
+        helper_path: &Path,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        if operations
+            .iter()
+            .any(|operation| !matches!(operation, ElevatedOperation::Launch { .. }))
+        {
+            return Err(PrivilegeBrokerError::new(
+                "ownership acknowledgement accepts only launch operations",
+            ));
+        }
+        execute_request(
+            helper_path,
+            operations,
+            launch_helper,
+            false,
+            Some(acknowledge),
+        )
     }
 
     #[cfg(feature = "process-fixtures")]
@@ -452,7 +565,44 @@ mod platform {
         helper_path: &Path,
         operations: &[ElevatedOperation],
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
-        execute_request(helper_path, operations, launch_helper_without_uac, true)
+        let mut acknowledge = |_operation_index: usize, _identity: &ProcessIdentity| Ok(());
+        let acknowledge = operations
+            .iter()
+            .any(|operation| matches!(operation, ElevatedOperation::Launch { .. }))
+            .then_some(
+                &mut acknowledge
+                    as &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+            );
+        execute_request(
+            helper_path,
+            operations,
+            launch_helper_without_uac,
+            true,
+            acknowledge,
+        )
+    }
+
+    #[cfg(feature = "process-fixtures")]
+    pub(super) fn execute_launch_batch_without_uac_for_test(
+        helper_path: &Path,
+        operations: &[ElevatedOperation],
+        acknowledge: &mut dyn FnMut(usize, &ProcessIdentity) -> Result<(), PrivilegeBrokerError>,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        if operations
+            .iter()
+            .any(|operation| !matches!(operation, ElevatedOperation::Launch { .. }))
+        {
+            return Err(PrivilegeBrokerError::new(
+                "ownership acknowledgement accepts only launch operations",
+            ));
+        }
+        execute_request(
+            helper_path,
+            operations,
+            launch_helper_without_uac,
+            true,
+            Some(acknowledge),
+        )
     }
 
     fn execute_request(
@@ -460,6 +610,7 @@ mod platform {
         operations: &[ElevatedOperation],
         launch: fn(&Path, &str) -> Result<HelperProcess, PrivilegeBrokerError>,
         allow_test_caller: bool,
+        mut acknowledge: Option<LaunchAcknowledgement<'_>>,
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
         if operations.is_empty() {
             return Err(PrivilegeBrokerError::new(
@@ -500,9 +651,51 @@ mod platform {
             ));
         }
         pipe.connection.send(&request)?;
-        let response_bytes = pipe.connection.receive()?;
-        let response: ElevatedHelperResponse = serde_json::from_slice(&response_bytes)
-            .map_err(|error| broker_error("helper response is invalid", error))?;
+        let mut acknowledged_launches = BTreeSet::new();
+        let response = loop {
+            let response_bytes = pipe.connection.receive()?;
+            if let Ok(offer) = serde_json::from_slice::<ElevatedOwnershipOffer>(&response_bytes) {
+                let offer_is_valid = offer.protocol_version == ELEVATED_HELPER_PROTOCOL_VERSION
+                    && offer.nonce == nonce
+                    && matches!(
+                        operations.get(offer.operation_index),
+                        Some(ElevatedOperation::Launch { .. })
+                    )
+                    && acknowledged_launches.insert(offer.operation_index);
+                if !offer_is_valid {
+                    return abandon_pending_launch(
+                        pipe,
+                        &helper,
+                        PrivilegeBrokerError::new(
+                            "helper ownership offer does not match the request",
+                        ),
+                    );
+                }
+                let Some(acknowledge) = acknowledge.as_deref_mut() else {
+                    return abandon_pending_launch(
+                        pipe,
+                        &helper,
+                        PrivilegeBrokerError::new(
+                            "helper requested ownership acknowledgement for an untracked launch",
+                        ),
+                    );
+                };
+                if let Err(error) = acknowledge(offer.operation_index, &offer.process_identity) {
+                    return abandon_pending_launch(pipe, &helper, error);
+                }
+                if let Err(error) = pipe.connection.send(&ElevatedOwnershipAcknowledgement {
+                    protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+                    nonce: nonce.clone(),
+                    operation_index: offer.operation_index,
+                    process_identity: offer.process_identity,
+                }) {
+                    return abandon_pending_launch(pipe, &helper, error);
+                }
+                continue;
+            }
+            break serde_json::from_slice::<ElevatedHelperResponse>(&response_bytes)
+                .map_err(|error| broker_error("helper response is invalid", error))?;
+        };
         helper.wait_for_exit()?;
 
         if response.protocol_version != ELEVATED_HELPER_PROTOCOL_VERSION {
@@ -525,7 +718,25 @@ mod platform {
                 "helper response does not contain one result per operation",
             ));
         }
+        if response.results.iter().enumerate().any(|(index, result)| {
+            matches!(result, ElevatedOperationResult::Launched { .. })
+                && !acknowledged_launches.contains(&index)
+        }) {
+            return Err(PrivilegeBrokerError::new(
+                "helper returned an unacknowledged launched Process",
+            ));
+        }
         Ok(response)
+    }
+
+    fn abandon_pending_launch(
+        pipe: PipeServer,
+        helper: &HelperProcess,
+        error: PrivilegeBrokerError,
+    ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
+        drop(pipe);
+        let _ = helper.wait_for_exit();
+        Err(error)
     }
 
     pub(super) fn run_helper(
@@ -612,11 +823,48 @@ mod platform {
             return Err(PrivilegeBrokerError::new(error.to_string()));
         }
 
-        let results = request
-            .operations
-            .iter()
-            .map(execute_operation)
-            .collect::<Vec<_>>();
+        let mut results = Vec::with_capacity(request.operations.len());
+        for (operation_index, operation) in request.operations.iter().enumerate() {
+            let result = execute_operation(operation);
+            if let ElevatedOperationResult::Launched { process_identity } = &result {
+                let ownership = ElevatedOwnershipOffer {
+                    protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+                    nonce: nonce.clone(),
+                    operation_index,
+                    process_identity: process_identity.clone(),
+                };
+                if let Err(error) = pipe.send(&ownership) {
+                    compensate_unacknowledged_launch(process_identity);
+                    return Err(error);
+                }
+                let acknowledgement = pipe
+                    .receive()
+                    .and_then(|bytes| {
+                        serde_json::from_slice::<ElevatedOwnershipAcknowledgement>(&bytes).map_err(
+                            |error| broker_error("ownership acknowledgement is invalid", error),
+                        )
+                    })
+                    .and_then(|acknowledgement| {
+                        if acknowledgement.protocol_version == ELEVATED_HELPER_PROTOCOL_VERSION
+                            && acknowledgement.nonce == nonce
+                            && acknowledgement.operation_index == operation_index
+                            && acknowledgement.process_identity == *process_identity
+                        {
+                            Ok(())
+                        } else {
+                            Err(PrivilegeBrokerError::new(
+                                "ownership acknowledgement does not match the launched Process",
+                            ))
+                        }
+                    });
+                if let Err(error) = acknowledgement {
+                    compensate_unacknowledged_launch(process_identity);
+                    let _ = send_rejection(&mut pipe, &nonce, error.to_string());
+                    return Err(error);
+                }
+            }
+            results.push(result);
+        }
         pipe.send(&ElevatedHelperResponse {
             protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
             nonce,
@@ -624,6 +872,10 @@ mod platform {
             error: None,
             results,
         })
+    }
+
+    fn compensate_unacknowledged_launch(identity: &ProcessIdentity) {
+        let _ = WindowsProcessRuntime::new().force_stop(identity);
     }
 
     fn operation_process_identity(
@@ -645,6 +897,7 @@ mod platform {
                 arguments,
                 working_directory,
                 monitored_process,
+                monitored_executable_path,
                 console_visibility,
                 startup_timeout_seconds,
             } => crate::process_runtime::launch_without_output_capture(&LaunchRecipe {
@@ -654,7 +907,7 @@ mod platform {
                 arguments: arguments.clone(),
                 working_directory: working_directory.clone(),
                 monitored_process: monitored_process.clone(),
-                monitored_executable_path: None,
+                monitored_executable_path: monitored_executable_path.clone(),
                 console_visibility: console_visibility.clone(),
                 elevated: false,
                 startup_timeout_seconds: *startup_timeout_seconds,

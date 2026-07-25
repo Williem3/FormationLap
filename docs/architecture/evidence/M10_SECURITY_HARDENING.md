@@ -16,8 +16,8 @@ blocked until this program is complete and separately reviewed.
 | Verified Process handles and monitored paths             | Complete    | `launcher_style_launch_returns_the_monitored_process_identity`, `filename_only_launcher_identity_is_observed_without_session_ownership`, all 11 real Windows ProcessRuntime fixture tests |
 | Profile-ID containment and legacy repair                 | Complete    | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
 | Helper caller authentication and preview identity        | Complete    | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
-| Ordered adjacent elevation and ownership acknowledgement | In progress | Next slice                                                                                                                                                                                |
-| Imported-profile review                                  | Pending     | —                                                                                                                                                                                         |
+| Ordered adjacent elevation and ownership acknowledgement | Complete    | Saved-position launch test, durable journal-before-ack test, and real helper compensation test                                                                                            |
+| Imported-profile review                                  | In progress | Next slice                                                                                                                                                                                |
 | Local storage and startup migration                      | Pending     | —                                                                                                                                                                                         |
 | Opt-in native update coordination                        | Pending     | —                                                                                                                                                                                         |
 | Signed-build equality and adversarial qualification      | Pending     | —                                                                                                                                                                                         |
@@ -144,6 +144,55 @@ if either executable changes between payload creation and manifest assembly.
     release tests, synchronized contracts/catalog/capability audit passed.
 - `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
   - 124 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+
+## Ordered adjacent elevation and ownership acknowledgement
+
+FormationLapCore no longer preflights every elevated application before the
+Startup Sequence begins. It reaches the application's saved position first and
+passes only the contiguous elevated run to the broker. An interleaved sequence
+therefore preserves `Normal A -> Elevated B -> Elevated C -> Normal D ->
+Elevated E`, using one prompt for B/C and a later prompt for E.
+
+Helper protocol version 2 adds one ownership offer and acknowledgement for
+every elevated launch. The helper returns the stable Process identity, Core
+writes that identity to the active Session journal, and only then does the main
+process acknowledge ownership. The helper compensates for a rejected, missing,
+or undeliverable acknowledgement by force-stopping the just-launched Process
+through its verified stable identity before exiting. It cannot continue to the
+next adjacent operation until the current launch is owned.
+
+Elevated launch operations now carry the same optional canonical monitored
+executable path as ordinary launch recipes, preserving exact launcher-process
+ownership rules across the privilege seam.
+
+### Red-green evidence
+
+1. `startup_preserves_saved_order_and_batches_only_adjacent_elevated_entries`
+   first failed because all elevated entries were launched before Normal A and
+   interleaved Elevated E was included in the same batch. It now proves the
+   saved order and two adjacent-only batches.
+2. `missing_ownership_acknowledgement_stops_the_just_launched_process` first
+   failed because the helper had no acknowledgement exchange. It now withholds
+   acknowledgement from the real helper and verifies the real launched fixture
+   is no longer running.
+3. `elevated_ownership_is_journaled_before_the_helper_is_acknowledged` inspects
+   `active-session.json` inside the broker callback and proves the offered
+   creation time is durable before acknowledgement returns.
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --test privileged_operations --all-features -- --test-threads=1`
+  - 14 passed, 1 manual UAC test ignored.
+- `cargo test --manifest-path src-tauri/Cargo.toml --test session_orchestration --all-features -- --test-threads=1`
+  - all 16 Session orchestration tests passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- The complete `pnpm.cmd verify` gate passed across the resumed commands after
+  reclaiming generated Cargo cache space: formatting, lint, type checking, 28
+  React tests, 3 accessibility tests, 24 release tests, version, generated
+  contracts, catalog, and capability audit.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 126 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
 
 ## Publication boundary
 

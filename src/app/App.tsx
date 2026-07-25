@@ -4070,6 +4070,7 @@ function ApplicationLifecycleRow({
   const status = process?.status ?? "stopped";
   const isActive =
     process?.identity !== null && process?.identity !== undefined;
+  const hasOutput = process?.output !== null && process?.output !== undefined;
   const sourceLabel =
     application.launchRecipe.source.kind === "directExecutable"
       ? `${application.launchRecipe.consoleVisibility} console`
@@ -4124,15 +4125,14 @@ function ApplicationLifecycleRow({
         {processStatusLabels[status]}
       </span>
       <span className="application-actions">
-        {process?.output && (
-          <button
-            type="button"
-            className="tertiary-button output-button"
-            onClick={() => onViewOutput(application)}
-          >
-            View output
-          </button>
-        )}
+        <button
+          type="button"
+          className="tertiary-button output-button"
+          disabled={!hasOutput}
+          onClick={() => onViewOutput(application)}
+        >
+          {hasOutput ? "View Output" : "No Output"}
+        </button>
         {!isActive ? (
           <button
             type="button"

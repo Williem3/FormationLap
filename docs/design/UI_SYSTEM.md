@@ -127,11 +127,13 @@ Contains, in order:
 1. Drag handle when editing.
 2. Local executable icon or generic fallback.
 3. Application name and one concise supporting line.
-4. Required/Optional classification.
-5. Status indicator with icon and text.
-6. Update state when known.
-7. Contextual lifecycle action.
-8. Overflow menu.
+4. Required/Optional classification in its own stable column.
+5. Status indicator with icon and text in a separate stable column.
+6. Output action in the lifecycle-action column: `View Output` when native
+   output is captured, otherwise a disabled `No Output` placeholder.
+7. Update state when known.
+8. Contextual lifecycle action.
+9. Overflow menu.
 
 Rows must remain legible without app icons.
 

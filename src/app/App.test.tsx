@@ -537,7 +537,7 @@ describe("Formation Lap shell", () => {
     render(<App bridge={bridge} />);
 
     await user.click(
-      await screen.findByRole("button", { name: "View output" }),
+      await screen.findByRole("button", { name: "View Output" }),
     );
 
     expect(
@@ -547,6 +547,14 @@ describe("Formation Lap shell", () => {
       "diagnostic tail",
     );
     expect(screen.getByText(/Earlier output was discarded/)).toBeVisible();
+  });
+
+  it("reserves a disabled No Output action when an application has no captured output", async () => {
+    render(<App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />);
+
+    expect(
+      await screen.findByRole("button", { name: "No Output" }),
+    ).toBeDisabled();
   });
 
   it("renders the native snapshot through NativeBridge", async () => {

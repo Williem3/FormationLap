@@ -13,6 +13,18 @@ const tauriConfiguration = JSON.parse(
     "utf8",
   ),
 );
+const releaseBundleConfiguration = JSON.parse(
+  readFileSync(
+    resolve(
+      import.meta.dirname,
+      "..",
+      "..",
+      "src-tauri",
+      "tauri.release-bundle.conf.json",
+    ),
+    "utf8",
+  ),
+);
 
 function binBlock(name) {
   const blocks = manifest.split("[[bin]]").slice(1);
@@ -58,5 +70,11 @@ test("the native updater plugin always receives a concrete fail-closed config", 
     windows: {
       installMode: "passive",
     },
+  });
+});
+
+test("release bundles install the helper authorization manifest as a native resource", () => {
+  assert.deepEqual(releaseBundleConfiguration.bundle.resources, {
+    "release-identity/formation-lap-release-identity.json": "",
   });
 });

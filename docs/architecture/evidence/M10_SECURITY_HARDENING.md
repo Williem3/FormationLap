@@ -15,8 +15,8 @@ blocked until this program is complete and separately reviewed.
 | -------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Verified Process handles and monitored paths             | Complete    | `launcher_style_launch_returns_the_monitored_process_identity`, `filename_only_launcher_identity_is_observed_without_session_ownership`, all 11 real Windows ProcessRuntime fixture tests |
 | Profile-ID containment and legacy repair                 | Complete    | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
-| Helper caller authentication and preview identity        | In progress | Next slice                                                                                                                                                                                |
-| Ordered adjacent elevation and ownership acknowledgement | Pending     | —                                                                                                                                                                                         |
+| Helper caller authentication and preview identity        | Complete    | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
+| Ordered adjacent elevation and ownership acknowledgement | In progress | Next slice                                                                                                                                                                                |
 | Imported-profile review                                  | Pending     | —                                                                                                                                                                                         |
 | Local storage and startup migration                      | Pending     | —                                                                                                                                                                                         |
 | Opt-in native update coordination                        | Pending     | —                                                                                                                                                                                         |
@@ -94,6 +94,56 @@ subsequent save/delete operations cannot alter an outside sentinel.
   - all 16 ProfileLibrary behavior tests passed.
 - `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
   - 120 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+
+## Helper caller authentication and preview identity
+
+The main process now verifies the exact canonical sibling main/helper pair and
+the compiled release identity before creating the pipe or requesting UAC. The
+helper independently derives the named-pipe server PID, observes that Process's
+token SID, stable identity, executable path, and Windows interactive Session,
+and compares those facts with its own identity before the typed request can be
+accepted.
+
+Debug builds retain local development elevation only for the exact sibling
+binary names. The no-UAC process fixture uses a feature-gated test-only entry
+point that is absent from bundled helpers.
+
+Unsigned previews now generate a bounded
+`formation-lap-release-identity.json` after the final main and helper binaries
+exist. The manifest binds their SHA-256 values, package version, helper protocol
+version, and `preview` channel. The existing protected Formation Lap update key
+signs the canonical identity payload, both executables embed the public key,
+and the manifest is installed beside them as a native resource. Sealing fails
+if either executable changes between payload creation and manifest assembly.
+
+### Red-green evidence
+
+1. `helper_rejects_a_caller_outside_the_authenticated_release_boundary` first
+   failed because the validation context had no observed Session, application
+   path, or release-identity facts. It now rejects each missing fact before any
+   operation.
+2. The release workflow contracts first failed because no helper authorization
+   manifest was generated or bundled. Preview and signed workflows now bind the
+   final executable bytes after build/signing and before bundling.
+3. The native manifest fixture verifies a real Tauri/Minisign signature over
+   the same canonical payload emitted by the release generator, then rejects a
+   changed helper hash.
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --test privileged_operations --all-features -- --test-threads=1`
+  - 12 passed, 1 manual UAC test ignored.
+- `cargo test --manifest-path src-tauri/Cargo.toml release_identity --all-features --lib`
+  - all 3 release-identity tests passed.
+- `node --test tests/release/workflow-contract.test.mjs tests/release/bundle-surface.test.mjs tests/release/release-identity.test.mjs`
+  - all 9 focused release contracts passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- `pnpm.cmd verify`
+  - formatting, lint, type checking, 28 React tests, 3 accessibility tests, 24
+    release tests, synchronized contracts/catalog/capability audit passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 124 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
 
 ## Publication boundary
 

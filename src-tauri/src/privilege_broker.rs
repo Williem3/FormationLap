@@ -153,7 +153,13 @@ fn broker_error(context: &str, error: impl fmt::Display) -> PrivilegeBrokerError
 
 /// Entrypoint used only by the separately built one-shot helper binary.
 pub fn run_elevated_helper(pipe_name: &str) -> Result<(), PrivilegeBrokerError> {
-    platform::run_helper(pipe_name)
+    platform::run_helper(pipe_name, false)
+}
+
+#[cfg(feature = "process-fixtures")]
+#[doc(hidden)]
+pub fn run_elevated_helper_for_test(pipe_name: &str) -> Result<(), PrivilegeBrokerError> {
+    platform::run_helper(pipe_name, true)
 }
 
 #[cfg(not(windows))]
@@ -169,7 +175,10 @@ mod platform {
         ))
     }
 
-    pub(super) fn run_helper(_pipe_name: &str) -> Result<(), PrivilegeBrokerError> {
+    pub(super) fn run_helper(
+        _pipe_name: &str,
+        _allow_test_caller: bool,
+    ) -> Result<(), PrivilegeBrokerError> {
         Err(PrivilegeBrokerError::new(
             "the elevated helper requires Windows",
         ))
@@ -234,9 +243,11 @@ mod platform {
                 GetNamedPipeServerProcessId, PIPE_NOWAIT, PIPE_READMODE_BYTE,
                 PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT, SetNamedPipeHandleState,
             },
+            RemoteDesktop::ProcessIdToSessionId,
             Threading::{
-                GetCurrentProcess, GetCurrentProcessId, GetProcessId, OpenProcessToken,
-                TerminateProcess, WaitForSingleObject,
+                GetCurrentProcess, GetCurrentProcessId, GetProcessId, OpenProcess,
+                OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION, TerminateProcess,
+                WaitForSingleObject,
             },
         },
         UI::{
@@ -433,7 +444,7 @@ mod platform {
         helper_path: &Path,
         operations: &[ElevatedOperation],
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
-        execute_request(helper_path, operations, launch_helper)
+        execute_request(helper_path, operations, launch_helper, false)
     }
 
     #[cfg(feature = "process-fixtures")]
@@ -441,18 +452,30 @@ mod platform {
         helper_path: &Path,
         operations: &[ElevatedOperation],
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
-        execute_request(helper_path, operations, launch_helper_without_uac)
+        execute_request(helper_path, operations, launch_helper_without_uac, true)
     }
 
     fn execute_request(
         helper_path: &Path,
         operations: &[ElevatedOperation],
         launch: fn(&Path, &str) -> Result<HelperProcess, PrivilegeBrokerError>,
+        allow_test_caller: bool,
     ) -> Result<ElevatedHelperResponse, PrivilegeBrokerError> {
         if operations.is_empty() {
             return Err(PrivilegeBrokerError::new(
                 "an elevated batch must contain at least one operation",
             ));
+        }
+        if !allow_test_caller {
+            let main_executable = std::env::current_exe().map_err(|error| {
+                broker_error("Formation Lap executable could not be located", error)
+            })?;
+            crate::release_identity::verify_runtime_release_identity(&main_executable, helper_path)
+                .map_err(|error| {
+                    PrivilegeBrokerError::new(format!(
+                        "elevated helper release identity was rejected: {error}"
+                    ))
+                })?;
         }
         let current_user_id = current_user_id()?;
         let nonce = Uuid::new_v4().to_string();
@@ -505,7 +528,10 @@ mod platform {
         Ok(response)
     }
 
-    pub(super) fn run_helper(pipe_name: &str) -> Result<(), PrivilegeBrokerError> {
+    pub(super) fn run_helper(
+        pipe_name: &str,
+        allow_test_caller: bool,
+    ) -> Result<(), PrivilegeBrokerError> {
         let nonce = validate_pipe_name(pipe_name)?;
         let mut pipe = open_pipe_client(pipe_name)?;
         let server_pid = server_pid(&pipe)?;
@@ -529,6 +555,37 @@ mod platform {
                     "helper pipe server identity is unavailable: {error}"
                 ))
             })?;
+        let helper_process_id = unsafe { GetCurrentProcessId() };
+        let helper_executable = std::env::current_exe()
+            .map_err(|error| broker_error("elevated helper path is unavailable", error))?;
+        let server_user_id = process_user_id(server_pid)?;
+        let helper_user_id = current_user_id()?;
+        let same_user = server_user_id == helper_user_id;
+        let same_interactive_session = matches!(
+            (
+                process_session_id(server_pid),
+                process_session_id(helper_process_id)
+            ),
+            (Ok(server), Ok(helper)) if server == helper
+        );
+        let (expected_application_path, release_identity_verified) = if allow_test_caller {
+            (true, true)
+        } else {
+            let main_executable =
+                Path::new(&parent_identity.canonical_executable_path).to_path_buf();
+            let expected = crate::release_identity::validate_expected_application_pair(
+                &main_executable,
+                &helper_executable,
+            )
+            .is_ok();
+            let release = expected
+                && crate::release_identity::verify_runtime_release_identity(
+                    &main_executable,
+                    &helper_executable,
+                )
+                .is_ok();
+            (expected, release)
+        };
         let operation_process_identities = request
             .operations
             .iter()
@@ -538,10 +595,17 @@ mod platform {
             })
             .collect();
         let context = HelperValidationContext {
-            current_user_id: current_user_id()?,
+            current_user_id: if same_user {
+                server_user_id
+            } else {
+                helper_user_id
+            },
             parent_identity,
-            helper_process_id: unsafe { GetCurrentProcessId() },
+            helper_process_id,
             operation_process_identities,
+            same_interactive_session,
+            expected_application_path,
+            release_identity_verified,
         };
         if let Err(error) = ElevatedRequestValidator::default().validate(&request, &context) {
             send_rejection(&mut pipe, &nonce, error.to_string())?;
@@ -673,6 +737,7 @@ mod platform {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let child = Command::new(helper_path)
             .arg(pipe_name)
+            .arg("--allow-development-test-caller")
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
             .map_err(|error| broker_error("helper process fixture could not start", error))?;
@@ -709,8 +774,21 @@ mod platform {
     }
 
     fn current_user_id() -> Result<String, PrivilegeBrokerError> {
+        user_id_for_process(unsafe { GetCurrentProcess() })
+    }
+
+    fn process_user_id(process_id: u32) -> Result<String, PrivilegeBrokerError> {
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id) };
+        if process.is_null() {
+            return Err(last_error("helper pipe server Process could not be opened"));
+        }
+        let process = OwnedHandle(process);
+        user_id_for_process(process.0)
+    }
+
+    fn user_id_for_process(process: HANDLE) -> Result<String, PrivilegeBrokerError> {
         let mut token = ptr::null_mut();
-        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+        if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
             return Err(last_error("current-user token could not be opened"));
         }
         let token = OwnedHandle(token);
@@ -749,6 +827,14 @@ mod platform {
         }
         String::from_utf16(unsafe { std::slice::from_raw_parts(string_sid, length) })
             .map_err(|error| broker_error("current-user SID is invalid UTF-16", error))
+    }
+
+    fn process_session_id(process_id: u32) -> Result<u32, PrivilegeBrokerError> {
+        let mut session_id = 0;
+        if unsafe { ProcessIdToSessionId(process_id, &mut session_id) } == 0 {
+            return Err(last_error("Process interactive Session could not be read"));
+        }
+        Ok(session_id)
     }
 
     fn validate_pipe_name(pipe_name: &str) -> Result<String, PrivilegeBrokerError> {

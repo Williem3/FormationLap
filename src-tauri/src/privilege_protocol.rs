@@ -70,6 +70,9 @@ pub struct HelperValidationContext {
     pub parent_identity: ProcessIdentity,
     pub helper_process_id: u32,
     pub operation_process_identities: Vec<ProcessIdentity>,
+    pub same_interactive_session: bool,
+    pub expected_application_path: bool,
+    pub release_identity_verified: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +84,9 @@ pub enum HelperProtocolError {
     ReplayedNonce,
     WrongUser,
     WrongParentIdentity,
+    WrongInteractiveSession,
+    UnexpectedApplicationPath,
+    UnverifiedReleaseIdentity,
     EmptyBatch,
     BatchTooLarge { maximum: usize, received: usize },
     NonCanonicalPath(String),
@@ -116,6 +122,15 @@ impl fmt::Display for HelperProtocolError {
             }
             Self::WrongParentIdentity => {
                 formatter.write_str("helper parent Process identity does not match")
+            }
+            Self::WrongInteractiveSession => {
+                formatter.write_str("helper caller is not in the same interactive Session")
+            }
+            Self::UnexpectedApplicationPath => {
+                formatter.write_str("helper caller is not the exact Formation Lap sibling")
+            }
+            Self::UnverifiedReleaseIdentity => {
+                formatter.write_str("helper caller release identity could not be verified")
             }
             Self::EmptyBatch => formatter.write_str("helper request does not contain an operation"),
             Self::BatchTooLarge { maximum, received } => write!(
@@ -172,6 +187,15 @@ impl ElevatedRequestValidator {
         }
         if request.parent_identity != context.parent_identity {
             return Err(HelperProtocolError::WrongParentIdentity);
+        }
+        if !context.same_interactive_session {
+            return Err(HelperProtocolError::WrongInteractiveSession);
+        }
+        if !context.expected_application_path {
+            return Err(HelperProtocolError::UnexpectedApplicationPath);
+        }
+        if !context.release_identity_verified {
+            return Err(HelperProtocolError::UnverifiedReleaseIdentity);
         }
         if request.operations.is_empty() {
             return Err(HelperProtocolError::EmptyBatch);

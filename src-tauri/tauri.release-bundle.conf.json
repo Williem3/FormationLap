@@ -1,6 +1,9 @@
 {
   "bundle": {
     "createUpdaterArtifacts": false,
-    "externalBin": ["binaries/formation-lap-elevated-helper"]
+    "externalBin": ["binaries/formation-lap-elevated-helper"],
+    "resources": {
+      "release-identity/formation-lap-release-identity.json": ""
+    }
   }
 }

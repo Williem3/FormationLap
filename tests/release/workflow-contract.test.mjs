@@ -49,6 +49,8 @@ test("release workflow signs every shipped executable before updater metadata", 
   assert.match(release, /artifact-metadata: write/);
   assert.match(release, /verify-release-version\.mjs/);
   assert.match(release, /tauri build --no-bundle/);
+  assert.match(release, /FORMATION_LAP_RELEASE_CHANNEL:/);
+  assert.match(release, /generate-release-identity\.mjs/);
   assert.match(release, /Azure\/artifact-signing-action@[0-9a-f]{40}/);
   assert.match(release, /Get-AuthenticodeSignature/);
   assert.match(release, /tauri bundle --bundles nsis/);
@@ -65,16 +67,20 @@ test("release workflow signs every shipped executable before updater metadata", 
 
   const build = release.indexOf("tauri build --no-bundle");
   const firstSigning = release.indexOf("Azure/artifact-signing-action");
+  const releaseIdentity = release.indexOf("generate-release-identity.mjs");
   const bundle = release.indexOf("tauri bundle --bundles nsis");
   const secondSigning = release.indexOf(
     "Azure/artifact-signing-action",
     firstSigning + 1,
   );
-  const updaterSigning = release.indexOf("tauri signer sign");
+  const updaterSigning = release.indexOf(
+    'tauri signer sign "${{ steps.prepared.outputs.installer }}"',
+  );
   const metadata = release.indexOf("generate-release-metadata.mjs");
   assert.ok(
     build < firstSigning &&
-      firstSigning < bundle &&
+      firstSigning < releaseIdentity &&
+      releaseIdentity < bundle &&
       bundle < secondSigning &&
       secondSigning < updaterSigning &&
       updaterSigning < metadata,
@@ -100,10 +106,26 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
   assert.doesNotMatch(preview, /AUTHENTICODE\.txt/);
   assert.match(preview, /UNSIGNED-PREVIEW\.txt/);
   assert.match(preview, /tauri signer sign/);
+  assert.match(preview, /FORMATION_LAP_RELEASE_CHANNEL:\s*preview/);
+  assert.match(
+    preview,
+    /FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY:\s*\$\{\{ vars\.FORMATION_LAP_UPDATE_PUBLIC_KEY \}\}/,
+  );
+  assert.match(preview, /generate-release-identity\.mjs/);
+  assert.match(preview, /formation-lap-release-identity\.payload/);
+  assert.match(preview, /formation-lap-release-identity\.json/);
   assert.match(preview, /generate-preview-metadata\.mjs/);
   assert.match(preview, /verify-preview-artifacts\.mjs/);
   assert.match(preview, /actions\/attest@[0-9a-f]{40}/);
   assert.match(preview, /gh release create/);
   assert.match(preview, /--prerelease/);
   assert.doesNotMatch(preview, /--latest/);
+
+  const build = preview.indexOf("tauri build --no-bundle");
+  const identity = preview.indexOf("generate-release-identity.mjs");
+  const bundle = preview.indexOf("tauri bundle --bundles nsis");
+  assert.ok(
+    build < identity && identity < bundle,
+    "preview release identity must bind final executable bytes before bundling",
+  );
 });

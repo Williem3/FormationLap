@@ -1,0 +1,6 @@
+formation-lap-release-identity-v1
+mainExecutableSha256=ad6f802906e251948b5249aba11ccef4897ce9c657377e980cfea0c234160704
+helperSha256=f4bc587e291bb084722ec7fd638ef171d1a1cbfedb922d7da5381fb87a1b64f4
+version=0.9.0-preview.1
+protocolVersion=1
+releaseChannel=preview

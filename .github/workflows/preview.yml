@@ -112,13 +112,32 @@ jobs:
       - name: Build application and helper before bundling
         shell: pwsh
         env:
+          FORMATION_LAP_RELEASE_CHANNEL: preview
+          FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: pnpm tauri build --no-bundle
+
+      - name: Bind and sign the preview helper release identity
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.preview.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $payload = "src-tauri\release-identity\formation-lap-release-identity.payload"
+          $manifest = "src-tauri\release-identity\formation-lap-release-identity.json"
+          $main = "src-tauri\target\release\formation-lap.exe"
+          $helper = "src-tauri\target\release\formation-lap-elevated-helper.exe"
+          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel preview --payload $payload
+          pnpm tauri signer sign $payload
+          node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel preview --payload $payload --signature "$payload.sig" --output $manifest
 
       - name: Bundle unsigned technical-preview binaries
         id: bundle
         shell: pwsh
         env:
+          FORMATION_LAP_RELEASE_CHANNEL: preview
+          FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: |
           pnpm tauri bundle --bundles nsis --config src-tauri/tauri.release-bundle.conf.json --no-sign --ci

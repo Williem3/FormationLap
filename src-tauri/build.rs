@@ -1,4 +1,6 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=FORMATION_LAP_RELEASE_CHANNEL");
+    println!("cargo:rerun-if-env-changed=FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY");
     println!("cargo:rerun-if-env-changed=FORMATION_LAP_UPDATE_PUBLIC_KEY");
     let windows = tauri_build::WindowsAttributes::new()
         .app_manifest(include_str!("windows-app-manifest.xml"));

@@ -55,6 +55,9 @@ fn valid_request() -> (ElevatedHelperRequest, HelperValidationContext) {
             parent_identity,
             helper_process_id: 7_777,
             operation_process_identities: Vec::new(),
+            same_interactive_session: true,
+            expected_application_path: true,
+            release_identity_verified: true,
         },
     )
 }
@@ -111,6 +114,36 @@ fn helper_rejects_the_wrong_user_and_wrong_parent_identity() {
             .validate(&request, &context)
             .expect_err("a PID without the same creation time is not the same parent"),
         HelperProtocolError::WrongParentIdentity
+    );
+}
+
+#[test]
+fn helper_rejects_a_caller_outside_the_authenticated_release_boundary() {
+    let (request, mut context) = valid_request();
+    context.same_interactive_session = false;
+    assert_eq!(
+        ElevatedRequestValidator::default()
+            .validate(&request, &context)
+            .expect_err("a caller in another interactive Session must be rejected"),
+        HelperProtocolError::WrongInteractiveSession
+    );
+
+    let (request, mut context) = valid_request();
+    context.expected_application_path = false;
+    assert_eq!(
+        ElevatedRequestValidator::default()
+            .validate(&request, &context)
+            .expect_err("a renamed or non-sibling caller must be rejected"),
+        HelperProtocolError::UnexpectedApplicationPath
+    );
+
+    let (request, mut context) = valid_request();
+    context.release_identity_verified = false;
+    assert_eq!(
+        ElevatedRequestValidator::default()
+            .validate(&request, &context)
+            .expect_err("an unverified release identity must be rejected"),
+        HelperProtocolError::UnverifiedReleaseIdentity
     );
 }
 

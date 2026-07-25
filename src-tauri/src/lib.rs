@@ -14,6 +14,7 @@ mod privilege_broker;
 mod privilege_protocol;
 mod process_runtime;
 mod profile_library;
+mod release_identity;
 mod session_journal;
 mod settings;
 mod update_advisor;
@@ -52,6 +53,9 @@ pub use discovery_catalog::{
     validate_catalog_documents,
 };
 pub(crate) use native_updater::FormationLapUpdater;
+#[cfg(feature = "process-fixtures")]
+#[doc(hidden)]
+pub use privilege_broker::run_elevated_helper_for_test;
 pub use privilege_broker::{
     DevelopmentPrivilegeBroker, PrivilegeBroker, PrivilegeBrokerError, WindowsPrivilegeBroker,
     run_elevated_helper,

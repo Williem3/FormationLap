@@ -577,9 +577,12 @@ export function App({ bridge }: AppProps) {
         applicationId: application.id,
       });
       setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch {
+    } catch (error) {
       setFormError(
-        `${application.name} could not start. Check its Launch Recipe and try again.`,
+        commandErrorMessage(
+          error,
+          `${application.name} could not start. Check its Launch Recipe and try again.`,
+        ),
       );
     } finally {
       setIsSaving(false);
@@ -646,8 +649,13 @@ export function App({ bridge }: AppProps) {
                 ? await bridge.acceptRecovery()
                 : await bridge.dismissRecovery();
       setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch {
-      setFormError("Formation Lap could not complete the Session action.");
+    } catch (error) {
+      setFormError(
+        commandErrorMessage(
+          error,
+          "Formation Lap could not complete the Session action.",
+        ),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -1056,6 +1064,7 @@ export function App({ bridge }: AppProps) {
             applicationName={applicationName}
             selectedProfile={selectedProfile}
             profileNeedsReview={selectedProfileNeedsReview}
+            error={formError}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
             updates={snapshot?.updates ?? null}
@@ -1855,6 +1864,32 @@ function displayWindowsPath(path: string): string {
   return path.startsWith(extendedPathPrefix)
     ? path.slice(extendedPathPrefix.length)
     : path;
+}
+
+function commandErrorMessage(error: unknown, fallback: string): string {
+  const details =
+    typeof error === "string"
+      ? (() => {
+          try {
+            return JSON.parse(error) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : error;
+  if (typeof details !== "object" || details === null) {
+    return fallback;
+  }
+  const { message, recovery } = details as {
+    message?: unknown;
+    recovery?: unknown;
+  };
+  if (typeof message !== "string" || message.trim().length === 0) {
+    return fallback;
+  }
+  return typeof recovery === "string" && recovery.trim().length > 0
+    ? `${message} ${recovery}`
+    : message;
 }
 
 function executableNameFromPath(path: string): string | null {
@@ -3318,6 +3353,7 @@ interface DashboardProps {
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
   profileNeedsReview: boolean;
+  error: string | null;
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
   updates: UpdateSnapshot | null;
@@ -3358,6 +3394,7 @@ function Dashboard({
   applicationName,
   selectedProfile,
   profileNeedsReview,
+  error,
   applicationProcesses,
   session,
   updates,
@@ -3477,6 +3514,11 @@ function Dashboard({
           </button>
         </div>
       </header>
+      {error && (
+        <p className="form-error dashboard-error" role="alert">
+          {error}
+        </p>
+      )}
 
       {updates?.resultDeferred && sessionState !== "idle" && (
         <section className="update-notice update-notice-deferred" role="status">
@@ -3922,6 +3964,10 @@ function ApplicationLifecycleRow({
     application.launchRecipe.source.kind === "directExecutable"
       ? `${application.launchRecipe.consoleVisibility} console`
       : `Steam ${application.launchRecipe.source.appId}`;
+  const startupFailure =
+    status === "failed"
+      ? `${application.name} exited during startup. Check its executable path and enter each launch argument on a separate line.`
+      : null;
 
   return (
     <article
@@ -3953,6 +3999,9 @@ function ApplicationLifecycleRow({
             <span className="status-glyph" aria-hidden="true" />
             {updateStatusLabel(update.status)}
           </small>
+        )}
+        {startupFailure && (
+          <small className="application-failure">{startupFailure}</small>
         )}
       </span>
       <span className="classification-label">{classification}</span>

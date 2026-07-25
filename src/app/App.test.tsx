@@ -885,6 +885,41 @@ describe("Formation Lap shell", () => {
     );
   });
 
+  it("shows the native elevated-launch recovery message on the Dashboard", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    Object.assign(bridge, {
+      startSession: vi.fn().mockRejectedValue({
+        message:
+          "The elevated helper could not launch Virtual Desktop Switcher.",
+        recovery: "Approve the Windows prompt and verify the application path.",
+      }),
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Start session" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The elevated helper could not launch Virtual Desktop Switcher. Approve the Windows prompt and verify the application path.",
+    );
+  });
+
+  it("explains when an application exits during startup", async () => {
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [
+      processSnapshot({ status: "failed", identity: null }),
+    ];
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    expect(
+      await screen.findByText(
+        "Healthy fixture exited during startup. Check its executable path and enter each launch argument on a separate line.",
+      ),
+    ).toBeVisible();
+  });
+
   it("selects another Racing Profile from the sidebar", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge({

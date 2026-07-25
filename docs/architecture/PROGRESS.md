@@ -93,6 +93,8 @@ M10 security hardening is in progress, owned by Codex `/root`.
 - Windows extended-length executable paths now render in their familiar form
   while canonical values remain available to native validation. There is no
   active implementation file scope.
+- The Dashboard now preserves native launch-recovery messages and explains
+  immediate startup exits. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -231,3 +233,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Made Native Launch Quarantine name each executable path that blocks approval, simplified direct executable recipes with derived working/process identity, and repaired Browse presentation | `pnpm.cmd test -- src/app/App.test.tsx` passed: 32 React tests including repair and automatic-direct-recipe coverage; typecheck passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Made Browse start in the current direct, monitored, or custom-stop executable's parent directory when that executable exists; missing paths retain the normal picker fallback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (32 tests); `cargo test --manifest-path src-tauri/Cargo.toml --lib native_file_picker` passed (2 tests); `pnpm.cmd contracts:check` passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Rendered extended-length Windows paths in the familiar `C:\...` form throughout Manual Entry and launch-recipe fields without weakening native canonical-path validation | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (33 tests); the regression test covers `\\?\C:\...` display normalization | No blocker; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Preserved structured native launch errors on the Dashboard and described the immediate-exit failure state, so elevated helper rejection and bad startup arguments have actionable feedback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (35 tests); regression coverage verifies native recovery copy and failed-startup guidance | No blocker; external signed Beta and Windows qualification remain the next M10 action |

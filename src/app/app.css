@@ -1211,15 +1211,21 @@ button:disabled {
   margin: 22px 0 0;
   padding: 18px;
   overflow-x: auto;
+  -ms-overflow-style: none;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--canvas) 72%, var(--surface));
   list-style: none;
+  scrollbar-width: none;
+}
+
+.formation-rail::-webkit-scrollbar {
+  display: none;
 }
 
 .formation-rail::before {
   position: absolute;
-  top: 35px;
+  top: 32px;
   right: 36px;
   left: 36px;
   height: 2px;
@@ -1233,25 +1239,18 @@ button:disabled {
   display: grid;
   min-width: 132px;
   flex: 1;
-  gap: 9px;
+  gap: 8px;
   justify-items: center;
   color: var(--muted);
   text-align: center;
 }
 
-.rail-index {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 2px solid var(--border);
+.race-light {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--surface);
-  color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
+  background: color-mix(in srgb, var(--muted) 58%, var(--surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 30%, transparent);
 }
 
 .rail-node strong,
@@ -1276,22 +1275,19 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.rail-node[data-rail-tone="warm"] .rail-index {
-  border-color: var(--warm);
-  background: color-mix(in srgb, var(--warm) 10%, var(--surface));
-  color: var(--warm-ink);
+.rail-node[data-rail-tone="warm"] .race-light {
+  background: var(--warm);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warm) 30%, transparent);
 }
 
-.rail-node[data-rail-tone="running"] .rail-index {
-  border-color: var(--running);
-  background: color-mix(in srgb, var(--running) 10%, var(--surface));
-  color: var(--running-ink);
+.rail-node[data-rail-tone="running"] .race-light {
+  background: var(--running);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 30%, transparent);
 }
 
-.rail-node[data-rail-tone="danger"] .rail-index {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
-  color: var(--danger-ink);
+.rail-node[data-rail-tone="danger"] .race-light {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .rail-node[data-rail-tone="warm"] small {
@@ -1304,11 +1300,6 @@ button:disabled {
 
 .rail-node[data-rail-tone="danger"] small {
   color: var(--danger-ink);
-}
-
-.rail-node-pending .rail-index,
-.rail-node-detached .rail-index {
-  border-style: dashed;
 }
 
 .recovery-offer,

@@ -28,6 +28,8 @@ lead to a larger final game node.
 - Stopped and failed nodes use the danger tone; pending and in-transition nodes
   use Tire Warmth; both Session-owned and Pre-existing running nodes use
   Running Green.
+- Nodes use solid, compact start-light markers rather than ordinal labels; the
+  Startup Sequence is communicated left to right.
 - A failed required app interrupts the rail before the game node.
 - Every node includes an icon and accessible text; color is never the only state
   signal.

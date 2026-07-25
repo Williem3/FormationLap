@@ -363,6 +363,18 @@ describe("Formation Lap shell", () => {
     ).toHaveAttribute("data-rail-tone", "running");
   });
 
+  it("uses solid start lights instead of ordinal labels in the Formation Rail", async () => {
+    const { container } = render(
+      <App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />,
+    );
+
+    const rail = await screen.findByRole("list", {
+      name: "Startup sequence",
+    });
+    expect(rail.querySelector(".race-light")).toBeTruthy();
+    expect(container.querySelector(".rail-index")).toBeNull();
+  });
+
   it("starts one configured application and renders authoritative lifecycle state", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

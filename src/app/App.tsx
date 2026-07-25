@@ -3950,7 +3950,7 @@ function FormationRail({
 }) {
   return (
     <ol className="formation-rail" aria-label="Startup sequence">
-      {applications.map((application, index) => {
+      {applications.map((application) => {
         const sessionApplication = sessionApplications.find(
           (candidate) => candidate.applicationId === application.id,
         );
@@ -3969,9 +3969,7 @@ function FormationRail({
             data-rail-tone={tone}
             key={application.id}
           >
-            <span className="rail-index" aria-hidden="true">
-              {String(index + 1).padStart(2, "0")}
-            </span>
+            <span className="race-light" aria-hidden="true" />
             <span>
               <strong>{application.name}</strong>
               <small>{label}</small>

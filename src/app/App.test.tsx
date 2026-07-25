@@ -348,7 +348,7 @@ describe("Formation Lap shell", () => {
         startWithWindows: false,
         theme: "system",
         reduceMotion: false,
-        automaticUpdateChecks: true,
+        automaticUpdateChecks: false,
         updateChannel: "stable",
       },
       updates: {
@@ -376,6 +376,10 @@ describe("Formation Lap shell", () => {
         level: 2,
         name: "Secure foundation ready",
       }),
+    ).toBeVisible();
+    expect(screen.getByText("Local data · Online checks off")).toBeVisible();
+    expect(
+      screen.getByText(/GitHub Releases, Winget, and SimHub/),
     ).toBeVisible();
   });
 
@@ -1241,6 +1245,11 @@ describe("Formation Lap shell", () => {
     });
     expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
     expect(screen.getByText(/verified first-party updates/)).toBeVisible();
+    expect(
+      screen.getByText(/GitHub Releases, Winget, and SimHub/),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    expect(screen.getByText("Local data · Online checks off")).toBeVisible();
   });
 
   it("renders Formation Lap and Supporting Application update advice without a third-party install action", async () => {

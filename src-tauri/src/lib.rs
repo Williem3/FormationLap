@@ -19,6 +19,7 @@ mod session_journal;
 mod settings;
 mod storage_migration;
 mod update_advisor;
+mod update_coordinator;
 mod update_providers;
 
 pub use commands::{
@@ -30,7 +31,7 @@ pub use commands::{
     discover_applications, dismiss_recovery, duplicate_profile, exit_application,
     export_diagnostics, export_profile, force_stop_application, get_app_snapshot, import_profile,
     recommend_applications, refresh_processes, request_quit, restart_application, save_profile,
-    select_profile, start_application, start_session, test_game_launch, update_settings,
+    select_profile, start_application, test_game_launch, update_settings,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
@@ -80,6 +81,7 @@ use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use update_coordinator::UpdateCoordinator;
 pub(crate) use update_providers::{DirectUpdateProviderRuntime, UpdateProviderRunner};
 
 fn navigation_is_allowed(url: &Url) -> bool {
@@ -113,6 +115,7 @@ fn tray_status(session: &SessionSnapshot) -> (&'static str, &'static str, bool) 
 fn build_tray(
     app: &mut tauri::App,
     commands: NativeCommandHost,
+    update_coordinator: UpdateCoordinator,
 ) -> tauri::Result<tauri::tray::TrayIcon> {
     let snapshot = commands
         .get_app_snapshot()
@@ -209,12 +212,13 @@ fn build_tray(
                     last_update_attempt = std::time::Instant::now();
                     let update_app = app_handle.clone();
                     let update_commands = status_commands.clone();
+                    let update_coordinator = update_coordinator.clone();
                     tauri::async_runtime::spawn(async move {
                         let updater = update_app.state::<FormationLapUpdater>();
                         let _ = commands::perform_update_check(
-                            &update_app,
                             &update_commands,
                             updater.inner(),
+                            &update_coordinator,
                             UpdateCheckTrigger::Automatic,
                         )
                         .await;
@@ -239,7 +243,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(navigation_guard)
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let storage_root = app.path().app_local_data_dir()?;
             let roaming_storage_root = app.path().app_config_dir()?;
@@ -251,9 +254,11 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(error.message))?
                 .settings;
             let _ = desktop_host::set_start_with_windows(settings.start_with_windows);
+            let update_coordinator = UpdateCoordinator::new();
             app.manage(commands.clone());
             app.manage(FormationLapUpdater::from_compile_time());
-            let tray = build_tray(app, commands.clone())?;
+            app.manage(update_coordinator.clone());
+            let tray = build_tray(app, commands.clone(), update_coordinator)?;
             app.manage(tray);
             if desktop_host::started_minimized()
                 && let Some(window) = app.get_webview_window("main")

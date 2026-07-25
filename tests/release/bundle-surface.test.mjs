@@ -67,7 +67,7 @@ test("test fixtures remain feature-gated outside production builds", () => {
   }
 });
 
-test("the native updater plugin always receives a concrete fail-closed config", () => {
+test("the bundle-only updater config exposes no runtime plugin surface", () => {
   assert.deepEqual(tauriConfiguration.plugins.updater, {
     endpoints: [],
     pubkey: "",
@@ -75,6 +75,8 @@ test("the native updater plugin always receives a concrete fail-closed config", 
       installMode: "passive",
     },
   });
+  assert.doesNotMatch(manifest, /tauri-plugin-updater/);
+  assert.match(manifest, /minisign-verify\s*=\s*"=0\.2\.5"/);
 });
 
 test("release bundles install the helper authorization manifest as a native resource", () => {

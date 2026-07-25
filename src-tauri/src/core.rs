@@ -99,7 +99,13 @@ pub enum AppCommand {
     CompleteUpdateCheck {
         result: crate::UpdateCheckResult,
     },
+    CancelUpdateCheck {
+        request_id: String,
+    },
     PrepareFormationLapInstall,
+    CancelFormationLapInstall {
+        expected_version: String,
+    },
     RefreshProcesses,
 }
 
@@ -133,7 +139,9 @@ impl AppCommand {
             Self::ExportDiagnostics => "diagnostics.export",
             Self::PrepareUpdateCheck { .. } => "updates.prepare_check",
             Self::CompleteUpdateCheck { .. } => "updates.complete_check",
+            Self::CancelUpdateCheck { .. } => "updates.cancel_check",
             Self::PrepareFormationLapInstall => "updates.prepare_install",
+            Self::CancelFormationLapInstall { .. } => "updates.cancel_install",
             Self::RefreshProcesses => "process.refresh",
         }
     }
@@ -208,9 +216,11 @@ pub enum CommandOutcome {
         decision: crate::UpdateCheckDecision,
     },
     UpdateCheckCompleted,
+    UpdateCheckCancelled,
     FormationLapInstallPrepared {
         decision: crate::FormationLapInstallDecision,
     },
+    FormationLapInstallCancelled,
     ProcessesRefreshed,
 }
 
@@ -231,6 +241,10 @@ pub enum CoreError {
     PrivilegeBroker(PrivilegeBrokerError),
     DiscoveryCatalog(DiscoveryCatalogError),
     InvalidUpdateCheck(String),
+    ActivityConflict {
+        activity: &'static str,
+        command: &'static str,
+    },
     InvalidSessionTransition {
         current: crate::SessionState,
         command: &'static str,
@@ -285,6 +299,9 @@ impl fmt::Display for CoreError {
             Self::InvalidUpdateCheck(message) => {
                 write!(formatter, "update check is invalid: {message}")
             }
+            Self::ActivityConflict { activity, command } => {
+                write!(formatter, "{command} cannot overlap {activity}")
+            }
             Self::InvalidSessionTransition { current, command } => {
                 write!(
                     formatter,
@@ -324,6 +341,7 @@ impl Error for CoreError {
             Self::InvalidProfileName(_)
             | Self::InvalidLaunchRecipe(_)
             | Self::InvalidUpdateCheck(_)
+            | Self::ActivityConflict { .. }
             | Self::ProfileNotFound(_)
             | Self::ProfileNeedsReview(_)
             | Self::InvalidProfileApproval(_)
@@ -388,6 +406,7 @@ pub struct FormationLapCore {
     discovery_catalog: DiscoveryCatalog,
     game_launch_diagnostics: GameLaunchDiagnostics,
     update_advisor: UpdateAdvisor,
+    formation_lap_installing: Option<String>,
     session: crate::SessionSnapshot,
 }
 
@@ -528,6 +547,7 @@ impl FormationLapCore {
             discovery_catalog: DiscoveryCatalog::bundled_with_sources(discovery_sources)?,
             game_launch_diagnostics: GameLaunchDiagnostics::open(storage_root)?,
             update_advisor,
+            formation_lap_installing: None,
             session,
         })
     }
@@ -836,6 +856,12 @@ impl FormationLapCore {
                         command: "Start Session",
                     });
                 }
+                if self.formation_lap_installing.is_some() {
+                    return Err(CoreError::ActivityConflict {
+                        activity: "Formation Lap update installation",
+                        command: "Start Session",
+                    });
+                }
                 if self.profile_library.review_status(&profile_id)?
                     == crate::ProfileReviewStatus::NeedsReview
                 {
@@ -1073,7 +1099,7 @@ impl FormationLapCore {
                         .record_automatic_update_check(now_unix_seconds)
                 {
                     if let crate::UpdateCheckDecision::Planned(plan) = &decision {
-                        self.update_advisor.cancel_check(&plan.request_id);
+                        let _ = self.update_advisor.cancel_check(&plan.request_id);
                     }
                     return Err(error);
                 }
@@ -1085,11 +1111,34 @@ impl FormationLapCore {
                     .map_err(CoreError::InvalidUpdateCheck)?;
                 Ok(CommandOutcome::UpdateCheckCompleted)
             }
+            AppCommand::CancelUpdateCheck { request_id } => {
+                if !self.update_advisor.cancel_check(&request_id) {
+                    return Err(CoreError::InvalidUpdateCheck(
+                        "the cancelled update check does not match the pending request".to_owned(),
+                    ));
+                }
+                Ok(CommandOutcome::UpdateCheckCancelled)
+            }
             AppCommand::PrepareFormationLapInstall => {
-                let decision = self
-                    .update_advisor
-                    .prepare_formation_lap_install(&self.session.state);
+                let decision = if self.formation_lap_installing.is_some() {
+                    crate::FormationLapInstallDecision::Deferred
+                } else {
+                    self.update_advisor
+                        .prepare_formation_lap_install(&self.session.state)
+                };
+                if let crate::FormationLapInstallDecision::Ready { latest_version } = &decision {
+                    self.formation_lap_installing = Some(latest_version.clone());
+                }
                 Ok(CommandOutcome::FormationLapInstallPrepared { decision })
+            }
+            AppCommand::CancelFormationLapInstall { expected_version } => {
+                if self.formation_lap_installing.as_deref() != Some(expected_version.as_str()) {
+                    return Err(CoreError::InvalidUpdateCheck(
+                        "the update install lease does not match the checked version".to_owned(),
+                    ));
+                }
+                self.formation_lap_installing = None;
+                Ok(CommandOutcome::FormationLapInstallCancelled)
             }
             AppCommand::RefreshProcesses => {
                 let application_ids = self

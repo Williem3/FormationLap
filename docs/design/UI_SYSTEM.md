@@ -181,7 +181,12 @@ where it prevents ambiguity. Controls align to a consistent right edge.
 - Settings is selected in the shared sidebar.
 - General, Appearance, Updates, Race-safe behavior, Data & privacy, and Advanced
   are separate groups.
-- The local-only privacy model is stated plainly.
+- The local-data privacy model is stated plainly without implying that
+  explicitly requested online checks are local-only.
+- First-run and Settings copy names GitHub Releases, Winget, and SimHub's
+  official site as possible provider contacts.
+- The quiet footer reads `Local data · Online checks on/off` from persisted
+  settings.
 - Reset actions are visually separated from routine settings.
 
 ## Interaction and motion

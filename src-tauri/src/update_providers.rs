@@ -1,4 +1,7 @@
-use crate::{ApplicationUpdateSnapshot, CatalogUpdateProvider, UpdateCheckPlan, UpdateStatus};
+use crate::{
+    ApplicationUpdateSnapshot, CatalogUpdateProvider, UpdateCheckPlan, UpdateStatus,
+    update_coordinator::CancellationToken,
+};
 use serde::Deserialize;
 use std::{
     io::Read,
@@ -240,10 +243,29 @@ where
         Self { runtime }
     }
 
+    #[cfg(test)]
     pub(crate) fn check(&self, plan: &UpdateCheckPlan) -> Vec<ApplicationUpdateSnapshot> {
+        self.check_with_cancellation(plan, &CancellationToken::new())
+    }
+
+    pub(crate) fn check_with_cancellation(
+        &self,
+        plan: &UpdateCheckPlan,
+        cancellation: &CancellationToken,
+    ) -> Vec<ApplicationUpdateSnapshot> {
         plan.applications
             .iter()
             .map(|target| {
+                if cancellation.is_cancelled() {
+                    return ApplicationUpdateSnapshot {
+                        application_id: target.application_id.clone(),
+                        name: target.name.clone(),
+                        status: UpdateStatus::Unknown {
+                            reason: "The update check was cancelled for Session start.".to_owned(),
+                        },
+                        information_url: None,
+                    };
+                }
                 let advice = match &target.provider {
                     Some(CatalogUpdateProvider::GitHubReleases { repository }) => {
                         let url =

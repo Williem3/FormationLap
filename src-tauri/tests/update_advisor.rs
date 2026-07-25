@@ -170,15 +170,29 @@ fn core_with_launchable_profile(
 }
 
 #[test]
-fn automatic_update_checks_default_to_stable_and_run_at_most_once_per_day() {
+fn automatic_update_checks_are_opt_in_and_an_explicit_true_persists() {
     let storage = TempStorage::new();
     let mut core = FormationLapCore::open(storage.path()).expect("update test core should open");
 
-    assert!(core.snapshot().settings.automatic_update_checks);
+    assert!(!core.snapshot().settings.automatic_update_checks);
     assert_eq!(
         core.snapshot().settings.update_channel,
         UpdateChannel::Stable
     );
+    assert_eq!(
+        core.execute(AppCommand::PrepareUpdateCheck {
+            trigger: UpdateCheckTrigger::Automatic,
+            now_unix_seconds: 999_999,
+        })
+        .expect("the default automatic check should be decided"),
+        CommandOutcome::UpdateCheckPrepared {
+            decision: UpdateCheckDecision::Disabled
+        }
+    );
+    let mut settings = core.snapshot().settings;
+    settings.automatic_update_checks = true;
+    core.execute(AppCommand::UpdateSettings { settings })
+        .expect("explicit update consent should save");
 
     let decision = core
         .execute(AppCommand::PrepareUpdateCheck {
@@ -214,6 +228,10 @@ fn automatic_update_checks_default_to_stable_and_run_at_most_once_per_day() {
 
     let mut reopened =
         FormationLapCore::open(storage.path()).expect("update schedule should reopen");
+    assert!(
+        reopened.snapshot().settings.automatic_update_checks,
+        "an explicitly saved true must survive upgrade and restart"
+    );
     assert_eq!(
         reopened
             .execute(AppCommand::PrepareUpdateCheck {
@@ -380,8 +398,19 @@ fn signed_formation_lap_installation_can_prepare_only_while_idle() {
         }
     );
 
+    assert!(
+        core.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        })
+        .is_err(),
+        "the core-owned install lease must exclude Session start"
+    );
+    core.execute(AppCommand::CancelFormationLapInstall {
+        expected_version: "1.0.0".to_owned(),
+    })
+    .expect("a failed or cancelled installer should release its lease");
     core.execute(AppCommand::StartSession { profile_id })
-        .expect("Session should start");
+        .expect("Session should start after the install lease is released");
     core.execute(AppCommand::RefreshProcesses)
         .expect("Session should become Active");
     assert_eq!(core.snapshot().session.state, SessionState::Active);

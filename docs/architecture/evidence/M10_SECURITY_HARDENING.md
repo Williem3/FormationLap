@@ -310,6 +310,63 @@ Updater-driven uninstall leaves both registrations in place.
   - built the native application and the branded NSIS installer with the
     configured hooks.
 
+## Opt-in, race-safe online updates
+
+UpdateCoordinator now owns the one active provider check, its cancellation
+token, the Session-start barrier, and the exclusive checked-version install
+lease. The Tauri Session command cancels and joins provider work before asking
+FormationLapCore to start; new check work cannot cross that barrier. Installation
+acquires the native lease before the core-owned activity lease, so concurrent
+Session and install commands choose one activity without an overlap window.
+Failure releases both leases, while a successfully launched installer keeps the
+core activity blocked until application exit.
+
+Automatic checks now default off for a new settings document or a legacy
+document without the field. A persisted explicit `true` remains true, manual
+**Check now** remains available, and the UI names GitHub Releases, Winget, and
+SimHub's official site. Dashboard status now reports
+`Local data · Online checks on/off`.
+
+The native updater replaced the generic updater runtime with a smaller bounded
+module. It accepts only HTTPS metadata from the exact Formation Lap GitHub
+repository, one exact `windows-x86_64` platform, a channel-appropriate SemVer,
+and an installer URL whose tag, version, architecture, and filename all agree.
+Metadata is capped at 256 KiB, installers at 128 MiB, and redirects at three
+across an exact host allowlist. The complete installer bytes must pass the
+embedded Minisign trust root before staging. A read-share-only file handle then
+remains open from the verified write through UAC-aware ShellExecute process
+creation, closing the replacement race.
+
+### Red-green evidence
+
+1. `automatic_update_checks_are_opt_in_and_an_explicit_true_persists` first
+   failed because the default and missing-field fallback were `true`; it now
+   proves new-user opt-out and explicit persisted opt-in.
+2. `session_start_cancels_and_joins_the_active_check` first failed because no
+   native activity owner existed; it now proves cancellation, join, and the
+   barrier against new checks.
+3. `install_and_session_start_are_mutually_exclusive` plus the core install
+   test prove installation blocks Session start and releases safely on failure.
+4. Native updater tests reject mismatched repository, tag, version,
+   architecture, filename, redirect scheme/host, and signature inputs.
+5. React tests first failed on the old `LOCAL ONLY` footer and unnamed provider
+   copy; they now prove the persisted on/off status and explicit provider
+   disclosure.
+
+### Verification
+
+- `pnpm.cmd verify`
+  - formatting, lint, type checking, 29 React tests, 3 accessibility tests, 25
+    release contracts, version/contracts/catalog checks, and the twenty-seven
+    command zero-permission capability audit passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 143 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+- `pnpm.cmd tauri build --debug --bundles nsis --no-sign --ci`
+  - built the native application and branded NSIS installer after exercising
+    the build-only updater configuration with no updater runtime plugin.
+
 ## Publication boundary
 
 No candidate commit was pushed, no tag was created, no workflow was dispatched,

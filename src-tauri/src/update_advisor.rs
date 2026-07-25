@@ -85,9 +85,12 @@ impl UpdateAdvisor {
         Ok(())
     }
 
-    pub(crate) fn cancel_check(&mut self, request_id: &str) {
+    pub(crate) fn cancel_check(&mut self, request_id: &str) -> bool {
         if self.pending_request_id.as_deref() == Some(request_id) {
             self.pending_request_id = None;
+            true
+        } else {
+            false
         }
     }
 

@@ -7,8 +7,8 @@ advertising, or usage telemetry.
 
 Formation Lap stores profiles, settings, application overrides, the
 active-Session recovery journal, bounded diagnostic logs, discovery results,
-and rotating backups in the operating system's per-user application
-configuration directory. These files can include user-chosen executable paths,
+and rotating backups in the operating system's per-user local application-data
+directory. These files can include user-chosen executable paths,
 launch arguments, process names, versions, timestamps, and sanitized outcomes.
 
 The bundled Curated Catalog is read-only. Diagnostic export happens only when
@@ -18,7 +18,7 @@ the report.
 Uninstall removes the installed program. User configuration is intentionally
 kept so reinstalling does not erase profiles without consent. To remove it,
 close Formation Lap, uninstall the app, then delete its per-user application
-configuration directory as described in
+local application-data directory as described in
 [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ## Network requests
@@ -29,11 +29,18 @@ Formation Lap can make direct HTTPS metadata requests for:
   repository; and
 - notification-only version advice for curated third-party applications.
 
+Automatic checks are off for new installations and run at most daily only
+after the user enables them. Manual **Check now** is always available and
+consents to that one check. Depending on configured applications, checks may
+contact Formation Lap or curated application releases on GitHub, Microsoft
+Winget sources, and SimHub's official site.
+
 It does not send profile contents or an application inventory to a Formation
 Lap server. Winget may access Microsoft sources when checking an exact curated
-package. A signed Formation Lap installer is downloaded only after explicit
-install intent. Formation Lap never downloads or installs a third-party
-application update.
+package. Session start cancels and joins active checks before becoming Active.
+A signed Formation Lap installer is downloaded only after explicit install
+intent. Formation Lap never downloads or installs a third-party application
+update.
 
 The exact destinations, timeouts, size limits, and redirect rules are recorded
 in

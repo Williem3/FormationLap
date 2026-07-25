@@ -470,7 +470,7 @@ pub struct DesktopSettings {
     pub start_with_windows: bool,
     pub theme: ThemePreference,
     pub reduce_motion: bool,
-    #[serde(default = "default_automatic_update_checks")]
+    #[serde(default)]
     pub automatic_update_checks: bool,
     #[serde(default)]
     pub update_channel: UpdateChannel,
@@ -482,14 +482,10 @@ impl Default for DesktopSettings {
             start_with_windows: false,
             theme: ThemePreference::System,
             reduce_motion: false,
-            automatic_update_checks: true,
+            automatic_update_checks: false,
             update_channel: UpdateChannel::Stable,
         }
     }
-}
-
-const fn default_automatic_update_checks() -> bool {
-    true
 }
 
 /// One sanitized entry from Formation Lap's bounded local diagnostic log.

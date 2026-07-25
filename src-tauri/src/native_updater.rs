@@ -1,13 +1,29 @@
-use crate::{UpdateChannel, UpdateStatus};
+use crate::{UpdateChannel, UpdateStatus, update_coordinator::CancellationToken};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use minisign_verify::{PublicKey, Signature};
 use serde::Deserialize;
-use std::{io::Read, sync::Mutex, time::Duration};
+use std::{
+    collections::HashMap,
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
+    path::PathBuf,
+    sync::Mutex,
+    time::Duration,
+};
 use tauri::{AppHandle, Runtime, Url};
-use tauri_plugin_updater::{Update, UpdaterExt};
 
 const SELF_UPDATE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BETA_DISCOVERY_BYTES: u64 = 262_144;
+const MAX_RELEASE_METADATA_BYTES: u64 = 262_144;
+const MAX_INSTALLER_BYTES: u64 = 134_217_728;
+const MAX_UPDATE_REDIRECTS: usize = 3;
+const UPDATE_TARGET: &str = "windows-x86_64";
+const UPDATE_REDIRECT_HOSTS: &[&str] = &[
+    "github.com",
+    "api.github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+];
 const STABLE_ENDPOINT: &str =
     "https://github.com/Williem3/FormationLap/releases/latest/download/latest.json";
 const BETA_RELEASES_API: &str =
@@ -89,6 +105,7 @@ struct GitHubReleaseAsset {
 
 #[derive(Deserialize)]
 struct GitHubRelease {
+    tag_name: String,
     draft: bool,
     prerelease: bool,
     published_at: Option<String>,
@@ -110,47 +127,320 @@ fn parse_beta_endpoint(response: &str) -> Result<Url, String> {
             if assets.next().is_some() {
                 return None;
             }
-            parse_release_endpoint(&asset.browser_download_url, false).ok()
+            let endpoint = parse_release_endpoint(&asset.browser_download_url, false).ok()?;
+            endpoint
+                .clone()
+                .path()
+                .strip_prefix("/Williem3/FormationLap/releases/download/")
+                .and_then(|path| path.strip_suffix("/latest.json"))
+                .filter(|tag| *tag == release.tag_name)
+                .map(|_| endpoint)
         })
         .ok_or_else(|| "No published signed Beta update feed is available.".to_owned())
 }
 
-fn discover_beta_endpoint() -> Result<Url, String> {
-    let client = reqwest::blocking::Client::builder()
+fn validate_redirect_url(url: &Url) -> Result<(), String> {
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || !UPDATE_REDIRECT_HOSTS.iter().any(|host| {
+            url.host_str()
+                .is_some_and(|value| value.eq_ignore_ascii_case(host))
+        })
+    {
+        return Err("The updater redirect left the controlled HTTPS hosts.".to_owned());
+    }
+    Ok(())
+}
+
+fn release_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
         .https_only(true)
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= MAX_UPDATE_REDIRECTS {
+                attempt.error("the updater returned too many redirects")
+            } else if validate_redirect_url(attempt.url()).is_ok() {
+                attempt.follow()
+            } else {
+                attempt.error("the updater redirect left the controlled HTTPS hosts")
+            }
+        }))
         .timeout(SELF_UPDATE_TIMEOUT)
         .user_agent(concat!("Formation-Lap/", env!("CARGO_PKG_VERSION")))
         .build()
-        .map_err(|error| format!("The Beta discovery client could not start: {error}"))?;
+        .map_err(|error| format!("The update client could not start: {error}"))
+}
+
+fn fetch_bounded(
+    client: &reqwest::blocking::Client,
+    url: &Url,
+    accept: &str,
+    maximum_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    validate_redirect_url(url)?;
     let response = client
-        .get(BETA_RELEASES_API)
-        .header("Accept", "application/vnd.github+json")
+        .get(url.clone())
+        .header("Accept", accept)
         .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
-        .map_err(|error| format!("The Beta release feed could not be reached: {error}"))?;
+        .map_err(|error| format!("The official update source could not be reached: {error}"))?;
+    validate_redirect_url(response.url())?;
     if !response.status().is_success() {
         return Err(format!(
-            "The Beta release feed returned HTTP status {}.",
+            "The official update source returned HTTP status {}.",
             response.status()
         ));
     }
+    if response
+        .content_length()
+        .is_some_and(|length| length > maximum_bytes)
+    {
+        return Err("The official update response exceeded the safe size limit.".to_owned());
+    }
     let mut bytes = Vec::new();
     response
-        .take(MAX_BETA_DISCOVERY_BYTES + 1)
+        .take(maximum_bytes + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| format!("The Beta release feed could not be read: {error}"))?;
-    if bytes.len() as u64 > MAX_BETA_DISCOVERY_BYTES {
-        return Err("The Beta release feed exceeded the safe size limit.".to_owned());
+        .map_err(|error| format!("The official update response could not be read: {error}"))?;
+    if bytes.len() as u64 > maximum_bytes {
+        return Err("The official update response exceeded the safe size limit.".to_owned());
+    }
+    Ok(bytes)
+}
+
+fn discover_beta_endpoint(
+    client: &reqwest::blocking::Client,
+    cancellation: &CancellationToken,
+) -> Result<Url, String> {
+    if cancellation.is_cancelled() {
+        return Err("The update check was cancelled for Session start.".to_owned());
+    }
+    let endpoint =
+        Url::parse(BETA_RELEASES_API).map_err(|_| "The Beta feed URL is invalid.".to_owned())?;
+    let bytes = fetch_bounded(
+        client,
+        &endpoint,
+        "application/vnd.github+json",
+        MAX_BETA_DISCOVERY_BYTES,
+    )?;
+    if cancellation.is_cancelled() {
+        return Err("The update check was cancelled for Session start.".to_owned());
     }
     let response = String::from_utf8(bytes)
         .map_err(|_| "The Beta release feed was not UTF-8 text.".to_owned())?;
     parse_beta_endpoint(&response)
 }
 
+#[derive(Deserialize)]
+struct ReleaseManifest {
+    version: String,
+    platforms: HashMap<String, ReleaseManifestPlatform>,
+}
+
+#[derive(Deserialize)]
+struct ReleaseManifestPlatform {
+    url: String,
+    signature: String,
+}
+
+#[derive(Clone)]
 struct PendingSignedUpdate {
     channel: UpdateChannel,
-    update: Update,
+    download_url: Url,
+    signature: String,
+    target: String,
+    version: String,
+}
+
+fn validate_installer_url(url: &Url, version: &str, target: &str) -> Result<(), String> {
+    if target != UPDATE_TARGET {
+        return Err("The signed update does not target the supported architecture.".to_owned());
+    }
+    let expected = format!(
+        "https://github.com/Williem3/FormationLap/releases/download/v{version}/Formation-Lap_{version}_x64-setup.exe"
+    );
+    if url.as_str() != expected {
+        return Err(
+            "The installer URL does not match the official repository, tag, version, architecture, and filename."
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn check_release(
+    configuration: &ReleaseConfiguration,
+    channel: UpdateChannel,
+    cancellation: &CancellationToken,
+) -> Result<(UpdateStatus, Option<PendingSignedUpdate>), String> {
+    let client = release_client()?;
+    let endpoint = match channel {
+        UpdateChannel::Stable => configuration.stable_endpoint.clone(),
+        UpdateChannel::Beta => discover_beta_endpoint(&client, cancellation)?,
+    };
+    if cancellation.is_cancelled() {
+        return Err("The update check was cancelled for Session start.".to_owned());
+    }
+    let metadata = fetch_bounded(
+        &client,
+        &endpoint,
+        "application/json",
+        MAX_RELEASE_METADATA_BYTES,
+    )?;
+    if cancellation.is_cancelled() {
+        return Err("The update check was cancelled for Session start.".to_owned());
+    }
+    let manifest: ReleaseManifest = serde_json::from_slice(&metadata)
+        .map_err(|_| "The official update feed returned invalid metadata.".to_owned())?;
+    if manifest.platforms.len() != 1 {
+        return Err("The official update feed contained an unexpected platform set.".to_owned());
+    }
+    let platform = manifest
+        .platforms
+        .get(UPDATE_TARGET)
+        .ok_or_else(|| "The official update feed did not contain the x64 installer.".to_owned())?;
+    let latest = semver::Version::parse(&manifest.version)
+        .map_err(|_| "The official update version is invalid.".to_owned())?;
+    let current = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+        .map_err(|_| "The installed Formation Lap version is invalid.".to_owned())?;
+    match channel {
+        UpdateChannel::Stable if !latest.pre.is_empty() => {
+            return Err("The Stable feed cannot select a prerelease.".to_owned());
+        }
+        UpdateChannel::Beta if latest.pre.is_empty() => {
+            return Err("The Beta feed must select a published prerelease.".to_owned());
+        }
+        _ => {}
+    }
+    if latest <= current {
+        return Ok((
+            UpdateStatus::Current {
+                current_version: current.to_string(),
+            },
+            None,
+        ));
+    }
+    let download_url = Url::parse(&platform.url)
+        .map_err(|_| "The official installer URL is invalid.".to_owned())?;
+    validate_installer_url(&download_url, &manifest.version, UPDATE_TARGET)?;
+    decode_release_signature(&platform.signature)?;
+    Ok((
+        UpdateStatus::UpdateAvailable {
+            current_version: current.to_string(),
+            latest_version: manifest.version.clone(),
+        },
+        Some(PendingSignedUpdate {
+            channel,
+            download_url,
+            signature: platform.signature.clone(),
+            target: UPDATE_TARGET.to_owned(),
+            version: manifest.version,
+        }),
+    ))
+}
+
+struct StagedInstaller {
+    file: File,
+    path: PathBuf,
+}
+
+fn download_and_stage(
+    configuration: &ReleaseConfiguration,
+    update: &PendingSignedUpdate,
+) -> Result<StagedInstaller, String> {
+    validate_installer_url(&update.download_url, &update.version, &update.target)?;
+    let bytes = fetch_bounded(
+        &release_client()?,
+        &update.download_url,
+        "application/octet-stream",
+        MAX_INSTALLER_BYTES,
+    )?;
+    if !bytes.starts_with(b"MZ") {
+        return Err("The signed update is not a Windows executable.".to_owned());
+    }
+    let public_key = decode_public_key(&configuration.public_key)?;
+    let signature = decode_release_signature(&update.signature)?;
+    public_key
+        .verify(&bytes, &signature, true)
+        .map_err(|_| "The downloaded installer signature is invalid.".to_owned())?;
+
+    stage_verified_installer(&bytes, &update.version)
+}
+
+fn stage_verified_installer(bytes: &[u8], version: &str) -> Result<StagedInstaller, String> {
+    let directory =
+        std::env::temp_dir().join(format!("formation-lap-update-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&directory)
+        .map_err(|error| format!("The update staging directory could not be created: {error}"))?;
+    let path = directory.join(format!("Formation-Lap_{}_x64-setup.exe", version));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+        options.share_mode(FILE_SHARE_READ);
+    }
+    let mut file = options
+        .open(&path)
+        .map_err(|error| format!("The update installer could not be staged: {error}"))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| format!("The update installer could not be staged: {error}"))?;
+    Ok(StagedInstaller { file, path })
+}
+
+#[cfg(windows)]
+fn launch_installer(installer: &StagedInstaller) -> Result<(), String> {
+    use std::{ffi::OsStr, os::windows::ffi::OsStrExt};
+    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOW};
+
+    let operation = OsStr::new("open")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let path = installer
+        .path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let parameters = OsStr::new("/P /R /UPDATE /ARGS")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    // Keep the verified staging handle open with read-only sharing until
+    // ShellExecute has created the installer Process. This closes the
+    // verification-to-launch replacement window while still allowing Windows
+    // to map the executable.
+    let _verified_file = &installer.file;
+    // SAFETY: All strings are stable, null-terminated UTF-16 values for the
+    // duration of the call. The file and directory arguments are fixed local
+    // values, and SW_SHOW is a valid display mode.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            path.as_ptr(),
+            parameters.as_ptr(),
+            std::ptr::null(),
+            SW_SHOW,
+        )
+    };
+    if result as isize <= 32 {
+        Err(format!(
+            "The verified update installer could not start (ShellExecute error {}).",
+            result as isize
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn launch_installer(_installer: &StagedInstaller) -> Result<(), String> {
+    Err("Formation Lap update installation is supported only on Windows.".to_owned())
 }
 
 pub(crate) struct FormationLapUpdater {
@@ -166,53 +456,34 @@ impl FormationLapUpdater {
         }
     }
 
-    pub(crate) async fn check<R: Runtime>(
+    pub(crate) async fn check(
         &self,
-        app: &AppHandle<R>,
         channel: UpdateChannel,
+        cancellation: CancellationToken,
     ) -> Result<UpdateStatus, String> {
-        let configuration = self.configuration.as_ref().map_err(Clone::clone)?;
-        let endpoint = match channel {
-            UpdateChannel::Stable => configuration.stable_endpoint.clone(),
-            UpdateChannel::Beta => tauri::async_runtime::spawn_blocking(discover_beta_endpoint)
-                .await
-                .map_err(|_| "The Beta release discovery task failed.".to_owned())??,
-        };
-        let updater = app
-            .updater_builder()
-            .pubkey(configuration.public_key.clone())
-            .endpoints(vec![endpoint])
-            .map_err(|error| format!("The signed update feed is invalid: {error}"))?
-            .timeout(SELF_UPDATE_TIMEOUT)
-            .build()
-            .map_err(|error| format!("The signed updater could not start: {error}"))?;
-        let update = updater
-            .check()
-            .await
-            .map_err(|error| format!("The signed update check failed: {error}"))?;
+        let configuration = self.configuration.as_ref().map_err(Clone::clone)?.clone();
+        let worker_cancellation = cancellation.clone();
+        let checked = tauri::async_runtime::spawn_blocking(move || {
+            check_release(&configuration, channel, &worker_cancellation)
+        })
+        .await
+        .map_err(|_| "The signed update check task failed.".to_owned())?;
         let mut pending = self
             .pending
             .lock()
             .map_err(|_| "The signed updater state is unavailable.".to_owned())?;
-        if let Some(update) = update {
-            decode_release_signature(&update.signature)?;
-            let status = UpdateStatus::UpdateAvailable {
-                current_version: update.current_version.clone(),
-                latest_version: update.version.clone(),
-            };
-            *pending = Some(PendingSignedUpdate { channel, update });
-            Ok(status)
-        } else {
+        if cancellation.is_cancelled() {
             *pending = None;
-            Ok(UpdateStatus::Current {
-                current_version: env!("CARGO_PKG_VERSION").to_owned(),
-            })
+            return Err("The update check was cancelled for Session start.".to_owned());
         }
+        let (status, checked_update) = checked?;
+        *pending = checked_update;
+        Ok(status)
     }
 
     pub(crate) async fn install<R: Runtime>(
         &self,
-        _app: &AppHandle<R>,
+        app: &AppHandle<R>,
         channel: UpdateChannel,
         expected_version: &str,
     ) -> Result<(), String> {
@@ -222,14 +493,18 @@ impl FormationLapUpdater {
             .map_err(|_| "The signed updater state is unavailable.".to_owned())?
             .take()
             .ok_or_else(|| "Run a fresh signed update check before installing.".to_owned())?;
-        if pending.channel != channel || pending.update.version != expected_version {
+        if pending.channel != channel || pending.version != expected_version {
             return Err("The selected update changed; run a fresh signed update check.".to_owned());
         }
-        pending
-            .update
-            .download_and_install(|_, _| {}, || {})
-            .await
-            .map_err(|error| format!("The signed update was rejected: {error}"))
+        let configuration = self.configuration.as_ref().map_err(Clone::clone)?.clone();
+        let installer = tauri::async_runtime::spawn_blocking(move || {
+            download_and_stage(&configuration, &pending)
+        })
+        .await
+        .map_err(|_| "The signed update download task failed.".to_owned())??;
+        launch_installer(&installer)?;
+        app.exit(0);
+        Ok(())
     }
 }
 
@@ -260,18 +535,21 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
     fn beta_discovery_ignores_drafts_and_stable_releases() {
         let response = r#"[
           {
+            "tag_name": "v1.0.0-beta.3",
             "draft": true,
             "prerelease": true,
             "published_at": "2026-07-24T10:00:00Z",
             "assets": [{"name":"latest.json","browser_download_url":"https://github.com/Williem3/FormationLap/releases/download/v1.0.0-beta.3/latest.json"}]
           },
           {
+            "tag_name": "v1.0.0",
             "draft": false,
             "prerelease": false,
             "published_at": "2026-07-24T09:00:00Z",
             "assets": [{"name":"latest.json","browser_download_url":"https://github.com/Williem3/FormationLap/releases/download/v1.0.0/latest.json"}]
           },
           {
+            "tag_name": "v1.0.0-beta.2",
             "draft": false,
             "prerelease": true,
             "published_at": "2026-07-24T08:00:00Z",
@@ -289,6 +567,7 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
     #[test]
     fn beta_discovery_rejects_ambiguous_or_untrusted_assets() {
         let duplicate_assets = r#"[{
+          "tag_name": "v1.0.0-beta.2",
           "draft": false,
           "prerelease": true,
           "published_at": "2026-07-24T08:00:00Z",
@@ -298,6 +577,7 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
           ]
         }]"#;
         let foreign_asset = r#"[{
+          "tag_name": "v1.0.0-beta.2",
           "draft": false,
           "prerelease": true,
           "published_at": "2026-07-24T08:00:00Z",
@@ -329,5 +609,79 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
             installer_invoked = true;
         }
         assert!(!installer_invoked);
+    }
+
+    #[test]
+    fn official_installer_candidate_requires_exact_tag_version_architecture_and_filename() {
+        let valid = Url::parse(
+            "https://github.com/Williem3/FormationLap/releases/download/v1.2.3/Formation-Lap_1.2.3_x64-setup.exe",
+        )
+        .expect("fixture URL should parse");
+        assert!(validate_installer_url(&valid, "1.2.3", "windows-x86_64").is_ok());
+
+        for invalid in [
+            "http://github.com/Williem3/FormationLap/releases/download/v1.2.3/Formation-Lap_1.2.3_x64-setup.exe",
+            "https://github.com/other/FormationLap/releases/download/v1.2.3/Formation-Lap_1.2.3_x64-setup.exe",
+            "https://github.com/Williem3/FormationLap/releases/download/v9.9.9/Formation-Lap_1.2.3_x64-setup.exe",
+            "https://github.com/Williem3/FormationLap/releases/download/v1.2.3/Formation-Lap_1.2.3_arm64-setup.exe",
+            "https://github.com/Williem3/FormationLap/releases/download/v1.2.3/other.exe",
+        ] {
+            assert!(
+                validate_installer_url(
+                    &Url::parse(invalid).expect("fixture URL should parse"),
+                    "1.2.3",
+                    "windows-x86_64",
+                )
+                .is_err(),
+                "{invalid} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn updater_redirects_stay_on_tightly_controlled_https_hosts() {
+        for allowed in [
+            "https://github.com/Williem3/FormationLap/releases/download/v1.2.3/latest.json",
+            "https://objects.githubusercontent.com/github-production-release-asset/file?token=bounded",
+            "https://release-assets.githubusercontent.com/github-production-release-asset/file?token=bounded",
+        ] {
+            assert!(validate_redirect_url(&Url::parse(allowed).unwrap()).is_ok());
+        }
+        for denied in [
+            "http://github.com/Williem3/FormationLap/releases/download/v1.2.3/latest.json",
+            "https://github.example.com/Williem3/FormationLap/releases/download/v1.2.3/latest.json",
+            "https://user@github.com/Williem3/FormationLap/releases/download/v1.2.3/latest.json",
+        ] {
+            assert!(validate_redirect_url(&Url::parse(denied).unwrap()).is_err());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verified_staging_handle_prevents_replacement_until_launch() {
+        let installer = stage_verified_installer(b"MZ verified fixture", "1.2.3")
+            .expect("verified fixture should stage");
+        assert!(
+            OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(&installer.path)
+                .is_err(),
+            "another Process must not replace verified bytes while the launch handle is open"
+        );
+
+        let directory = installer
+            .path
+            .parent()
+            .expect("staged installer should have a parent")
+            .to_path_buf();
+        let path = installer.path.clone();
+        drop(installer);
+        OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .expect("the test should release the staging handle");
+        fs::remove_dir_all(directory).expect("test staging directory should be removable");
     }
 }

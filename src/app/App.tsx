@@ -1044,6 +1044,9 @@ export function App({ bridge }: AppProps) {
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
             updates={snapshot?.updates ?? null}
+            onlineChecksEnabled={
+              snapshot?.settings.automaticUpdateChecks ?? false
+            }
             isBusy={isSaving}
             gameLaunchDiagnostic={gameLaunchDiagnostic}
             onCreateProfile={openNewProfile}
@@ -1504,8 +1507,8 @@ function SettingsScreen({
           <p className="eyebrow">Local preferences</p>
           <h1>Settings</h1>
           <p className="workspace-summary">
-            Tune desktop behavior and appearance without sending configuration
-            or usage data anywhere.
+            Profiles and usage data stay on this PC. Online checks run only when
+            requested or explicitly enabled.
           </p>
         </div>
         <span className="settings-save-state" role="status">
@@ -1599,8 +1602,9 @@ function SettingsScreen({
             <span>
               <strong>Automatic daily checks</strong>
               <small>
-                Check trusted providers at most once per day. Disable this
-                without losing Check now.
+                Off by default. When enabled, checks at most daily may contact
+                Formation Lap and curated application providers through GitHub
+                Releases, Winget, and SimHub’s official site.
               </small>
             </span>
             <input
@@ -1652,7 +1656,7 @@ function SettingsScreen({
               <strong>{updateStatusLabel(updates.formationLap)}</strong>
               <small>
                 {sessionState === "idle"
-                  ? "Checks go directly to the curated provider origins."
+                  ? "Check now consents to one direct check of the named providers."
                   : "Checks resume when the Session is idle."}
               </small>
             </span>
@@ -3145,6 +3149,7 @@ interface DashboardProps {
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
   updates: UpdateSnapshot | null;
+  onlineChecksEnabled: boolean;
   isBusy: boolean;
   gameLaunchDiagnostic: GameLaunchDiagnostic | null;
   onCreateProfile(): void;
@@ -3184,6 +3189,7 @@ function Dashboard({
   applicationProcesses,
   session,
   updates,
+  onlineChecksEnabled,
   isBusy,
   gameLaunchDiagnostic,
   onCreateProfile,
@@ -3363,6 +3369,12 @@ function Dashboard({
             <p id="start-session-requirement">
               Create a Racing Profile to define one Primary Sim and its ordered
               Supporting Applications.
+            </p>
+            <p>
+              Local data stays on this PC. Automatic online checks are{" "}
+              {onlineChecksEnabled ? "on" : "off"}; online checks may contact
+              Formation Lap and curated application providers through GitHub
+              Releases, Winget, and SimHub’s official site.
             </p>
             <button
               type="button"
@@ -3619,7 +3631,9 @@ function Dashboard({
             </small>
           </span>
         </div>
-        <span className="utility-data">V1 · LOCAL ONLY</span>
+        <span className="utility-data">
+          Local data · Online checks {onlineChecksEnabled ? "on" : "off"}
+        </span>
       </footer>
     </>
   );

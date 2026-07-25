@@ -931,7 +931,7 @@ fn encode_base64(bytes: &[u8]) -> String {
     encoded
 }
 
-fn executable_icon(executable_path: &Path) -> ApplicationIcon {
+pub(crate) fn executable_icon(executable_path: &Path) -> ApplicationIcon {
     windows_icon::extract(executable_path)
         .filter(|bytes| !bytes.is_empty())
         .map(|bytes| ApplicationIcon::LocalData {

@@ -333,6 +333,15 @@ pub enum ApplicationIcon {
     Generic,
 }
 
+/// A locally resolved icon for one application in the selected Racing Profile.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ApplicationIconSnapshot {
+    pub application_id: String,
+    pub icon: ApplicationIcon,
+}
+
 /// One curated Primary Sim found at a targeted local source.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -716,6 +725,9 @@ pub struct AppSnapshot {
     pub updates: UpdateSnapshot,
     pub profiles: Vec<ProfileSummary>,
     pub selected_profile: Option<RacingProfile>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub application_icons: Option<Vec<ApplicationIconSnapshot>>,
     pub application_processes: Vec<ApplicationProcessSnapshot>,
     pub session: SessionSnapshot,
 }
@@ -729,6 +741,7 @@ impl AppSnapshot {
             updates: UpdateSnapshot::default(),
             profiles: Vec::new(),
             selected_profile: None,
+            application_icons: None,
             application_processes: Vec::new(),
             session: SessionSnapshot::default(),
         }

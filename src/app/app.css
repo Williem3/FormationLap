@@ -1088,6 +1088,12 @@ button:disabled {
   height: 20px;
 }
 
+.application-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .locked-label {
   margin-left: auto;
   padding: 4px 7px;

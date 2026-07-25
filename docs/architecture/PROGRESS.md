@@ -119,6 +119,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   Curated Catalog. Selecting the unsupported OpenXR mode is rejected before a
   Session starts instead of silently launching Steam option 3. There is no
   active implementation file scope.
+- Dashboard lifecycle rows now use local executable icons supplied by the
+  native snapshot. Direct recipes resolve their exact executable, Steam
+  recipes use a learned monitored path, and the generic fallback remains for
+  missing paths. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -265,3 +269,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Advanced ordered Session cleanup immediately after a confirmed Force stop, so a successful elevated termination does not leave the next cleanup step waiting for an unrelated refresh | Red/green `closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending`; 13 privileged-operation tests, Rust format/targeted Clippy, and TypeScript typecheck passed. Live Windows check confirmed Force stop terminated VirtualDesktopSwitcher | Go Fast is now the outstanding Closing Process; it should be configured to persist after Session close rather than force-stopped. Restart Formation Lap after the live cleanup settles to load this native change. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Traced same-executable companion Processes behind the Windows ProcessRuntime, allowing a Session-owned launcher and its companion UI to be observed, window-closed, awaited, and force-stopped as one group | Red/green Windows fixture `close_windows_follows_a_same_executable_companion_created_by_the_session`; all 12 Windows ProcessRuntime fixture tests, targeted Clippy, Rust format, and diff whitespace checks passed | Rebuild/restart Formation Lap, then retry ApexTraceVR normal Close Session; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Corrected Le Mans Ultimate's Curated Catalog VR route to its documented SteamVR mode and rejected the unsupported OpenXR Steam option | Red/green `le_mans_ultimate_rejects_the_unsupported_openxr_steam_launch_mode`; 9 launch-recipe tests, catalog validation, Rust format, and targeted Clippy passed | Rebuild/restart Formation Lap, select OpenVR / SteamVR for Le Mans Ultimate, then retry Test Game Launch or Start Session; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Replaced Dashboard lifecycle-row heartbeat/flag placeholders with locally resolved executable icons while retaining the generic fallback for missing paths | Red/green React icon rendering test; `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (37 tests), Rust library tests (32), format, Clippy, and generated-contract check passed | Rebuild/restart Formation Lap to load the native icon snapshot; external signed Beta and Windows qualification remain the next M10 action |

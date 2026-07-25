@@ -73,9 +73,11 @@ export type ApplicationUpdateSnapshot = { applicationId: string, name: string, s
 
 export type UpdateSnapshot = { formationLap: UpdateStatus, applications: Array<ApplicationUpdateSnapshot>, lastAutomaticCheckUnixSeconds: number | null, resultDeferred: boolean, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, updates: UpdateSnapshot, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
+export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, updates: UpdateSnapshot, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationIcons?: Array<ApplicationIconSnapshot>, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
 
 export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
+
+export type ApplicationIconSnapshot = { applicationId: string, icon: ApplicationIcon, };
 
 export type DiscoveredInstallation = { "kind": "directExecutable", executablePath: string, } | { "kind": "steam", appId: number, install_directory: string, };
 

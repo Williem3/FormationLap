@@ -130,6 +130,69 @@ describe("Formation Lap shell", () => {
     expect(await screen.findByLabelText("VR")).toBeDisabled();
   });
 
+  it("renders locally resolved executable icons in lifecycle rows", async () => {
+    const snapshot = lifecycleSnapshot();
+    const supportingApplication = {
+      id: "simhub-lifecycle",
+      name: "SimHub",
+      launchRecipe: {
+        source: {
+          kind: "directExecutable" as const,
+          executablePath: "C:\\Fixtures\\SimHub.exe",
+        },
+        arguments: [],
+        workingDirectory: "C:\\Fixtures",
+        monitoredProcess: null,
+        monitoredExecutablePath: null,
+        consoleVisibility: "hidden" as const,
+        elevated: false,
+        startupTimeoutSeconds: 3,
+        postStartDelayMilliseconds: 0,
+        shutdownStrategy: { kind: "closeWindows" as const },
+      },
+      pathNeedsRepair: false,
+    };
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: supportingApplication,
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ];
+    snapshot.applicationIcons = [
+      {
+        applicationId: supportingApplication.id,
+        icon: {
+          kind: "localData",
+          media_type: "image/x-icon",
+          data_base64: "AAABAA==",
+        },
+      },
+      {
+        applicationId: snapshot.selectedProfile!.primarySim.id,
+        icon: {
+          kind: "localData",
+          media_type: "image/x-icon",
+          data_base64: "AAACAA==",
+        },
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    const { container } = render(<App bridge={bridge} />);
+
+    await screen.findAllByText("SimHub");
+    expect(
+      container.querySelector(
+        '.application-icon img[src="data:image/x-icon;base64,AAABAA=="]',
+      ),
+    ).toBeTruthy();
+    expect(
+      container.querySelector(
+        '.application-icon img[src="data:image/x-icon;base64,AAACAA=="]',
+      ),
+    ).toBeTruthy();
+  });
+
   it("starts a Session through NativeBridge and renders its authoritative Formation Rail", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

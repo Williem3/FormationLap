@@ -36,8 +36,8 @@ pub use commands::{
     update_settings,
 };
 pub use contracts::{
-    AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
-    ApplicationUpdateSnapshot, ApplicationUpdateTarget, CatalogPrimarySim,
+    AppSnapshot, ApplicationIcon, ApplicationIconSnapshot, ApplicationProcessSnapshot,
+    ApplicationRequirement, ApplicationUpdateSnapshot, ApplicationUpdateTarget, CatalogPrimarySim,
     CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CompatibilityRank,
     ConsoleVisibility, DesktopSettings, DiagnosticEntry, DiagnosticExport, DiscoveredInstallation,
     DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot,

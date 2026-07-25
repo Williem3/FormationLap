@@ -1,13 +1,16 @@
 use crate::diagnostics::DiagnosticLog;
-use crate::discovery_catalog::{DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources};
+use crate::discovery_catalog::{
+    DiscoveryCatalog, DiscoveryCatalogError, TargetedDiscoverySources, executable_icon,
+};
 use crate::game_launch_diagnostics::GameLaunchDiagnostics;
 use crate::update_advisor::UpdateAdvisor;
 use crate::{
-    AppSnapshot, ApplicationProcessSnapshot, DevelopmentPrivilegeBroker, ElevatedOperation,
-    ElevatedOperationResult, PrivilegeBroker, PrivilegeBrokerError, ProcessIdentity,
-    ProcessObservation, ProcessOwnership, ProcessResponsiveness, ProcessRuntime,
-    ProcessRuntimeError, ProcessStatus, ProfileLibrary, RacingProfile, SettingsStore,
-    WindowsPrivilegeBroker, WindowsProcessRuntime, session_journal::SessionJournal,
+    AppSnapshot, ApplicationIcon, ApplicationIconSnapshot, ApplicationProcessSnapshot,
+    DevelopmentPrivilegeBroker, ElevatedOperation, ElevatedOperationResult, PrivilegeBroker,
+    PrivilegeBrokerError, ProcessIdentity, ProcessObservation, ProcessOwnership,
+    ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
+    RacingProfile, SettingsStore, WindowsPrivilegeBroker, WindowsProcessRuntime,
+    session_journal::SessionJournal,
 };
 use std::{
     collections::BTreeMap,
@@ -560,6 +563,13 @@ impl FormationLapCore {
             .selected_profile_id()
             .and_then(|profile_id| self.profile_library.profile(profile_id))
             .or_else(|| self.profile_library.selected_profile());
+        snapshot.application_icons = Some(
+            snapshot
+                .selected_profile
+                .as_ref()
+                .map(Self::profile_application_icons)
+                .unwrap_or_default(),
+        );
         snapshot.settings = self.settings_store.desktop().clone();
         snapshot.updates = self.update_advisor.snapshot(
             self.settings_store
@@ -568,6 +578,32 @@ impl FormationLapCore {
         snapshot.application_processes = self.application_processes.values().cloned().collect();
         snapshot.session = self.session.clone();
         snapshot
+    }
+
+    fn profile_application_icons(profile: &RacingProfile) -> Vec<ApplicationIconSnapshot> {
+        profile
+            .supporting_applications
+            .iter()
+            .map(|supporting| &supporting.application)
+            .chain(std::iter::once(&profile.primary_sim))
+            .map(|application| {
+                let executable_path = match &application.launch_recipe.source {
+                    crate::LaunchSource::DirectExecutable { executable_path } => {
+                        Some(executable_path)
+                    }
+                    crate::LaunchSource::Steam { .. } => {
+                        application.launch_recipe.monitored_executable_path.as_ref()
+                    }
+                };
+                let icon = executable_path
+                    .map(|path| executable_icon(std::path::Path::new(path)))
+                    .unwrap_or(ApplicationIcon::Generic);
+                ApplicationIconSnapshot {
+                    application_id: application.id.clone(),
+                    icon,
+                }
+            })
+            .collect()
     }
 
     pub fn execute(&mut self, command: AppCommand) -> Result<CommandOutcome, CoreError> {

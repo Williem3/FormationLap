@@ -1065,6 +1065,7 @@ export function App({ bridge }: AppProps) {
             selectedProfile={selectedProfile}
             profileNeedsReview={selectedProfileNeedsReview}
             error={formError}
+            applicationIcons={snapshot?.applicationIcons ?? []}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
             updates={snapshot?.updates ?? null}
@@ -1940,6 +1941,24 @@ function applicationIcon(
     />
   ) : (
     <FlagIcon />
+  );
+}
+
+function profileApplicationIcon(
+  applicationId: string,
+  applicationIcons: NonNullable<AppSnapshot["applicationIcons"]>,
+  fallback: ReactNode,
+) {
+  const icon = applicationIcons.find(
+    (candidate) => candidate.applicationId === applicationId,
+  )?.icon;
+  return icon?.kind === "localData" ? (
+    <img
+      alt=""
+      src={`data:${icon.media_type};base64,${icon.data_base64}`}
+    />
+  ) : (
+    fallback
   );
 }
 
@@ -3354,6 +3373,7 @@ interface DashboardProps {
   selectedProfile: AppSnapshot["selectedProfile"];
   profileNeedsReview: boolean;
   error: string | null;
+  applicationIcons: NonNullable<AppSnapshot["applicationIcons"]>;
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
   updates: UpdateSnapshot | null;
@@ -3395,6 +3415,7 @@ function Dashboard({
   selectedProfile,
   profileNeedsReview,
   error,
+  applicationIcons,
   applicationProcesses,
   session,
   updates,
@@ -3752,7 +3773,11 @@ function Dashboard({
                     key={application.id}
                     application={application}
                     classification={requirement}
-                    icon={<PulseIcon />}
+                    icon={profileApplicationIcon(
+                      application.id,
+                      applicationIcons,
+                      <PulseIcon />,
+                    )}
                     process={applicationProcesses.find(
                       (candidate) => candidate.applicationId === application.id,
                     )}
@@ -3779,7 +3804,11 @@ function Dashboard({
             <ApplicationLifecycleRow
               application={selectedProfile.primarySim}
               classification="Primary Sim"
-              icon={<FlagIcon />}
+              icon={profileApplicationIcon(
+                selectedProfile.primarySim.id,
+                applicationIcons,
+                <FlagIcon />,
+              )}
               process={applicationProcesses.find(
                 (candidate) =>
                   candidate.applicationId === selectedProfile.primarySim.id,

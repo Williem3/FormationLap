@@ -14,8 +14,8 @@ blocked until this program is complete and separately reviewed.
 | Slice                                                    | Status      | Durable behavior evidence                                                                                                                                                                 |
 | -------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Verified Process handles and monitored paths             | Complete    | `launcher_style_launch_returns_the_monitored_process_identity`, `filename_only_launcher_identity_is_observed_without_session_ownership`, all 11 real Windows ProcessRuntime fixture tests |
-| Profile-ID containment and legacy repair                 | In progress | Next slice                                                                                                                                                                                |
-| Helper caller authentication and preview identity        | Pending     | —                                                                                                                                                                                         |
+| Profile-ID containment and legacy repair                 | Complete    | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
+| Helper caller authentication and preview identity        | In progress | Next slice                                                                                                                                                                                |
 | Ordered adjacent elevation and ownership acknowledgement | Pending     | —                                                                                                                                                                                         |
 | Imported-profile review                                  | Pending     | —                                                                                                                                                                                         |
 | Local storage and startup migration                      | Pending     | —                                                                                                                                                                                         |
@@ -61,6 +61,39 @@ target them.
   - passed; exFAT hard-link fallback warnings are environmental.
 - `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
   - 119 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+
+## Profile-ID containment and legacy repair
+
+ProfileLibrary now retains each loaded document's trusted source path
+privately. Save and delete operations resolve only that retained path and
+reject non-canonical UUID identifiers instead of deriving filesystem paths from
+document content.
+
+On load, a document whose ID is not a canonical UUID or does not exactly match
+its filename is repaired into a fresh UUID-backed profile. The original file is
+moved to `backups/<new-id>.legacy.json`, the repaired document is atomically
+activated at `profiles/<new-id>.json`, and activation failure restores the
+original. Existing valid profiles keep their identity and behavior.
+
+### Red-green evidence
+
+`invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`
+first exposed the untrusted `../outside-profile` document ID through the public
+snapshot. It now proves that the loaded profile receives a fresh canonical
+UUID, its filename matches that UUID, the original remains recoverable, and
+subsequent save/delete operations cannot alter an outside sentinel.
+
+### Verification
+
+- `pnpm.cmd verify`
+  - formatting, lint, type checking, 28 React tests, 3 accessibility tests, 21
+    release tests, synchronized contracts/catalog/capability audit passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --test racing_profiles --all-features -- --test-threads=1`
+  - all 16 ProfileLibrary behavior tests passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 120 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
 
 ## Publication boundary
 

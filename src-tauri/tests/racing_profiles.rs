@@ -709,6 +709,85 @@ fn schema_one_profile_is_migrated_without_losing_identity() {
 }
 
 #[test]
+fn invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path() {
+    let storage = TempStorage::new();
+    let profiles = storage.path().join("profiles");
+    fs::create_dir_all(&profiles).expect("profile directory should be created");
+    let legacy_path = profiles.join("portable-profile.json");
+    fs::write(
+        &legacy_path,
+        r#"{
+  "schemaVersion": 2,
+  "id": "../outside-profile",
+  "name": "Imported legacy profile",
+  "primarySim": {
+    "name": "Le Mans Ultimate"
+  }
+}"#,
+    )
+    .expect("invalid legacy profile fixture should be written");
+    let outside_path = storage.path().join("outside-profile.json");
+    fs::write(&outside_path, b"must remain untouched").expect("outside sentinel should be written");
+
+    let mut core = FormationLapCore::open(storage.path())
+        .expect("invalid legacy identity should be repaired during open");
+    let repaired = core
+        .snapshot()
+        .selected_profile
+        .expect("repaired profile should remain available");
+    assert_eq!(
+        uuid::Uuid::parse_str(&repaired.id)
+            .expect("repaired profile ID should be a UUID")
+            .to_string(),
+        repaired.id
+    );
+    assert_ne!(repaired.id, "../outside-profile");
+    assert!(!legacy_path.exists());
+    assert!(
+        profiles.join(format!("{}.json", repaired.id)).is_file(),
+        "repaired profile should use its UUID-backed filename"
+    );
+    let legacy_backup = storage
+        .path()
+        .join("backups")
+        .join(format!("{}.legacy.json", repaired.id));
+    assert!(
+        legacy_backup.is_file(),
+        "the invalid source document should remain recoverable"
+    );
+    let backup: serde_json::Value = serde_json::from_slice(
+        &fs::read(legacy_backup).expect("legacy backup should remain readable"),
+    )
+    .expect("legacy backup should remain valid JSON");
+    assert_eq!(backup["id"], "../outside-profile");
+
+    let repaired_id = repaired.id.clone();
+    let mut edited = repaired;
+    edited.name = "Repaired and saved".to_owned();
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(edited),
+    })
+    .expect("repaired profile should save through its trusted source path");
+    core.execute(AppCommand::DeleteProfile {
+        profile_id: repaired_id.clone(),
+    })
+    .expect("repaired profile should delete through its trusted source path");
+    assert!(!profiles.join(format!("{repaired_id}.json")).exists());
+    assert!(
+        storage
+            .path()
+            .join("backups")
+            .join(format!("{repaired_id}.json"))
+            .is_file(),
+        "deletion should retain the last repaired profile document"
+    );
+    assert_eq!(
+        fs::read(&outside_path).expect("outside sentinel should remain readable"),
+        b"must remain untouched"
+    );
+}
+
+#[test]
 fn exported_racing_profile_is_portable_and_contains_no_runtime_identity() {
     let storage = TempStorage::new();
     let mut core =

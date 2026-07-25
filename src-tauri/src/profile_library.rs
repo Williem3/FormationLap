@@ -130,7 +130,13 @@ impl PortableRacingProfileDocument {
 pub(crate) struct ProfileLibrary {
     backups_directory: PathBuf,
     profiles_directory: PathBuf,
-    profiles: Vec<RacingProfileDocument>,
+    profiles: Vec<StoredProfile>,
+}
+
+#[derive(Clone)]
+struct StoredProfile {
+    document: RacingProfileDocument,
+    source_path: PathBuf,
 }
 
 impl ProfileLibrary {
@@ -143,23 +149,41 @@ impl ProfileLibrary {
 
         let mut profiles = Vec::new();
         for entry in fs::read_dir(&profiles_directory)? {
-            let path = entry?.path();
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let path = entry.path();
             if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
                 continue;
             }
 
-            let mut document = Self::load_live_document(&path, &backups_directory)?;
+            let document = Self::load_live_document(&path, &backups_directory)?;
+            let (mut document, source_path) = if Self::identity_matches_source(&document, &path) {
+                (document, path)
+            } else {
+                Self::repair_legacy_identity(
+                    &profiles_directory,
+                    &backups_directory,
+                    &path,
+                    document,
+                )?
+            };
             if document.schema_version == LEGACY_PROFILE_SCHEMA_VERSION {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
-                Self::persist_migration(&path, &backups_directory, &document)?;
+                Self::persist_migration(&source_path, &backups_directory, &document)?;
             }
-            profiles.push(document);
+            profiles.push(StoredProfile {
+                document,
+                source_path,
+            });
         }
 
         profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
+            left.document
+                .name
+                .cmp(&right.document.name)
+                .then_with(|| left.document.id.cmp(&right.document.id))
         });
 
         Ok(Self {
@@ -202,6 +226,108 @@ impl ProfileLibrary {
             }
             Err(error) => Err(error),
         }
+    }
+
+    fn identity_matches_source(document: &RacingProfileDocument, source_path: &Path) -> bool {
+        Self::is_canonical_uuid(&document.id)
+            && source_path.file_stem().and_then(|stem| stem.to_str()) == Some(document.id.as_str())
+    }
+
+    fn is_canonical_uuid(profile_id: &str) -> bool {
+        Uuid::parse_str(profile_id).is_ok_and(|uuid| uuid.to_string() == profile_id)
+    }
+
+    fn repair_legacy_identity(
+        profiles_directory: &Path,
+        backups_directory: &Path,
+        source_path: &Path,
+        mut document: RacingProfileDocument,
+    ) -> Result<(RacingProfileDocument, PathBuf), CoreError> {
+        let (profile_id, destination, temporary, backup) = loop {
+            let profile_id = Uuid::new_v4().to_string();
+            let destination = profiles_directory.join(format!("{profile_id}.json"));
+            let temporary = profiles_directory.join(format!(".{profile_id}.json.tmp"));
+            let backup = backups_directory.join(format!("{profile_id}.legacy.json"));
+            if !destination.exists() && !temporary.exists() && !backup.exists() {
+                break (profile_id, destination, temporary, backup);
+            }
+        };
+
+        document.id = profile_id;
+        document.schema_version = PROFILE_SCHEMA_VERSION;
+        Self::write_temporary_document(&temporary, &document)?;
+        if let Err(error) = fs::rename(source_path, &backup) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error.into());
+        }
+        if let Err(error) = fs::rename(&temporary, &destination) {
+            let _ = fs::rename(&backup, source_path);
+            let _ = fs::remove_file(&temporary);
+            return Err(error.into());
+        }
+
+        Ok((document, destination))
+    }
+
+    fn write_temporary_document(
+        temporary: &Path,
+        document: &RacingProfileDocument,
+    ) -> Result<(), CoreError> {
+        let mut serialized = serde_json::to_vec_pretty(document)?;
+        serialized.push(b'\n');
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(temporary)?;
+        if let Err(error) = file.write_all(&serialized).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = fs::remove_file(temporary);
+            return Err(error.into());
+        }
+        Ok(())
+    }
+
+    fn sort_profiles(&mut self) {
+        self.profiles.sort_by(|left, right| {
+            left.document
+                .name
+                .cmp(&right.document.name)
+                .then_with(|| left.document.id.cmp(&right.document.id))
+        });
+    }
+
+    fn profile_index(&self, profile_id: &str) -> Result<usize, CoreError> {
+        if !Self::is_canonical_uuid(profile_id) {
+            return Err(CoreError::ProfileNotFound(profile_id.to_owned()));
+        }
+        self.profiles
+            .iter()
+            .position(|profile| profile.document.id == profile_id)
+            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))
+    }
+
+    fn persisted_paths(
+        &self,
+        profile_index: usize,
+    ) -> Result<(PathBuf, PathBuf, PathBuf), CoreError> {
+        let stored = &self.profiles[profile_index];
+        if !Self::identity_matches_source(&stored.document, &stored.source_path)
+            || stored.source_path.parent() != Some(self.profiles_directory.as_path())
+        {
+            return Err(std::io::Error::other(
+                "stored profile identity no longer matches its trusted source path",
+            )
+            .into());
+        }
+        let file_name = stored
+            .source_path
+            .file_name()
+            .ok_or_else(|| std::io::Error::other("profile path has no file name"))?;
+        let temporary = self
+            .profiles_directory
+            .join(format!(".{}.json.tmp", stored.document.id));
+        let backup = self.backups_directory.join(file_name);
+        Ok((stored.source_path.clone(), temporary, backup))
     }
 
     fn recover_interrupted_replacements(
@@ -268,9 +394,9 @@ impl ProfileLibrary {
         self.profiles
             .iter()
             .map(|profile| ProfileSummary {
-                id: profile.id.clone(),
-                name: profile.name.clone(),
-                primary_sim_name: profile.primary_sim.name.clone(),
+                id: profile.document.id.clone(),
+                name: profile.document.name.clone(),
+                primary_sim_name: profile.document.primary_sim.name.clone(),
             })
             .collect()
     }
@@ -278,33 +404,40 @@ impl ProfileLibrary {
     pub(crate) fn configured_application_count(&self) -> usize {
         self.profiles
             .iter()
-            .map(|profile| 1 + profile.supporting_applications.len())
+            .map(|profile| 1 + profile.document.supporting_applications.len())
             .sum()
     }
 
     pub(crate) fn selected_profile(&self) -> Option<RacingProfile> {
-        self.profiles.first().map(RacingProfileDocument::as_profile)
+        self.profiles
+            .first()
+            .map(|profile| profile.document.as_profile())
     }
 
     pub(crate) fn contains(&self, profile_id: &str) -> bool {
-        self.profiles.iter().any(|profile| profile.id == profile_id)
+        Self::is_canonical_uuid(profile_id)
+            && self
+                .profiles
+                .iter()
+                .any(|profile| profile.document.id == profile_id)
     }
 
     pub(crate) fn profile(&self, profile_id: &str) -> Option<RacingProfile> {
         self.profiles
             .iter()
-            .find(|profile| profile.id == profile_id)
-            .map(RacingProfileDocument::as_profile)
+            .find(|profile| profile.document.id == profile_id)
+            .map(|profile| profile.document.as_profile())
     }
 
     pub(crate) fn export(&self, profile_id: &str) -> Result<String, CoreError> {
         let profile = self
             .profiles
             .iter()
-            .find(|profile| profile.id == profile_id)
+            .find(|profile| profile.document.id == profile_id)
             .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
-        let mut document =
-            serde_json::to_string_pretty(&PortableRacingProfileDocument::from_stored(profile))?;
+        let mut document = serde_json::to_string_pretty(
+            &PortableRacingProfileDocument::from_stored(&profile.document),
+        )?;
         document.push('\n');
         Ok(document)
     }
@@ -360,23 +493,14 @@ impl ProfileLibrary {
         let temporary = self
             .profiles_directory
             .join(format!(".{profile_id}.json.tmp"));
-        let mut document = serde_json::to_vec_pretty(&profile)?;
-        document.push(b'\n');
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(&document)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(temporary, destination)?;
+        Self::write_temporary_document(&temporary, &profile)?;
+        fs::rename(&temporary, &destination)?;
 
-        self.profiles.push(profile);
-        self.profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
+        self.profiles.push(StoredProfile {
+            document: profile,
+            source_path: destination,
         });
+        self.sort_profiles();
 
         Ok(profile_id)
     }
@@ -415,24 +539,14 @@ impl ProfileLibrary {
         };
         let destination = self.profiles_directory.join(format!("{id}.json"));
         let temporary = self.profiles_directory.join(format!(".{id}.json.tmp"));
-        let mut serialized = serde_json::to_vec_pretty(&profile)?;
-        serialized.push(b'\n');
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(&serialized)?;
-        file.sync_all()?;
-        drop(file);
+        Self::write_temporary_document(&temporary, &profile)?;
         fs::rename(&temporary, &destination)?;
 
-        self.profiles.push(profile);
-        self.profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
+        self.profiles.push(StoredProfile {
+            document: profile,
+            source_path: destination,
         });
+        self.sort_profiles();
 
         Ok(id)
     }
@@ -444,38 +558,16 @@ impl ProfileLibrary {
         primary_sim_name: String,
     ) -> Result<(), CoreError> {
         validate_profile_names(&name, &primary_sim_name)?;
-        let profile_index = self
-            .profiles
-            .iter()
-            .position(|profile| profile.id == profile_id)
-            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
-        let mut profile = self.profiles[profile_index].clone();
+        let profile_index = self.profile_index(profile_id)?;
+        let (destination, temporary, backup) = self.persisted_paths(profile_index)?;
+        let mut profile = self.profiles[profile_index].document.clone();
         profile.name = name;
         profile.primary_sim.name = primary_sim_name;
-        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
-        let temporary = self
-            .profiles_directory
-            .join(format!(".{profile_id}.json.tmp"));
-        let backup = self.backups_directory.join(format!("{profile_id}.json"));
-        let mut serialized = serde_json::to_vec_pretty(&profile)?;
-        serialized.push(b'\n');
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(&serialized)?;
-        file.sync_all()?;
-        drop(file);
-
+        Self::write_temporary_document(&temporary, &profile)?;
         replace_with_backup(&destination, &temporary, &backup)?;
 
-        self.profiles[profile_index] = profile;
-        self.profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
-        });
+        self.profiles[profile_index].document = profile;
+        self.sort_profiles();
 
         Ok(())
     }
@@ -488,12 +580,9 @@ impl ProfileLibrary {
             }
         }
 
-        let profile_index = self
-            .profiles
-            .iter()
-            .position(|stored| stored.id == profile.id)
-            .ok_or_else(|| CoreError::ProfileNotFound(profile.id.clone()))?;
-        let stored_profile = &self.profiles[profile_index];
+        let profile_index = self.profile_index(&profile.id)?;
+        let (destination, temporary, backup) = self.persisted_paths(profile_index)?;
+        let stored_profile = &self.profiles[profile_index].document;
         profile.primary_sim.id = stored_profile.primary_sim.id.clone();
         profile.primary_sim.path_needs_repair =
             Self::path_needs_repair(&profile.primary_sim.launch_recipe);
@@ -517,43 +606,18 @@ impl ProfileLibrary {
         }
 
         let profile = RacingProfileDocument::from(profile);
-        let profile_id = profile.id.clone();
-        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
-        let temporary = self
-            .profiles_directory
-            .join(format!(".{profile_id}.json.tmp"));
-        let backup = self.backups_directory.join(format!("{profile_id}.json"));
-        let mut serialized = serde_json::to_vec_pretty(&profile)?;
-        serialized.push(b'\n');
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(&serialized)?;
-        file.sync_all()?;
-        drop(file);
-
+        Self::write_temporary_document(&temporary, &profile)?;
         replace_with_backup(&destination, &temporary, &backup)?;
 
-        self.profiles[profile_index] = profile;
-        self.profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
-        });
+        self.profiles[profile_index].document = profile;
+        self.sort_profiles();
 
         Ok(())
     }
 
     pub(crate) fn delete(&mut self, profile_id: &str) -> Result<(), CoreError> {
-        let profile_index = self
-            .profiles
-            .iter()
-            .position(|profile| profile.id == profile_id)
-            .ok_or_else(|| CoreError::ProfileNotFound(profile_id.to_owned()))?;
-        let destination = self.profiles_directory.join(format!("{profile_id}.json"));
-        let backup = self.backups_directory.join(format!("{profile_id}.json"));
+        let profile_index = self.profile_index(profile_id)?;
+        let (destination, _temporary, backup) = self.persisted_paths(profile_index)?;
 
         if backup.exists() {
             fs::remove_file(&backup)?;
@@ -569,12 +633,8 @@ impl ProfileLibrary {
         source_profile_id: &str,
         name: String,
     ) -> Result<String, CoreError> {
-        let source = self
-            .profiles
-            .iter()
-            .find(|profile| profile.id == source_profile_id)
-            .cloned()
-            .ok_or_else(|| CoreError::ProfileNotFound(source_profile_id.to_owned()))?;
+        let source_index = self.profile_index(source_profile_id)?;
+        let source = self.profiles[source_index].document.clone();
         validate_profile_names(&name, &source.primary_sim.name)?;
         let id = Uuid::new_v4().to_string();
         let mut duplicate = source;
@@ -587,23 +647,14 @@ impl ProfileLibrary {
 
         let destination = self.profiles_directory.join(format!("{id}.json"));
         let temporary = self.profiles_directory.join(format!(".{id}.json.tmp"));
-        let mut serialized = serde_json::to_vec_pretty(&duplicate)?;
-        serialized.push(b'\n');
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(&serialized)?;
-        file.sync_all()?;
-        drop(file);
+        Self::write_temporary_document(&temporary, &duplicate)?;
         fs::rename(&temporary, &destination)?;
 
-        self.profiles.push(duplicate);
-        self.profiles.sort_by(|left, right| {
-            left.name
-                .cmp(&right.name)
-                .then_with(|| left.id.cmp(&right.id))
+        self.profiles.push(StoredProfile {
+            document: duplicate,
+            source_path: destination,
         });
+        self.sort_profiles();
 
         Ok(id)
     }

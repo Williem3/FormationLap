@@ -129,11 +129,44 @@ pub trait ProcessRuntime: Send {
 pub struct WindowsProcessRuntime {
     #[cfg(windows)]
     captured_output: BTreeMap<String, windows_adapter::CapturedOutput>,
+    #[cfg(windows)]
+    companions: BTreeMap<String, Vec<ProcessIdentity>>,
 }
 
 impl WindowsProcessRuntime {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[cfg(windows)]
+    fn discover_companions(
+        &mut self,
+        identity: &ProcessIdentity,
+    ) -> Result<(), ProcessRuntimeError> {
+        let companions = self.companions.entry(identity_key(identity)).or_default();
+        for companion in windows_adapter::same_executable_descendants(identity)? {
+            if !companions
+                .iter()
+                .any(|known| identity_key(known) == identity_key(&companion))
+            {
+                companions.push(companion);
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn tracked_identities(&self, identity: &ProcessIdentity) -> Vec<ProcessIdentity> {
+        let mut identities = vec![identity.clone()];
+        if let Some(companions) = self.companions.get(&identity_key(identity)) {
+            identities.extend(companions.iter().cloned());
+        }
+        identities
+    }
+
+    #[cfg(windows)]
+    fn forget_companions(&mut self, identity: &ProcessIdentity) {
+        self.companions.remove(&identity_key(identity));
     }
 }
 
@@ -185,7 +218,60 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<ProcessObservation, ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            windows_adapter::observe(identity)
+            let primary_observation = windows_adapter::observe(identity)?;
+            if matches!(primary_observation, ProcessObservation::Running { .. }) {
+                self.discover_companions(identity)?;
+            }
+            if let ProcessObservation::Replaced { current_identity } = primary_observation {
+                self.forget_companions(identity);
+                return Ok(ProcessObservation::Replaced { current_identity });
+            }
+
+            let mut has_running_process = false;
+            let mut has_responsive_window = false;
+            let mut has_unresponsive_window = false;
+            let mut retained_companions = Vec::new();
+
+            for tracked in self.tracked_identities(identity) {
+                let observation = if tracked == *identity {
+                    primary_observation.clone()
+                } else {
+                    windows_adapter::observe(&tracked)?
+                };
+                match observation {
+                    ProcessObservation::Running { responsiveness } => {
+                        has_running_process = true;
+                        match responsiveness {
+                            ProcessResponsiveness::NotApplicable => {}
+                            ProcessResponsiveness::Responsive => has_responsive_window = true,
+                            ProcessResponsiveness::NotResponsive => has_unresponsive_window = true,
+                        }
+                        if tracked != *identity {
+                            retained_companions.push(tracked);
+                        }
+                    }
+                    ProcessObservation::Exited | ProcessObservation::Replaced { .. } => {}
+                }
+            }
+
+            if retained_companions.is_empty() {
+                self.forget_companions(identity);
+            } else {
+                self.companions
+                    .insert(identity_key(identity), retained_companions);
+            }
+
+            if !has_running_process {
+                return Ok(ProcessObservation::Exited);
+            }
+            let responsiveness = if has_unresponsive_window {
+                ProcessResponsiveness::NotResponsive
+            } else if has_responsive_window {
+                ProcessResponsiveness::Responsive
+            } else {
+                ProcessResponsiveness::NotApplicable
+            };
+            Ok(ProcessObservation::Running { responsiveness })
         }
         #[cfg(not(windows))]
         {
@@ -203,7 +289,30 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<GracefulStopResult, ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            windows_adapter::request_graceful_stop(identity, strategy)
+            if matches!(
+                windows_adapter::observe(identity)?,
+                ProcessObservation::Running { .. }
+            ) {
+                self.discover_companions(identity)?;
+            }
+            let targets = if matches!(strategy, ShutdownStrategy::CloseWindows) {
+                self.tracked_identities(identity)
+            } else {
+                vec![identity.clone()]
+            };
+            let mut requested = false;
+            for tracked in targets {
+                if windows_adapter::request_graceful_stop(&tracked, strategy)?
+                    == GracefulStopResult::Requested
+                {
+                    requested = true;
+                }
+            }
+            Ok(if requested {
+                GracefulStopResult::Requested
+            } else {
+                GracefulStopResult::Unavailable
+            })
         }
         #[cfg(not(windows))]
         {
@@ -221,7 +330,23 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<bool, ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            windows_adapter::wait_for_exit(identity, timeout)
+            if matches!(
+                windows_adapter::observe(identity)?,
+                ProcessObservation::Running { .. }
+            ) {
+                self.discover_companions(identity)?;
+            }
+            let deadline = std::time::Instant::now() + timeout;
+            for tracked in self.tracked_identities(identity) {
+                if !windows_adapter::wait_for_exit(
+                    &tracked,
+                    deadline.saturating_duration_since(std::time::Instant::now()),
+                )? {
+                    return Ok(false);
+                }
+            }
+            self.forget_companions(identity);
+            Ok(true)
         }
         #[cfg(not(windows))]
         {
@@ -235,7 +360,17 @@ impl ProcessRuntime for WindowsProcessRuntime {
     fn force_stop(&mut self, identity: &ProcessIdentity) -> Result<(), ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            windows_adapter::force_stop(identity)
+            if matches!(
+                windows_adapter::observe(identity)?,
+                ProcessObservation::Running { .. }
+            ) {
+                self.discover_companions(identity)?;
+            }
+            for tracked in self.tracked_identities(identity) {
+                windows_adapter::force_stop(&tracked)?;
+            }
+            self.forget_companions(identity);
+            Ok(())
         }
         #[cfg(not(windows))]
         {
@@ -281,6 +416,7 @@ mod windows_adapter {
     use super::{ProcessObservation, ProcessOutput, ProcessResponsiveness, ProcessRuntimeError};
     use crate::{ConsoleVisibility, LaunchRecipe, LaunchSource, ProcessIdentity};
     use std::{
+        collections::BTreeSet,
         ffi::{OsStr, OsString},
         io::{self, Read},
         mem::size_of,
@@ -762,6 +898,58 @@ mod windows_adapter {
 
         matches.sort_by_key(|identity| identity.pid);
         Ok(matches)
+    }
+
+    pub(super) fn same_executable_descendants(
+        identity: &ProcessIdentity,
+    ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(runtime_error(
+                "process list could not be opened",
+                io::Error::last_os_error(),
+            ));
+        }
+        let snapshot = OwnedHandle(snapshot);
+        let mut entry = PROCESSENTRY32W {
+            dwSize: u32::try_from(size_of::<PROCESSENTRY32W>())
+                .map_err(|_| ProcessRuntimeError::new("process entry size is invalid"))?,
+            ..PROCESSENTRY32W::default()
+        };
+        let mut entries = Vec::new();
+        let mut has_entry = unsafe { Process32FirstW(snapshot.0, &mut entry) } != 0;
+        while has_entry {
+            entries.push((entry.th32ProcessID, entry.th32ParentProcessID));
+            has_entry = unsafe { Process32NextW(snapshot.0, &mut entry) } != 0;
+        }
+
+        let mut ancestor_processes = BTreeSet::from([identity.pid]);
+        let mut descendants = Vec::new();
+        loop {
+            let mut found_descendant = false;
+            for (pid, parent_pid) in &entries {
+                if !ancestor_processes.contains(parent_pid) || ancestor_processes.contains(pid) {
+                    continue;
+                }
+                let Ok(candidate) = process_identity(*pid) else {
+                    continue;
+                };
+                if !candidate
+                    .canonical_executable_path
+                    .eq_ignore_ascii_case(&identity.canonical_executable_path)
+                {
+                    continue;
+                }
+                ancestor_processes.insert(*pid);
+                descendants.push(candidate);
+                found_descendant = true;
+            }
+            if !found_descendant {
+                break;
+            }
+        }
+        descendants.sort_by_key(|candidate| candidate.pid);
+        Ok(descendants)
     }
 
     pub(super) fn running_executable_paths() -> Vec<PathBuf> {

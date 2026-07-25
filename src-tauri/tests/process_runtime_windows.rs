@@ -562,6 +562,56 @@ fn close_windows_gracefully_stops_a_windowed_fixture_before_force_is_needed() {
 }
 
 #[test]
+fn close_windows_follows_a_same_executable_companion_created_by_the_session() {
+    let temporary = TempDirectory::new();
+    let parent_report_path = temporary.path().join("companion parent.json");
+    let companion_report_path = temporary.path().join("companion child.json");
+    let fixture_path = PathBuf::from(env!(
+        "CARGO_BIN_EXE_formation-lap-process-fixture",
+        "process fixture should be built with the process-fixtures feature"
+    ));
+    let recipe = LaunchRecipe {
+        source: LaunchSource::DirectExecutable {
+            executable_path: fixture_path.to_string_lossy().into_owned(),
+        },
+        arguments: vec![
+            "--report".to_owned(),
+            parent_report_path.to_string_lossy().into_owned(),
+            "--lifetime-ms".to_owned(),
+            "10000".to_owned(),
+            "--spawn-companion-window".to_owned(),
+            companion_report_path.to_string_lossy().into_owned(),
+        ],
+        working_directory: Some(temporary.path().to_string_lossy().into_owned()),
+        monitored_process: None,
+        monitored_executable_path: None,
+        console_visibility: ConsoleVisibility::Hidden,
+        elevated: false,
+        startup_timeout_seconds: 3,
+        post_start_delay_milliseconds: 0,
+        shutdown_strategy: ShutdownStrategy::CloseWindows,
+    };
+    let mut runtime = WindowsProcessRuntime::new();
+    let identity = runtime
+        .launch(&recipe)
+        .expect("launcher fixture should launch");
+    wait_for_file(&parent_report_path);
+    wait_for_file(&companion_report_path);
+
+    assert_eq!(
+        runtime
+            .request_graceful_stop(&identity, &ShutdownStrategy::CloseWindows)
+            .expect("the companion window should receive the close request"),
+        formation_lap_lib::GracefulStopResult::Requested
+    );
+    assert!(
+        runtime
+            .wait_for_exit(&identity, Duration::from_secs(2))
+            .expect("the launcher and its companion should both exit")
+    );
+}
+
+#[test]
 fn custom_stop_runs_structured_arguments_and_allows_the_target_to_exit() {
     let temporary = TempDirectory::new();
     let report_path = temporary.path().join("custom stop target.json");

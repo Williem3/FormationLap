@@ -130,6 +130,7 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
     let mut output_bytes = 0_usize;
     let mut startup_delay = Duration::ZERO;
     let mut exit_code = 0_u8;
+    let mut companion_report_path = None;
     while let Some(argument) = arguments.next() {
         if argument == "--window-state" {
             window_state = Some(arguments.next().ok_or("missing window state")?);
@@ -147,6 +148,10 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
                 Duration::from_millis(arguments.next().ok_or("missing startup delay")?.parse()?);
         } else if argument == "--exit-code" {
             exit_code = arguments.next().ok_or("missing exit code")?.parse()?;
+        } else if argument == "--spawn-companion-window" {
+            companion_report_path = Some(PathBuf::from(
+                arguments.next().ok_or("missing companion report path")?,
+            ));
         } else {
             received_arguments.push(argument);
         }
@@ -193,6 +198,21 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
         io::stderr().flush()?;
     }
 
+    let mut companion = companion_report_path
+        .map(|companion_report_path| {
+            std::process::Command::new(env::current_exe()?)
+                .args([
+                    "--report",
+                    companion_report_path.to_string_lossy().as_ref(),
+                    "--lifetime-ms",
+                    lifetime.to_string().as_str(),
+                    "--window-state",
+                    "healthy",
+                ])
+                .spawn()
+        })
+        .transpose()?;
+
     let report = json!({
         "arguments": received_arguments,
         "workingDirectory": env::current_dir()?,
@@ -200,6 +220,12 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
     fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
     let deadline = std::time::Instant::now() + Duration::from_millis(lifetime);
     while std::time::Instant::now() < deadline {
+        if companion
+            .as_mut()
+            .is_some_and(|child| child.try_wait().ok().flatten().is_some())
+        {
+            break;
+        }
         if stop_file.as_ref().is_some_and(|path| path.exists()) {
             break;
         }

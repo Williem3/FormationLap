@@ -110,6 +110,11 @@ M10 security hardening is in progress, owned by Codex `/root`.
 - A successful explicit Force stop advances ordered Session cleanup immediately,
   rather than waiting for an unrelated Process refresh. There is no active
   implementation file scope.
+- Session-owned same-executable descendants are traced inside the Windows
+  ProcessRuntime. Their window state contributes to observation, Close Windows
+  reaches every companion UI, and waiting/force stop retain the same stable
+  identities. Applications without a companion keep the ordinary one-Process
+  path. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -254,3 +259,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Made elevated Session cleanup issue at most one graceful-stop UAC request per Process, retaining Stopping across refreshes until exit | Red/green `closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending`; 13 privileged-operation tests plus one ignored UAC smoke test, Rust format, and targeted Clippy passed | Restart Formation Lap to load the native change. A refused or non-exiting elevated close no longer loops UAC; it remains Stopping until the Process exits or is force-stopped. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Kept the explicitly confirmed Force stop recovery action available during Session cleanup, allowing a stuck elevated console Process to release the remaining ordered shutdown | Red/green UI and FormationLapCore regression coverage; 36 React tests, 13 privileged-operation tests, Rust format/targeted Clippy, TypeScript typecheck, and source lint passed. Repository-wide lint remains blocked by the pre-existing access-denied `target-codex-session/` cache directory | Restart Formation Lap, select Force stop for Virtual Desktop Switcher, and confirm it; the next refresh continues cleanup. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Advanced ordered Session cleanup immediately after a confirmed Force stop, so a successful elevated termination does not leave the next cleanup step waiting for an unrelated refresh | Red/green `closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending`; 13 privileged-operation tests, Rust format/targeted Clippy, and TypeScript typecheck passed. Live Windows check confirmed Force stop terminated VirtualDesktopSwitcher | Go Fast is now the outstanding Closing Process; it should be configured to persist after Session close rather than force-stopped. Restart Formation Lap after the live cleanup settles to load this native change. External signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Traced same-executable companion Processes behind the Windows ProcessRuntime, allowing a Session-owned launcher and its companion UI to be observed, window-closed, awaited, and force-stopped as one group | Red/green Windows fixture `close_windows_follows_a_same_executable_companion_created_by_the_session`; all 12 Windows ProcessRuntime fixture tests, targeted Clippy, Rust format, and diff whitespace checks passed | Rebuild/restart Formation Lap, then retry ApexTraceVR normal Close Session; external signed Beta and Windows qualification remain the next M10 action |

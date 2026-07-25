@@ -2880,6 +2880,55 @@ function ProfileEditor({
                         <option value="optional">Optional</option>
                       </select>
                     </label>
+                    <label className="field compact-field">
+                      <span>Shutdown strategy</span>
+                      <select
+                        value={
+                          supportingApplication.application.launchRecipe
+                            .shutdownStrategy.kind
+                        }
+                        onChange={(event) =>
+                          updateSupportingApplication(index, (supporting) => {
+                            switch (event.currentTarget.value) {
+                              case "consoleInterrupt":
+                                supporting.application.launchRecipe.shutdownStrategy =
+                                  {
+                                    kind: "consoleInterrupt",
+                                  };
+                                break;
+                              case "customStop":
+                                supporting.application.launchRecipe.shutdownStrategy =
+                                  {
+                                    kind: "customStop",
+                                    executablePath: "",
+                                    arguments: [],
+                                  };
+                                break;
+                              case "forceOnly":
+                                supporting.application.launchRecipe.shutdownStrategy =
+                                  {
+                                    kind: "forceOnly",
+                                  };
+                                break;
+                              default:
+                                supporting.application.launchRecipe.shutdownStrategy =
+                                  {
+                                    kind: "closeWindows",
+                                  };
+                            }
+                          })
+                        }
+                      >
+                        <option value="closeWindows">Close windows</option>
+                        <option value="consoleInterrupt">
+                          Console interrupt
+                        </option>
+                        <option value="customStop">
+                          Custom stop executable
+                        </option>
+                        <option value="forceOnly">No graceful strategy</option>
+                      </select>
+                    </label>
                     <label className="check-row compact-check">
                       <input
                         type="checkbox"
@@ -2903,6 +2952,7 @@ function ProfileEditor({
                   <ApplicationRecipeFields
                     application={supportingApplication.application}
                     label={supportingApplication.application.name}
+                    includeShutdownStrategy={false}
                     onPickExecutablePath={onPickExecutablePath}
                     onChange={(application) =>
                       updateSupportingApplication(index, (supporting) => {
@@ -2938,6 +2988,7 @@ function ProfileEditor({
 interface ApplicationRecipeFieldsProps {
   application: ProfileApplication;
   label: string;
+  includeShutdownStrategy?: boolean;
   onPickExecutablePath(initialPath?: string | null): Promise<string | null>;
   onChange(application: ProfileApplication): void;
 }
@@ -2945,6 +2996,7 @@ interface ApplicationRecipeFieldsProps {
 function ApplicationRecipeFields({
   application,
   label,
+  includeShutdownStrategy = true,
   onPickExecutablePath,
   onChange,
 }: ApplicationRecipeFieldsProps) {
@@ -3117,20 +3169,15 @@ function ApplicationRecipeFields({
             )}
           </div>
         )}
-        <label className="field">
-          <span>{label} arguments · one per line</span>
-          <textarea
-            rows={2}
-            value={application.launchRecipe.arguments.join("\n")}
-            onChange={(event) =>
-              update((next) => {
-                next.launchRecipe.arguments = event.currentTarget.value
-                  .split("\n")
-                  .filter((argument) => argument.length > 0);
-              })
-            }
-          />
-        </label>
+        <ArgumentList
+          label={`${label} arguments`}
+          arguments={application.launchRecipe.arguments}
+          onChange={(nextArguments) =>
+            update((next) => {
+              next.launchRecipe.arguments = nextArguments;
+            })
+          }
+        />
         {source.kind === "steam" ? (
           <>
             <div className="field-grid">
@@ -3202,53 +3249,8 @@ function ApplicationRecipeFields({
             monitor this exact executable automatically.
           </p>
         )}
-        <div className="recipe-number-grid">
-          <label className="field">
-            <span>Startup timeout · seconds</span>
-            <input
-              type="number"
-              min="1"
-              value={application.launchRecipe.startupTimeoutSeconds}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.startupTimeoutSeconds =
-                    event.currentTarget.valueAsNumber || 30;
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>Post-start delay · ms</span>
-            <input
-              type="number"
-              min="0"
-              value={application.launchRecipe.postStartDelayMilliseconds}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.postStartDelayMilliseconds =
-                    event.currentTarget.valueAsNumber || 0;
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>Console</span>
-            <select
-              value={application.launchRecipe.consoleVisibility}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.consoleVisibility = event.currentTarget
-                    .value as ProfileApplication["launchRecipe"]["consoleVisibility"];
-                })
-              }
-            >
-              <option value="hidden">Hidden</option>
-              <option value="visible">Visible</option>
-            </select>
-          </label>
-        </div>
-        <div className="supporting-policy">
-          <label className="field compact-field">
+        {includeShutdownStrategy && (
+          <label className="field recipe-shutdown-field">
             <span>Shutdown strategy</span>
             <select
               value={shutdown.kind}
@@ -3286,6 +3288,8 @@ function ApplicationRecipeFields({
               <option value="forceOnly">No graceful strategy</option>
             </select>
           </label>
+        )}
+        <div className="recipe-launch-flags">
           <label className="check-row compact-check">
             <input
               type="checkbox"
@@ -3298,10 +3302,68 @@ function ApplicationRecipeFields({
             />
             <span>
               <strong>Launch elevated</strong>
-              <small>Uses the one-shot helper in a later milestone.</small>
+              <small>
+                Uses the one-shot helper when elevation is required.
+              </small>
             </span>
           </label>
         </div>
+        <details className="advanced-recipe-settings">
+          <summary>Advanced startup settings</summary>
+          <div className="recipe-number-grid">
+            <label className="field compact-field">
+              <span>Startup timeout · seconds</span>
+              <input
+                type="number"
+                min="1"
+                value={application.launchRecipe.startupTimeoutSeconds}
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.startupTimeoutSeconds =
+                      event.currentTarget.valueAsNumber || 30;
+                  })
+                }
+              />
+            </label>
+            <label className="field compact-field">
+              <span>Post-start delay · ms</span>
+              <input
+                type="number"
+                min="0"
+                value={application.launchRecipe.postStartDelayMilliseconds}
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.postStartDelayMilliseconds =
+                      event.currentTarget.valueAsNumber || 0;
+                  })
+                }
+              />
+            </label>
+            <label className="check-row compact-check">
+              <input
+                type="checkbox"
+                aria-label="Hide console"
+                checked={
+                  application.launchRecipe.consoleVisibility === "hidden"
+                }
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.consoleVisibility = event.currentTarget
+                      .checked
+                      ? "hidden"
+                      : "visible";
+                  })
+                }
+              />
+              <span>
+                <strong>Hide console</strong>
+                <small>
+                  Keep a console window out of the way while it runs.
+                </small>
+              </span>
+            </label>
+          </div>
+        </details>
         {shutdown.kind === "customStop" && (
           <div className="field-grid">
             <label className="field">
@@ -3340,27 +3402,91 @@ function ApplicationRecipeFields({
                 </button>
               </div>
             </label>
-            <label className="field">
-              <span>Stop arguments · one per line</span>
-              <textarea
-                rows={2}
-                value={shutdown.arguments.join("\n")}
-                onChange={(event) =>
-                  update((next) => {
-                    const nextShutdown = next.launchRecipe.shutdownStrategy;
-                    if (nextShutdown.kind === "customStop") {
-                      nextShutdown.arguments = event.currentTarget.value
-                        .split("\n")
-                        .filter((argument) => argument.length > 0);
-                    }
-                  })
-                }
-              />
-            </label>
+            <ArgumentList
+              label="Stop arguments"
+              arguments={shutdown.arguments}
+              onChange={(nextArguments) =>
+                update((next) => {
+                  const nextShutdown = next.launchRecipe.shutdownStrategy;
+                  if (nextShutdown.kind === "customStop") {
+                    nextShutdown.arguments = nextArguments;
+                  }
+                })
+              }
+            />
           </div>
         )}
       </div>
     </details>
+  );
+}
+
+interface ArgumentListProps {
+  label: string;
+  arguments: string[];
+  onChange(nextArguments: string[]): void;
+}
+
+function ArgumentList({
+  label,
+  arguments: values,
+  onChange,
+}: ArgumentListProps) {
+  const removeArgument = (index: number) => {
+    onChange(values.filter((_, candidateIndex) => candidateIndex !== index));
+  };
+
+  return (
+    <section className="argument-list" aria-label={label}>
+      <div className="argument-list-heading">
+        <span>{label}</span>
+        <button
+          type="button"
+          className="tertiary-button argument-add-button"
+          aria-label={`Add ${label.slice(0, -1)}`}
+          onClick={() => onChange([...values, ""])}
+        >
+          <PlusIcon />
+          Add argument
+        </button>
+      </div>
+      {values.length > 0 ? (
+        <div className="argument-list-rows">
+          {values.map((argument, index) => (
+            <div className="argument-row" key={`argument-${index}`}>
+              <input
+                aria-label={`${label} ${index + 1}`}
+                value={argument}
+                onChange={(event) =>
+                  onChange(
+                    values.map((value, candidateIndex) =>
+                      candidateIndex === index
+                        ? event.currentTarget.value
+                        : value,
+                    ),
+                  )
+                }
+                onBlur={() => {
+                  if (argument.length === 0) {
+                    removeArgument(index);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="tertiary-button argument-remove-button"
+                aria-label={`Remove ${label.slice(0, -1)} ${index + 1}`}
+                onClick={() => removeArgument(index)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="argument-list-empty">No arguments.</p>
+      )}
+    </section>
   );
 }
 

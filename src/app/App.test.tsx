@@ -1006,6 +1006,86 @@ describe("Formation Lap shell", () => {
     expect(screen.getByLabelText("VR")).toBeChecked();
   });
 
+  it("keeps launch arguments, advanced startup settings, and shutdown policy compact", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: {
+          id: "simhub-lifecycle",
+          name: "SimHub",
+          launchRecipe: {
+            source: {
+              kind: "directExecutable",
+              executablePath: "C:\\Fixtures\\SimHub.exe",
+            },
+            arguments: [],
+            workingDirectory: "C:\\Fixtures",
+            monitoredProcess: "SimHub.exe",
+            monitoredExecutablePath: "C:\\Fixtures\\SimHub.exe",
+            consoleVisibility: "visible",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+          },
+          pathNeedsRepair: false,
+        },
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    await user.click(screen.getAllByText("Launch Recipe details")[0]!);
+
+    expect(screen.getAllByText("No arguments.")).toHaveLength(2);
+    await user.click(
+      screen.getByRole("button", { name: "Add Primary Sim argument" }),
+    );
+    await user.type(screen.getByLabelText("Primary Sim arguments 1"), "-novr");
+
+    await user.click(screen.getAllByText("Advanced startup settings")[0]!);
+    const hiddenConsole = screen.getAllByRole("checkbox", {
+      name: "Hide console",
+    })[0]!;
+    expect(hiddenConsole).toBeChecked();
+    await user.click(hiddenConsole);
+
+    const requirement = screen.getByLabelText("Requirement for SimHub");
+    const policy = requirement.closest(".supporting-policy");
+    if (!(policy instanceof HTMLElement)) {
+      throw new Error("Supporting Application policy should be grouped");
+    }
+    expect(within(policy).getByLabelText("Shutdown strategy")).toHaveValue(
+      "closeWindows",
+    );
+    await user.selectOptions(
+      within(policy).getByLabelText("Shutdown strategy"),
+      "consoleInterrupt",
+    );
+    const keepRunning = screen.getByRole("checkbox", {
+      name: /Keep SimHub running/,
+    });
+    expect(keepRunning.closest("label")).toHaveClass("compact-check");
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const savedProfile = (await bridge.getAppSnapshot()).selectedProfile;
+    expect(savedProfile?.primarySim.launchRecipe.arguments).toEqual(["-novr"]);
+    expect(savedProfile?.primarySim.launchRecipe.consoleVisibility).toBe(
+      "visible",
+    );
+    expect(
+      savedProfile?.supportingApplications[0]?.application.launchRecipe
+        .shutdownStrategy,
+    ).toEqual({ kind: "consoleInterrupt" });
+  });
+
   it("shows profile save failures beside the editor save action", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

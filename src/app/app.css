@@ -1893,15 +1893,22 @@ button:disabled {
 
 .supporting-policy {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(130px, 0.78fr) minmax(170px, 1fr) minmax(
+      0,
+      1.12fr
+    );
   gap: 12px;
+  align-items: end;
   margin-top: 14px;
 }
 
 .compact-check {
   min-height: 42px;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  align-items: center;
 }
 
 .recipe-details {
@@ -1935,10 +1942,111 @@ button:disabled {
   line-height: 18px;
 }
 
+.argument-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.argument-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.argument-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 7px;
+  color: var(--accent-ink);
+}
+
+.argument-add-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.argument-list-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.argument-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.argument-row input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 450;
+}
+
+.argument-row input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-shadow);
+}
+
+.argument-remove-button {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.argument-list-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.recipe-shutdown-field {
+  max-width: 280px;
+}
+
+.recipe-launch-flags {
+  margin-top: 14px;
+}
+
+.advanced-recipe-settings {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.advanced-recipe-settings summary {
+  padding: 12px 2px 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.advanced-recipe-settings[open] summary {
+  color: var(--accent-ink);
+}
+
 .recipe-number-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(120px, 150px) minmax(120px, 150px) minmax(
+      210px,
+      1fr
+    );
   gap: 12px;
+  padding-top: 12px;
 }
 
 .locked-game-row {

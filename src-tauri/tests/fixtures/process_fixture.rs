@@ -69,12 +69,17 @@ mod fixture_window {
             let _ = ready.send(Err(io::Error::last_os_error().to_string()));
             return;
         }
+        let style = if state == "hidden-hung" {
+            WS_OVERLAPPEDWINDOW
+        } else {
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE
+        };
         let window = unsafe {
             CreateWindowExW(
                 0,
                 class_name.as_ptr(),
                 window_name.as_ptr(),
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                style,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 480,
@@ -91,7 +96,7 @@ mod fixture_window {
         }
         let _ = ready.send(Ok(()));
 
-        if state == "hung" {
+        if state == "hung" || state == "hidden-hung" {
             loop {
                 thread::sleep(Duration::from_secs(60));
             }

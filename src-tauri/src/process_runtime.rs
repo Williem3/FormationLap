@@ -315,8 +315,8 @@ mod windows_adapter {
         UI::{
             Shell::ShellExecuteW,
             WindowsAndMessaging::{
-                EnumWindows, GetWindowThreadProcessId, IsHungAppWindow, PostMessageW,
-                SW_SHOWNORMAL, WM_CLOSE,
+                EnumWindows, GetWindowThreadProcessId, IsHungAppWindow, IsWindowVisible,
+                PostMessageW, SW_SHOWNORMAL, WM_CLOSE,
             },
         },
     };
@@ -671,7 +671,7 @@ mod windows_adapter {
         unsafe {
             GetWindowThreadProcessId(window, &mut window_pid);
         }
-        if window_pid == context.pid {
+        if window_pid == context.pid && unsafe { IsWindowVisible(window) } != 0 {
             context.has_window = true;
             if unsafe { IsHungAppWindow(window) } != 0 {
                 context.has_hung_window = true;

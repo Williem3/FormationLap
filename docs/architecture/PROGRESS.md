@@ -98,6 +98,9 @@ M10 security hardening is in progress, owned by Codex `/root`.
 - A new Session keeps its Pending startup steps when a terminal Process snapshot
   from an earlier manual action is still in memory. There is no active
   implementation file scope.
+- Not Responding now only reports an unresponsive visible top-level window;
+  invisible internal windows are not user-visible evidence of a hung Process.
+  There is no active implementation file scope.
 
 Known environment facts:
 
@@ -238,3 +241,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Rendered extended-length Windows paths in the familiar `C:\...` form throughout Manual Entry and launch-recipe fields without weakening native canonical-path validation | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (33 tests); the regression test covers `\\?\C:\...` display normalization | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Preserved structured native launch errors on the Dashboard and described the immediate-exit failure state, so elevated helper rejection and bad startup arguments have actionable feedback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (35 tests); regression coverage verifies native recovery copy and failed-startup guidance | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Prevented a stale terminal Process record from replacing a newly Pending Session step, which had stranded ordered startup after the first application became ready | Red/green `refresh_ignores_a_stale_stopped_process_for_a_newly_pending_session_step`; 17 Session orchestration tests, Rust format check, `cargo clippy --lib -- -D warnings`, TypeScript typecheck, and ESLint passed | Restart the development app, cancel any currently stuck startup, and start the Session again. A tool-created untracked `target-codex-session/` cache remains access-denied and was deliberately excluded from this commit; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Prevented invisible internal windows from creating false Not Responding statuses for live applications | Red/green Windows fixture: a hidden hung window now reports NotApplicable while a visible hung window still reports NotResponsive; all 11 Windows ProcessRuntime fixture tests, Rust format, and `cargo clippy --lib -- -D warnings` passed | Restart Formation Lap to load the native change. GO Fast's self-updater replaces the tracked executable, so its original Process correctly becomes Stopped; restart/adopt it manually after the updater completes. External signed Beta and Windows qualification remain the next M10 action |

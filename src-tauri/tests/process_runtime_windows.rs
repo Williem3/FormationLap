@@ -470,7 +470,7 @@ fn observation_distinguishes_responsive_and_hung_windowed_processes() {
             "--window-state".to_owned(),
             "hung".to_owned(),
         ],
-        ..healthy_recipe
+        ..healthy_recipe.clone()
     };
     let hung_identity = runtime
         .launch(&hung_recipe)
@@ -483,6 +483,32 @@ fn observation_distinguishes_responsive_and_hung_windowed_processes() {
             .expect("hung window should be observed"),
         ProcessObservation::Running {
             responsiveness: ProcessResponsiveness::NotResponsive,
+        }
+    );
+
+    let hidden_hung_report = temporary.path().join("hidden hung window.json");
+    let hidden_hung_recipe = LaunchRecipe {
+        arguments: vec![
+            "--report".to_owned(),
+            hidden_hung_report.to_string_lossy().into_owned(),
+            "--lifetime-ms".to_owned(),
+            "7000".to_owned(),
+            "--window-state".to_owned(),
+            "hidden-hung".to_owned(),
+        ],
+        ..healthy_recipe
+    };
+    let hidden_hung_identity = runtime
+        .launch(&hidden_hung_recipe)
+        .expect("hidden hung window fixture should launch");
+    wait_for_file(&hidden_hung_report);
+    thread::sleep(Duration::from_millis(5_500));
+    assert_eq!(
+        runtime
+            .observe(&hidden_hung_identity)
+            .expect("hidden hung window should be observed"),
+        ProcessObservation::Running {
+            responsiveness: ProcessResponsiveness::NotApplicable,
         }
     );
 }

@@ -553,6 +553,7 @@ fn elevated_ownership_is_journaled_before_the_helper_is_acknowledged() {
         profile: Box::new(profile),
     })
     .expect("the elevated profile should save");
+    approve_privileged_profile(&mut core, &profile_id);
 
     core.execute(AppCommand::StartSession { profile_id })
         .expect("the elevated launch should be acknowledged");
@@ -634,6 +635,7 @@ fn startup_preserves_saved_order_and_batches_only_adjacent_elevated_entries() {
         }),
     })
     .expect("the elevated Startup Sequence should save");
+    approve_privileged_profile(&mut core, &profile_id);
 
     assert_eq!(
         core.execute(AppCommand::StartSession {
@@ -745,6 +747,7 @@ fn cancelling_startup_closes_every_process_from_the_elevated_launch_batch() {
         }),
     })
     .expect("the elevated Startup Sequence should save");
+    approve_privileged_profile(&mut core, &profile_id);
 
     core.execute(AppCommand::StartSession { profile_id })
         .expect("the Session should request its elevated batch");
@@ -785,6 +788,35 @@ fn direct_recipe(executable_path: &str, elevated: bool) -> LaunchRecipe {
         post_start_delay_milliseconds: 0,
         shutdown_strategy: ShutdownStrategy::CloseWindows,
     }
+}
+
+fn approve_privileged_profile(core: &mut FormationLapCore, profile_id: &str) {
+    let profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the privileged profile should remain selected");
+    let approved_privileged_application_ids = std::iter::once(&profile.primary_sim)
+        .chain(
+            profile
+                .supporting_applications
+                .iter()
+                .map(|supporting| &supporting.application),
+        )
+        .filter(|application| {
+            application.launch_recipe.elevated
+                || matches!(
+                    &application.launch_recipe.shutdown_strategy,
+                    ShutdownStrategy::CustomStop { .. }
+                )
+        })
+        .map(|application| application.id.clone())
+        .collect();
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.to_owned(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids,
+    })
+    .expect("the test explicitly approves every privileged recipe");
 }
 
 fn labeled_recipe(executable_path: &str, elevated: bool, label: &str) -> LaunchRecipe {

@@ -70,6 +70,10 @@ type PendingProcessAction = {
   application: ProfileApplication;
   process: ApplicationProcessSnapshot;
 };
+type ProfileApproval = {
+  configurationReviewed: boolean;
+  approvedPrivilegedApplicationIds: string[];
+};
 
 export function App({ bridge }: AppProps) {
   const [state, setState] = useState<SnapshotState>({ kind: "loading" });
@@ -146,6 +150,9 @@ export function App({ bridge }: AppProps) {
 
   const snapshot = state.kind === "ready" ? state.snapshot : null;
   const selectedProfile = snapshot?.selectedProfile ?? null;
+  const selectedProfileNeedsReview =
+    snapshot?.profiles.find((profile) => profile.id === selectedProfile?.id)
+      ?.reviewStatus === "needsReview";
   const applicationName = snapshot?.applicationName ?? "Formation Lap";
   const isDialogOpen =
     isDuplicateOpen ||
@@ -410,7 +417,10 @@ export function App({ bridge }: AppProps) {
     setView("edit-profile");
   };
 
-  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+  const saveProfile = async (
+    event: FormEvent<HTMLFormElement>,
+    approval?: ProfileApproval,
+  ) => {
     event.preventDefault();
     if (!profileDraft) {
       return;
@@ -418,15 +428,25 @@ export function App({ bridge }: AppProps) {
     setIsSaving(true);
     setFormError(null);
     try {
-      const nextSnapshot = await bridge.saveProfile({
+      let nextSnapshot = await bridge.saveProfile({
         profile: profileDraft,
       });
+      if (approval) {
+        nextSnapshot = await bridge.approveProfile({
+          profileId: profileDraft.id,
+          configurationReviewed: approval.configurationReviewed,
+          approvedPrivilegedApplicationIds:
+            approval.approvedPrivilegedApplicationIds,
+        });
+      }
       setState({ kind: "ready", snapshot: nextSnapshot });
       setProfileDraft(null);
       setView("dashboard");
     } catch {
       setFormError(
-        "The Racing Profile could not be saved. Review the profile details and try again.",
+        selectedProfileNeedsReview
+          ? "The Racing Profile is still quarantined. Repair missing paths and approve every elevated or custom-stop entry."
+          : "The Racing Profile could not be saved. Review the profile details and try again.",
       );
     } finally {
       setIsSaving(false);
@@ -861,7 +881,12 @@ export function App({ bridge }: AppProps) {
                     </span>
                     <span>
                       <strong>{profile.name}</strong>
-                      <small>{profile.primarySimName}</small>
+                      <small>
+                        {profile.primarySimName}
+                        {profile.reviewStatus === "needsReview"
+                          ? " · Review required"
+                          : ""}
+                      </small>
                     </span>
                   </button>
                 );
@@ -1000,6 +1025,7 @@ export function App({ bridge }: AppProps) {
           profileDraft ? (
           <ProfileEditor
             profile={profileDraft}
+            needsReview={selectedProfileNeedsReview}
             isSaving={isSaving}
             error={formError}
             onChange={setProfileDraft}
@@ -1014,6 +1040,7 @@ export function App({ bridge }: AppProps) {
             state={state}
             applicationName={applicationName}
             selectedProfile={selectedProfile}
+            profileNeedsReview={selectedProfileNeedsReview}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
             updates={snapshot?.updates ?? null}
@@ -2289,21 +2316,48 @@ function ProfileWizard({
 
 interface ProfileEditorProps {
   profile: RacingProfile;
+  needsReview: boolean;
   isSaving: boolean;
   error: string | null;
   onChange(profile: RacingProfile): void;
   onCancel(): void;
-  onSubmit(event: FormEvent<HTMLFormElement>): void;
+  onSubmit(event: FormEvent<HTMLFormElement>, approval?: ProfileApproval): void;
 }
 
 function ProfileEditor({
   profile,
+  needsReview,
   isSaving,
   error,
   onChange,
   onCancel,
   onSubmit,
 }: ProfileEditorProps) {
+  const [configurationReviewed, setConfigurationReviewed] = useState(false);
+  const [
+    approvedPrivilegedApplicationIds,
+    setApprovedPrivilegedApplicationIds,
+  ] = useState<string[]>([]);
+  const profileApplications = [
+    profile.primarySim,
+    ...profile.supportingApplications.map(
+      (supporting) => supporting.application,
+    ),
+  ];
+  const privilegedApplications = profileApplications.filter(
+    (application) =>
+      application.launchRecipe.elevated ||
+      application.launchRecipe.shutdownStrategy.kind === "customStop",
+  );
+  const pathsNeedRepair = profileApplications.some(
+    (application) => application.pathNeedsRepair,
+  );
+  const approvalComplete =
+    configurationReviewed &&
+    privilegedApplications.every((application) =>
+      approvedPrivilegedApplicationIds.includes(application.id),
+    );
+
   const update = (change: (next: RacingProfile) => void) => {
     const next = structuredClone(profile);
     change(next);
@@ -2365,7 +2419,20 @@ function ProfileEditor({
   };
 
   return (
-    <form className="profile-editor" onSubmit={onSubmit}>
+    <form
+      className="profile-editor"
+      onSubmit={(event) =>
+        onSubmit(
+          event,
+          needsReview
+            ? {
+                configurationReviewed,
+                approvedPrivilegedApplicationIds,
+              }
+            : undefined,
+        )
+      }
+    >
       <header className="workspace-header editor-header">
         <div>
           <p className="eyebrow">Profile editor</p>
@@ -2379,14 +2446,93 @@ function ProfileEditor({
           <button type="button" className="secondary-button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" className="primary-button" disabled={isSaving}>
-            {isSaving ? "Saving…" : "Save changes"}
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={isSaving || (needsReview && !approvalComplete)}
+          >
+            {isSaving
+              ? "Saving…"
+              : needsReview
+                ? "Save and approve profile"
+                : "Save changes"}
           </button>
         </div>
       </header>
 
       <div className="profile-editor-grid">
         <div className="editor-column">
+          {needsReview && (
+            <section
+              className="editor-panel profile-review-panel"
+              aria-labelledby="profile-review-editor-title"
+            >
+              <div className="editor-panel-heading">
+                <p className="eyebrow">Native launch quarantine</p>
+                <h2 id="profile-review-editor-title">
+                  Approve reviewed configuration
+                </h2>
+              </div>
+              <p>
+                Confirm the preserved portable values below. Missing or
+                suspicious paths must be repaired before approval.
+              </p>
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={configurationReviewed}
+                  onChange={(event) =>
+                    setConfigurationReviewed(event.currentTarget.checked)
+                  }
+                />
+                <span>
+                  <strong>
+                    I reviewed executable paths, arguments, working directories,
+                    elevation, monitored executables, and stop recipes.
+                  </strong>
+                </span>
+              </label>
+              {privilegedApplications.map((application) => (
+                <label className="check-row" key={application.id}>
+                  <input
+                    type="checkbox"
+                    checked={approvedPrivilegedApplicationIds.includes(
+                      application.id,
+                    )}
+                    onChange={(event) =>
+                      setApprovedPrivilegedApplicationIds((current) =>
+                        event.currentTarget.checked
+                          ? [...current, application.id]
+                          : current.filter(
+                              (applicationId) =>
+                                applicationId !== application.id,
+                            ),
+                      )
+                    }
+                  />
+                  <span>
+                    <strong>
+                      Approve privileged recipe for {application.name}
+                    </strong>
+                    <small>
+                      {application.launchRecipe.elevated
+                        ? "Elevated launch"
+                        : "Ordinary launch"}
+                      {application.launchRecipe.shutdownStrategy.kind ===
+                      "customStop"
+                        ? " · custom stop executable"
+                        : ""}
+                    </small>
+                  </span>
+                </label>
+              ))}
+              {pathsNeedRepair && (
+                <p className="form-error" role="alert">
+                  Repair every flagged executable path before approval.
+                </p>
+              )}
+            </section>
+          )}
           <section className="editor-panel" aria-labelledby="identity-title">
             <div className="editor-panel-heading">
               <p className="eyebrow">Profile</p>
@@ -2995,6 +3141,7 @@ interface DashboardProps {
   state: SnapshotState;
   applicationName: string;
   selectedProfile: AppSnapshot["selectedProfile"];
+  profileNeedsReview: boolean;
   applicationProcesses: ApplicationProcessSnapshot[];
   session: AppSnapshot["session"] | null;
   updates: UpdateSnapshot | null;
@@ -3033,6 +3180,7 @@ function Dashboard({
   state,
   applicationName,
   selectedProfile,
+  profileNeedsReview,
   applicationProcesses,
   session,
   updates,
@@ -3123,6 +3271,7 @@ function Dashboard({
             disabled={
               isBusy ||
               !selectedProfile ||
+              (profileNeedsReview && sessionState === "idle") ||
               sessionState === "cancelling" ||
               sessionState === "closing" ||
               sessionState === "recoveryAvailable"
@@ -3228,6 +3377,32 @@ function Dashboard({
 
       {state.kind === "ready" && selectedProfile && (
         <section className="profile-dashboard" aria-labelledby="sequence-title">
+          {profileNeedsReview && (
+            <section
+              className="profile-review-offer"
+              aria-labelledby="profile-review-title"
+            >
+              <div>
+                <p className="eyebrow">Native launch quarantine</p>
+                <h2 id="profile-review-title">
+                  Review imported executable settings
+                </h2>
+                <span>
+                  Session start stays blocked until paths, arguments, working
+                  directories, elevation, monitored executables, and stop
+                  recipes are reviewed.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isBusy || profileIsLocked}
+                onClick={onEditProfile}
+              >
+                Review profile configuration
+              </button>
+            </section>
+          )}
           {sessionState === "recoveryAvailable" && (
             <div className="recovery-offer" role="status">
               <div>
@@ -3390,8 +3565,9 @@ function Dashboard({
             />
           </div>
           <p id="start-session-requirement" className="profile-guidance">
-            Formation Lap starts Supporting Applications in this order, confirms
-            the Primary Sim last, and preserves Pre-existing Processes.
+            {profileNeedsReview
+              ? "Review and approve this imported executable configuration before starting a Session."
+              : "Formation Lap starts Supporting Applications in this order, confirms the Primary Sim last, and preserves Pre-existing Processes."}
           </p>
           {sessionState === "idle" && session?.summary && (
             <section

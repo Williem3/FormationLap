@@ -21,15 +21,15 @@ mod update_advisor;
 mod update_providers;
 
 pub use commands::{
-    ApplicationTargetPayload, CommandError, CreateProfilePayload, DuplicateProfilePayload,
-    ExitApplicationPayload, ForceStopApplicationPayload, ImportProfilePayload, NativeCommandHost,
-    PrimarySimIdPayload, ProfileIdPayload, QuitPayload, RestartApplicationPayload,
-    SaveProfilePayload, UpdateSettingsPayload, accept_recovery, cancel_startup, close_session,
-    create_profile, delete_profile, discover_applications, dismiss_recovery, duplicate_profile,
-    exit_application, export_diagnostics, export_profile, force_stop_application, get_app_snapshot,
-    import_profile, recommend_applications, refresh_processes, request_quit, restart_application,
-    save_profile, select_profile, start_application, start_session, test_game_launch,
-    update_settings,
+    ApplicationTargetPayload, ApproveProfilePayload, CommandError, CreateProfilePayload,
+    DuplicateProfilePayload, ExitApplicationPayload, ForceStopApplicationPayload,
+    ImportProfilePayload, NativeCommandHost, PrimarySimIdPayload, ProfileIdPayload, QuitPayload,
+    RestartApplicationPayload, SaveProfilePayload, UpdateSettingsPayload, accept_recovery,
+    approve_profile, cancel_startup, close_session, create_profile, delete_profile,
+    discover_applications, dismiss_recovery, duplicate_profile, exit_application,
+    export_diagnostics, export_profile, force_stop_application, get_app_snapshot, import_profile,
+    recommend_applications, refresh_processes, request_quit, restart_application, save_profile,
+    select_profile, start_application, start_session, test_game_launch, update_settings,
 };
 pub use contracts::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
@@ -39,12 +39,13 @@ pub use contracts::{
     DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot,
     FormationLapInstallDecision, GameLaunchDiagnostic, GameLaunchTarget, LaunchRecipe,
     LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
-    ProfileApplication, ProfileSummary, QuitAction, QuitDisposition, RacingProfile,
-    SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
-    SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
-    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation,
-    ThemePreference, UpdateChannel, UpdateCheckDecision, UpdateCheckPlan, UpdateCheckResult,
-    UpdateCheckTrigger, UpdateSnapshot, UpdateStatus, VrLaunchMode, WindowCloseAction,
+    ProfileApplication, ProfileReviewStatus, ProfileSummary, QuitAction, QuitDisposition,
+    RacingProfile, SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState,
+    SessionEvent, SessionEventKind, SessionSnapshot, SessionState, SessionSummary,
+    ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
+    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateCheckDecision,
+    UpdateCheckPlan, UpdateCheckResult, UpdateCheckTrigger, UpdateSnapshot, UpdateStatus,
+    VrLaunchMode, WindowCloseAction,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{
@@ -280,6 +281,7 @@ pub fn run() {
             commands::delete_profile,
             commands::export_profile,
             commands::import_profile,
+            commands::approve_profile,
             commands::start_application,
             commands::refresh_processes,
             commands::exit_application,

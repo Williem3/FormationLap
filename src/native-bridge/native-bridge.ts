@@ -1,6 +1,7 @@
 import type {
   AppSnapshot,
   ApplicationTargetPayload,
+  ApproveProfilePayload,
   CreateProfilePayload,
   DuplicateProfilePayload,
   ExitApplicationPayload,
@@ -27,6 +28,7 @@ export interface NativeBridge {
   deleteProfile(payload: ProfileIdPayload): Promise<AppSnapshot>;
   exportProfile(payload: ProfileIdPayload): Promise<string>;
   importProfile(payload: ImportProfilePayload): Promise<AppSnapshot>;
+  approveProfile(payload: ApproveProfilePayload): Promise<AppSnapshot>;
   startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot>;
   refreshProcesses(): Promise<AppSnapshot>;
   exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot>;

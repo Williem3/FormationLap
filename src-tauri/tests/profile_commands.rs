@@ -1,6 +1,6 @@
 use formation_lap_lib::{
-    CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload, NativeCommandHost,
-    ProfileIdPayload, SaveProfilePayload,
+    ApproveProfilePayload, CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload,
+    NativeCommandHost, ProfileIdPayload, ProfileReviewStatus, SaveProfilePayload,
 };
 use std::{
     fs,
@@ -217,4 +217,51 @@ fn export_and_import_commands_round_trip_a_portable_racing_profile() {
     assert_eq!(snapshot.profiles.len(), 1);
     assert_eq!(snapshot.profiles[0].name, "Le Mans evening");
     assert_eq!(snapshot.profiles[0].primary_sim_name, "Le Mans Ultimate");
+}
+
+#[test]
+fn import_command_exposes_review_state_and_native_approval() {
+    let storage = TempStorage::new();
+    let commands =
+        NativeCommandHost::open(storage.path()).expect("native command host should open");
+    let mut portable: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("portable fixture should be valid JSON");
+    portable["primarySim"]["launchRecipe"]["source"] = serde_json::json!({
+        "kind": "steam",
+        "appId": 1623730,
+        "selector": null
+    });
+    let document =
+        serde_json::to_string_pretty(&portable).expect("portable fixture should remain valid JSON");
+
+    let imported = commands
+        .import_profile(ImportProfilePayload { document })
+        .expect("portable Racing Profile should import");
+    let profile_id = imported.profiles[0].id.clone();
+    assert_eq!(
+        imported.profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert_eq!(
+        commands
+            .start_session(ProfileIdPayload {
+                profile_id: profile_id.clone(),
+            })
+            .expect_err("Session start should remain quarantined")
+            .code,
+        "profile_needs_review"
+    );
+
+    let approved = commands
+        .approve_profile(ApproveProfilePayload {
+            profile_id,
+            configuration_reviewed: true,
+            approved_privileged_application_ids: Vec::new(),
+        })
+        .expect("reviewed non-privileged configuration should be approved");
+    assert_eq!(
+        approved.profiles[0].review_status,
+        ProfileReviewStatus::Approved
+    );
 }

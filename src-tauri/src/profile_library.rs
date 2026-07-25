@@ -1,6 +1,6 @@
 use crate::{
-    CloseSessionSettings, CoreError, LaunchRecipe, ProfileApplication, ProfileSummary,
-    RacingProfile, atomic_file::replace_with_backup,
+    CloseSessionSettings, CoreError, LaunchRecipe, ProfileApplication, ProfileReviewStatus,
+    ProfileSummary, RacingProfile, ShutdownStrategy, atomic_file::replace_with_backup,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -41,6 +41,8 @@ struct RacingProfileDocument {
     preferred_vr_launch_mode: Option<crate::VrLaunchMode>,
     #[serde(default)]
     close_session: CloseSessionSettings,
+    #[serde(default)]
+    review_status: ProfileReviewStatus,
 }
 
 impl RacingProfileDocument {
@@ -68,6 +70,7 @@ impl From<RacingProfile> for RacingProfileDocument {
             vr_enabled: profile.vr_enabled,
             preferred_vr_launch_mode: profile.preferred_vr_launch_mode,
             close_session: profile.close_session,
+            review_status: ProfileReviewStatus::Approved,
         }
     }
 }
@@ -397,6 +400,7 @@ impl ProfileLibrary {
                 id: profile.document.id.clone(),
                 name: profile.document.name.clone(),
                 primary_sim_name: profile.document.primary_sim.name.clone(),
+                review_status: profile.document.review_status.clone(),
             })
             .collect()
     }
@@ -420,6 +424,13 @@ impl ProfileLibrary {
                 .profiles
                 .iter()
                 .any(|profile| profile.document.id == profile_id)
+    }
+
+    pub(crate) fn review_status(&self, profile_id: &str) -> Result<ProfileReviewStatus, CoreError> {
+        Ok(self.profiles[self.profile_index(profile_id)?]
+            .document
+            .review_status
+            .clone())
     }
 
     pub(crate) fn profile(&self, profile_id: &str) -> Option<RacingProfile> {
@@ -488,6 +499,7 @@ impl ProfileLibrary {
             vr_enabled: portable.vr_enabled,
             preferred_vr_launch_mode: portable.preferred_vr_launch_mode,
             close_session: portable.close_session,
+            review_status: ProfileReviewStatus::NeedsReview,
         };
         let destination = self.profiles_directory.join(format!("{profile_id}.json"));
         let temporary = self
@@ -506,12 +518,63 @@ impl ProfileLibrary {
     }
 
     fn path_needs_repair(recipe: &LaunchRecipe) -> bool {
-        match &recipe.source {
+        let source_needs_repair = match &recipe.source {
             crate::LaunchSource::DirectExecutable { executable_path } => {
-                !Path::new(executable_path).is_file()
+                Self::executable_needs_repair(executable_path)
             }
             crate::LaunchSource::Steam { .. } => false,
+        };
+        let working_directory_needs_repair =
+            recipe
+                .working_directory
+                .as_deref()
+                .is_some_and(|directory| {
+                    let path = Path::new(directory);
+                    !path.is_absolute() || !path.is_dir()
+                });
+        let monitored_path_needs_repair = recipe
+            .monitored_executable_path
+            .as_deref()
+            .is_some_and(Self::executable_needs_repair);
+        let custom_stop_needs_repair = match &recipe.shutdown_strategy {
+            ShutdownStrategy::CustomStop {
+                executable_path, ..
+            } => Self::executable_needs_repair(executable_path),
+            _ => false,
+        };
+
+        source_needs_repair
+            || working_directory_needs_repair
+            || monitored_path_needs_repair
+            || custom_stop_needs_repair
+    }
+
+    fn executable_needs_repair(executable_path: &str) -> bool {
+        let path = Path::new(executable_path);
+        if !path.is_absolute()
+            || !path.is_file()
+            || path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_none_or(|extension| !extension.eq_ignore_ascii_case("exe"))
+        {
+            return true;
         }
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                [
+                    "cmd.exe",
+                    "powershell.exe",
+                    "pwsh.exe",
+                    "wscript.exe",
+                    "cscript.exe",
+                    "mshta.exe",
+                    "rundll32.exe",
+                ]
+                .iter()
+                .any(|blocked| name.eq_ignore_ascii_case(blocked))
+            })
     }
 
     pub(crate) fn create(
@@ -536,6 +599,7 @@ impl ProfileLibrary {
             vr_enabled: false,
             preferred_vr_launch_mode: None,
             close_session: CloseSessionSettings::default(),
+            review_status: ProfileReviewStatus::Approved,
         };
         let destination = self.profiles_directory.join(format!("{id}.json"));
         let temporary = self.profiles_directory.join(format!(".{id}.json.tmp"));
@@ -582,7 +646,7 @@ impl ProfileLibrary {
 
         let profile_index = self.profile_index(&profile.id)?;
         let (destination, temporary, backup) = self.persisted_paths(profile_index)?;
-        let stored_profile = &self.profiles[profile_index].document;
+        let stored_profile = self.profiles[profile_index].document.clone();
         profile.primary_sim.id = stored_profile.primary_sim.id.clone();
         profile.primary_sim.path_needs_repair =
             Self::path_needs_repair(&profile.primary_sim.launch_recipe);
@@ -605,7 +669,15 @@ impl ProfileLibrary {
                 Self::path_needs_repair(&supporting.application.launch_recipe);
         }
 
-        let profile = RacingProfileDocument::from(profile);
+        let privileged_recipe_changed = Self::privileged_recipe_changed(&stored_profile, &profile);
+        let mut profile = RacingProfileDocument::from(profile);
+        profile.review_status = if stored_profile.review_status == ProfileReviewStatus::NeedsReview
+            || privileged_recipe_changed
+        {
+            ProfileReviewStatus::NeedsReview
+        } else {
+            ProfileReviewStatus::Approved
+        };
         Self::write_temporary_document(&temporary, &profile)?;
         replace_with_backup(&destination, &temporary, &backup)?;
 
@@ -613,6 +685,120 @@ impl ProfileLibrary {
         self.sort_profiles();
 
         Ok(())
+    }
+
+    pub(crate) fn approve(
+        &mut self,
+        profile_id: &str,
+        configuration_reviewed: bool,
+        approved_privileged_application_ids: &[String],
+    ) -> Result<(), CoreError> {
+        if !configuration_reviewed {
+            return Err(CoreError::InvalidProfileApproval(
+                "executable configuration was not confirmed".to_owned(),
+            ));
+        }
+        let profile_index = self.profile_index(profile_id)?;
+        let profile = &self.profiles[profile_index].document;
+        if Self::applications(profile).any(|application| application.path_needs_repair) {
+            return Err(CoreError::InvalidProfileApproval(
+                "one or more executable paths must be repaired first".to_owned(),
+            ));
+        }
+
+        let required = Self::applications(profile)
+            .filter(|application| {
+                Self::recipe_requires_privileged_approval(&application.launch_recipe)
+            })
+            .map(|application| application.id.clone())
+            .collect::<HashSet<_>>();
+        let approved = approved_privileged_application_ids
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
+        if approved.len() != approved_privileged_application_ids.len() || approved != required {
+            return Err(CoreError::InvalidProfileApproval(
+                "every elevated or custom-stop application must be approved exactly once"
+                    .to_owned(),
+            ));
+        }
+
+        let (destination, temporary, backup) = self.persisted_paths(profile_index)?;
+        let mut approved_profile = profile.clone();
+        approved_profile.review_status = ProfileReviewStatus::Approved;
+        Self::write_temporary_document(&temporary, &approved_profile)?;
+        replace_with_backup(&destination, &temporary, &backup)?;
+        self.profiles[profile_index].document = approved_profile;
+
+        Ok(())
+    }
+
+    fn applications(profile: &RacingProfileDocument) -> impl Iterator<Item = &ProfileApplication> {
+        std::iter::once(&profile.primary_sim).chain(
+            profile
+                .supporting_applications
+                .iter()
+                .map(|supporting| &supporting.application),
+        )
+    }
+
+    fn recipe_requires_privileged_approval(recipe: &LaunchRecipe) -> bool {
+        recipe.elevated
+            || matches!(
+                &recipe.shutdown_strategy,
+                ShutdownStrategy::CustomStop { .. }
+            )
+    }
+
+    fn privileged_recipe_changed(stored: &RacingProfileDocument, updated: &RacingProfile) -> bool {
+        std::iter::once(&updated.primary_sim)
+            .chain(
+                updated
+                    .supporting_applications
+                    .iter()
+                    .map(|supporting| &supporting.application),
+            )
+            .any(|updated_application| {
+                let stored_application = Self::applications(stored)
+                    .find(|stored_application| stored_application.id == updated_application.id);
+                match stored_application {
+                    Some(stored_application) => !Self::privileged_recipe_matches(
+                        &stored_application.launch_recipe,
+                        &updated_application.launch_recipe,
+                    ),
+                    None => Self::recipe_requires_privileged_approval(
+                        &updated_application.launch_recipe,
+                    ),
+                }
+            })
+    }
+
+    fn privileged_recipe_matches(stored: &LaunchRecipe, updated: &LaunchRecipe) -> bool {
+        let stored_requires = Self::recipe_requires_privileged_approval(stored);
+        let updated_requires = Self::recipe_requires_privileged_approval(updated);
+        if !stored_requires && !updated_requires {
+            return true;
+        }
+        if stored_requires != updated_requires || stored.elevated != updated.elevated {
+            return false;
+        }
+        if updated.elevated
+            && (stored.source != updated.source
+                || stored.arguments != updated.arguments
+                || stored.working_directory != updated.working_directory)
+        {
+            return false;
+        }
+        if matches!(
+            &stored.shutdown_strategy,
+            ShutdownStrategy::CustomStop { .. }
+        ) || matches!(
+            &updated.shutdown_strategy,
+            ShutdownStrategy::CustomStop { .. }
+        ) {
+            return stored.shutdown_strategy == updated.shutdown_strategy;
+        }
+        true
     }
 
     pub(crate) fn delete(&mut self, profile_id: &str) -> Result<(), CoreError> {

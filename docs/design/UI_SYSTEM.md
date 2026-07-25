@@ -170,7 +170,11 @@ where it prevents ambiguity. Controls align to a consistent right edge.
 - Startup order occupies the wider right column.
 - The game is a locked final row.
 - Keep-running exceptions are explicit.
-- Save Changes is the only primary action.
+- Save Changes is the only primary action for approved profiles.
+- Needs Review profiles show a native-quarantine panel and replace Save Changes
+  with Save and Approve. The panel requires one complete configuration review
+  confirmation plus one explicit confirmation for every elevated or custom-stop
+  entry. Start Session remains disabled until native approval succeeds.
 
 ### Settings
 

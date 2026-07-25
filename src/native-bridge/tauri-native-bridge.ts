@@ -1,5 +1,6 @@
 import {
   acceptRecovery,
+  approveProfile,
   cancelStartup,
   checkUpdates,
   closeSession,
@@ -38,6 +39,7 @@ export class TauriNativeBridge implements NativeBridge {
   deleteProfile = deleteProfile;
   exportProfile = exportProfile;
   importProfile = importProfile;
+  approveProfile = approveProfile;
   startApplication = startApplication;
   refreshProcesses = refreshProcesses;
   exitApplication = exitApplication;

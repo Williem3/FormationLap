@@ -1278,6 +1278,7 @@ button:disabled {
 }
 
 .recovery-offer,
+.profile-review-offer,
 .session-summary,
 .update-notice {
   display: flex;
@@ -1293,6 +1294,7 @@ button:disabled {
 
 .recovery-offer strong,
 .recovery-offer span,
+.profile-review-offer span,
 .update-notice strong,
 .update-notice span {
   display: block;
@@ -1307,6 +1309,24 @@ button:disabled {
   color: var(--muted);
   font-size: 11px;
   line-height: 16px;
+}
+
+.profile-review-offer {
+  border-color: color-mix(in srgb, var(--warm) 58%, var(--border));
+  background: color-mix(in srgb, var(--warm) 10%, var(--surface));
+}
+
+.profile-review-offer h2 {
+  margin: 2px 0 4px;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.profile-review-offer span,
+.profile-review-panel > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .update-notice {
@@ -1658,6 +1678,19 @@ button:disabled {
   font-weight: 640;
   letter-spacing: -0.02em;
   line-height: 28px;
+}
+
+.profile-review-panel {
+  border-color: color-mix(in srgb, var(--warm) 58%, var(--border));
+  background: color-mix(in srgb, var(--warm) 7%, var(--surface));
+}
+
+.profile-review-panel > p {
+  margin: 16px 0;
+}
+
+.profile-review-panel .check-row + .check-row {
+  margin-top: 10px;
 }
 
 .settings-checks {

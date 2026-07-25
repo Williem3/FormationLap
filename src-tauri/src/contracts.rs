@@ -197,6 +197,22 @@ pub struct RacingProfile {
     pub close_session: CloseSessionSettings,
 }
 
+/// Whether native authorization permits one Racing Profile to start a Session.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ProfileReviewStatus {
+    #[default]
+    Approved,
+    NeedsReview,
+}
+
+impl ProfileReviewStatus {
+    fn is_approved(&self) -> bool {
+        self == &Self::Approved
+    }
+}
+
 /// A compact Racing Profile representation for snapshots and selection.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -205,6 +221,8 @@ pub struct ProfileSummary {
     pub id: String,
     pub name: String,
     pub primary_sim_name: String,
+    #[serde(default, skip_serializing_if = "ProfileReviewStatus::is_approved")]
+    pub review_status: ProfileReviewStatus,
 }
 
 /// Stable identity for one observed Windows process.

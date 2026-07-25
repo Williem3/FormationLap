@@ -1,7 +1,7 @@
 use formation_lap_lib::{
     AppCommand, ApplicationRequirement, CloseSessionSettings, CommandOutcome, ConsoleVisibility,
-    FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication, ProfileSummary,
-    RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
+    FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication, ProfileReviewStatus,
+    ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
 };
 use std::{
     fs,
@@ -72,6 +72,7 @@ fn created_racing_profile_survives_core_restart() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            review_status: ProfileReviewStatus::Approved,
         }]
     );
 }
@@ -177,6 +178,7 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             id: profile_id,
             name: "Sunday endurance".to_owned(),
             primary_sim_name: "rFactor 2".to_owned(),
+            review_status: ProfileReviewStatus::Approved,
         }]
     );
 }
@@ -264,11 +266,13 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
                 id: source_profile_id,
                 name: "Endurance".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
+                review_status: ProfileReviewStatus::Approved,
             },
             ProfileSummary {
                 id: duplicate_profile_id,
                 name: "Endurance copy".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
+                review_status: ProfileReviewStatus::Approved,
             },
         ]
     );
@@ -610,6 +614,7 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            review_status: ProfileReviewStatus::Approved,
         }]
     );
 }
@@ -656,6 +661,7 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Last valid".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            review_status: ProfileReviewStatus::Approved,
         }]
     );
 }
@@ -867,5 +873,275 @@ fn imported_profile_gets_fresh_identity_and_marks_missing_paths_for_repair() {
         !serde_json::to_string(&imported)
             .expect("imported profile should serialize")
             .contains("processIdentity")
+    );
+}
+
+#[test]
+fn newly_imported_profile_cannot_start_until_its_configuration_is_approved() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut portable: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("example exported profile fixture should be valid JSON");
+    portable["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(executable_path);
+    portable["primarySim"]["launchRecipe"]["workingDirectory"] =
+        serde_json::json!(executable_path.parent());
+    let document =
+        serde_json::to_string_pretty(&portable).expect("portable fixture should serialize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+
+    let profile_id = match core
+        .execute(AppCommand::ImportProfile { document })
+        .expect("a portable Racing Profile should import")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected imported profile creation, got {other:?}"),
+    };
+
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert!(matches!(
+        core.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        }),
+        Err(formation_lap_lib::CoreError::ProfileNeedsReview(id)) if id == profile_id
+    ));
+
+    core.execute(AppCommand::ApproveProfile {
+        profile_id,
+        configuration_reviewed: true,
+        approved_privileged_application_ids: Vec::new(),
+    })
+    .expect("reviewed non-privileged configuration should be approved");
+
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::Approved
+    );
+}
+
+#[test]
+fn imported_elevated_and_custom_stop_entries_require_explicit_approval() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut portable: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("example exported profile fixture should be valid JSON");
+    portable["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(executable_path);
+    portable["primarySim"]["launchRecipe"]["elevated"] = serde_json::json!(true);
+    portable["supportingApplications"] = serde_json::json!([{
+        "application": {
+            "name": "Reviewed custom stop",
+            "launchRecipe": {
+                "source": {
+                    "kind": "directExecutable",
+                    "executablePath": executable_path
+                },
+                "arguments": [],
+                "workingDirectory": executable_path.parent(),
+                "monitoredProcess": null,
+                "monitoredExecutablePath": null,
+                "consoleVisibility": "hidden",
+                "elevated": false,
+                "startupTimeoutSeconds": 30,
+                "postStartDelayMilliseconds": 0,
+                "shutdownStrategy": {
+                    "kind": "customStop",
+                    "executablePath": executable_path,
+                    "arguments": ["--stop"]
+                }
+            }
+        },
+        "requirement": "optional",
+        "keepRunning": false
+    }]);
+    let document =
+        serde_json::to_string_pretty(&portable).expect("portable fixture should serialize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::ImportProfile { document })
+        .expect("a portable Racing Profile should import")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected imported profile creation, got {other:?}"),
+    };
+    let profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the imported Racing Profile should be selected");
+
+    assert!(matches!(
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![profile.primary_sim.id.clone()],
+        }),
+        Err(formation_lap_lib::CoreError::InvalidProfileApproval(_))
+    ));
+
+    core.execute(AppCommand::ApproveProfile {
+        profile_id,
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![
+            profile.primary_sim.id,
+            profile.supporting_applications[0].application.id.clone(),
+        ],
+    })
+    .expect("every privileged entry was approved");
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::Approved
+    );
+}
+
+#[test]
+fn imported_profile_quarantines_missing_secondary_executable_paths() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut portable: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/fixtures/exported-profile.json"))
+            .expect("example exported profile fixture should be valid JSON");
+    portable["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(executable_path);
+    portable["primarySim"]["launchRecipe"]["workingDirectory"] =
+        serde_json::json!(r"C:\Missing\Working");
+    portable["primarySim"]["launchRecipe"]["monitoredExecutablePath"] =
+        serde_json::json!(r"C:\Missing\Observed.exe");
+    portable["primarySim"]["launchRecipe"]["shutdownStrategy"] = serde_json::json!({
+        "kind": "customStop",
+        "executablePath": r"C:\Missing\Stop.exe",
+        "arguments": []
+    });
+    let document =
+        serde_json::to_string_pretty(&portable).expect("portable fixture should serialize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::ImportProfile { document })
+        .expect("a portable Racing Profile should import")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected imported profile creation, got {other:?}"),
+    };
+    let profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the imported Racing Profile should be selected");
+
+    assert!(
+        profile.primary_sim.path_needs_repair,
+        "working, monitored, and custom-stop executable paths participate in review"
+    );
+    assert!(matches!(
+        core.execute(AppCommand::ApproveProfile {
+            profile_id,
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![profile.primary_sim.id],
+        }),
+        Err(formation_lap_lib::CoreError::InvalidProfileApproval(_))
+    ));
+}
+
+#[test]
+fn editing_an_approved_privileged_recipe_invalidates_its_approval() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Privileged local profile".to_owned(),
+            primary_sim_name: "Fixture".to_owned(),
+        })
+        .expect("a valid Racing Profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected");
+    profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    profile.primary_sim.launch_recipe.elevated = true;
+    profile.primary_sim.launch_recipe.shutdown_strategy = ShutdownStrategy::CustomStop {
+        executable_path: executable_path.to_string_lossy().into_owned(),
+        arguments: vec!["--stop".to_owned()],
+    };
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the privileged recipe should save into review quarantine");
+    let primary_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the profile should remain selected")
+        .primary_sim
+        .id;
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![primary_id.clone()],
+    })
+    .expect("the privileged recipe should be approved");
+
+    let mut changed_arguments = core
+        .snapshot()
+        .selected_profile
+        .expect("the profile should remain selected");
+    changed_arguments.primary_sim.launch_recipe.arguments = vec!["--changed".to_owned()];
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(changed_arguments),
+    })
+    .expect("changed elevated arguments should save into review quarantine");
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+
+    core.execute(AppCommand::ApproveProfile {
+        profile_id,
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![primary_id],
+    })
+    .expect("the changed elevated recipe should be approved");
+    let mut changed_custom_stop = core
+        .snapshot()
+        .selected_profile
+        .expect("the profile should remain selected");
+    changed_custom_stop
+        .primary_sim
+        .launch_recipe
+        .shutdown_strategy = ShutdownStrategy::CustomStop {
+        executable_path: executable_path.to_string_lossy().into_owned(),
+        arguments: vec!["--different-stop".to_owned()],
+    };
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(changed_custom_stop),
+    })
+    .expect("changed custom-stop arguments should save into review quarantine");
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
     );
 }

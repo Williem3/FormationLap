@@ -47,6 +47,11 @@ pub enum AppCommand {
     ImportProfile {
         document: String,
     },
+    ApproveProfile {
+        profile_id: String,
+        configuration_reviewed: bool,
+        approved_privileged_application_ids: Vec<String>,
+    },
     StartApplication {
         profile_id: String,
         application_id: String,
@@ -109,6 +114,7 @@ impl AppCommand {
             Self::SelectProfile { .. } => "profile.select",
             Self::ExportProfile { .. } => "profile.export",
             Self::ImportProfile { .. } => "profile.import",
+            Self::ApproveProfile { .. } => "profile.approve",
             Self::StartApplication { .. } => "application.start",
             Self::ExitApplication { .. } => "application.exit",
             Self::ForceStopApplication { .. } => "application.force_stop",
@@ -218,6 +224,8 @@ pub enum CoreError {
     InvalidLaunchRecipe(String),
     InvalidProfileName(&'static str),
     ProfileNotFound(String),
+    ProfileNeedsReview(String),
+    InvalidProfileApproval(String),
     ApplicationNotFound(String),
     ProcessRuntime(ProcessRuntimeError),
     PrivilegeBroker(PrivilegeBrokerError),
@@ -256,6 +264,15 @@ impl fmt::Display for CoreError {
             }
             Self::ProfileNotFound(profile_id) => {
                 write!(formatter, "Racing Profile {profile_id} was not found")
+            }
+            Self::ProfileNeedsReview(profile_id) => {
+                write!(
+                    formatter,
+                    "Racing Profile {profile_id} must be reviewed before starting a Session"
+                )
+            }
+            Self::InvalidProfileApproval(message) => {
+                write!(formatter, "Racing Profile approval is invalid: {message}")
             }
             Self::ApplicationNotFound(application_id) => {
                 write!(formatter, "application {application_id} was not found")
@@ -308,6 +325,8 @@ impl Error for CoreError {
             | Self::InvalidLaunchRecipe(_)
             | Self::InvalidUpdateCheck(_)
             | Self::ProfileNotFound(_)
+            | Self::ProfileNeedsReview(_)
+            | Self::InvalidProfileApproval(_)
             | Self::ApplicationNotFound(_)
             | Self::InvalidSessionTransition { .. }
             | Self::UnsupportedProfileSchema(_)
@@ -613,6 +632,19 @@ impl FormationLapCore {
                 let profile_id = self.profile_library.import(&document)?;
                 Ok(CommandOutcome::ProfileCreated { profile_id })
             }
+            AppCommand::ApproveProfile {
+                profile_id,
+                configuration_reviewed,
+                approved_privileged_application_ids,
+            } => {
+                self.ensure_active_profile_is_editable(&profile_id)?;
+                self.profile_library.approve(
+                    &profile_id,
+                    configuration_reviewed,
+                    &approved_privileged_application_ids,
+                )?;
+                Ok(CommandOutcome::ProfileUpdated { profile_id })
+            }
             AppCommand::StartApplication {
                 profile_id,
                 application_id,
@@ -803,6 +835,11 @@ impl FormationLapCore {
                         current: self.session.state.clone(),
                         command: "Start Session",
                     });
+                }
+                if self.profile_library.review_status(&profile_id)?
+                    == crate::ProfileReviewStatus::NeedsReview
+                {
+                    return Err(CoreError::ProfileNeedsReview(profile_id));
                 }
                 let profile = self
                     .profile_library

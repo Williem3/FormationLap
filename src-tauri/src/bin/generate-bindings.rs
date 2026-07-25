@@ -1,6 +1,6 @@
 use formation_lap_lib::{
     AppSnapshot, ApplicationIcon, ApplicationProcessSnapshot, ApplicationRequirement,
-    ApplicationTargetPayload, ApplicationUpdateSnapshot, CatalogPrimarySim,
+    ApplicationTargetPayload, ApplicationUpdateSnapshot, ApproveProfilePayload, CatalogPrimarySim,
     CatalogSupportingApplication, CatalogUpdateProvider, CloseSessionSettings, CommandError,
     CompatibilityRank, ConsoleVisibility, CreateProfilePayload, DesktopSettings, DiagnosticEntry,
     DiagnosticExport, DiscoveredInstallation, DiscoveredPrimarySim,
@@ -8,12 +8,12 @@ use formation_lap_lib::{
     ExitApplicationPayload, ForceStopApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget,
     ImportProfilePayload, LaunchRecipe, LaunchSource, PrimarySimIdPayload, ProcessIdentity,
     ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload,
-    ProfileSummary, QuitDisposition, QuitPayload, RacingProfile, RestartApplicationPayload,
-    SaveProfilePayload, SessionApplicationRole, SessionApplicationSnapshot,
-    SessionApplicationState, SessionEvent, SessionEventKind, SessionSnapshot, SessionState,
-    SessionSummary, ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
-    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateSettingsPayload,
-    UpdateSnapshot, UpdateStatus, VrLaunchMode,
+    ProfileReviewStatus, ProfileSummary, QuitDisposition, QuitPayload, RacingProfile,
+    RestartApplicationPayload, SaveProfilePayload, SessionApplicationRole,
+    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
+    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SteamLaunchSelector,
+    SupportingApplication, SupportingApplicationRecommendation, ThemePreference, UpdateChannel,
+    UpdateSettingsPayload, UpdateSnapshot, UpdateStatus, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -38,6 +38,7 @@ fn render_bindings() -> String {
         VrLaunchMode::decl(&config),
         CloseSessionSettings::decl(&config),
         RacingProfile::decl(&config),
+        ProfileReviewStatus::decl(&config),
         ProfileSummary::decl(&config),
         ProcessIdentity::decl(&config),
         ProcessOwnership::decl(&config),
@@ -77,6 +78,7 @@ fn render_bindings() -> String {
         ProfileIdPayload::decl(&config),
         DuplicateProfilePayload::decl(&config),
         ImportProfilePayload::decl(&config),
+        ApproveProfilePayload::decl(&config),
         ApplicationTargetPayload::decl(&config),
         ExitApplicationPayload::decl(&config),
         ForceStopApplicationPayload::decl(&config),
@@ -127,6 +129,10 @@ export function exportProfile(payload: ProfileIdPayload): Promise<string> {{
 
 export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {{
   return invoke<AppSnapshot>("import_profile", {{ payload }});
+}}
+
+export function approveProfile(payload: ApproveProfilePayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("approve_profile", {{ payload }});
 }}
 
 export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {{

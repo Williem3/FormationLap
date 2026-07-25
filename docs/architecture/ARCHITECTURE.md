@@ -255,6 +255,7 @@ The WebView receives narrow commands such as:
 - `save_profile`
 - `delete_profile`
 - `import_profile`
+- `approve_profile`
 - `export_profile`
 - `start_session`
 - `cancel_startup`

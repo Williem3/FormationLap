@@ -27,7 +27,9 @@ export type CloseSessionSettings = { stopSteamVr: boolean, };
 
 export type RacingProfile = { id: string, name: string, primarySim: ProfileApplication, supportingApplications: Array<SupportingApplication>, vrEnabled: boolean, preferredVrLaunchMode: VrLaunchMode | null, closeSession: CloseSessionSettings, };
 
-export type ProfileSummary = { id: string, name: string, primarySimName: string, };
+export type ProfileReviewStatus = "approved" | "needsReview";
+
+export type ProfileSummary = { id: string, name: string, primarySimName: string, reviewStatus?: ProfileReviewStatus, };
 
 export type ProcessIdentity = { pid: number, creationTime: string, canonicalExecutablePath: string, };
 
@@ -105,6 +107,8 @@ export type DuplicateProfilePayload = { sourceProfileId: string, name: string, }
 
 export type ImportProfilePayload = { document: string, };
 
+export type ApproveProfilePayload = { profileId: string, configurationReviewed: boolean, approvedPrivilegedApplicationIds: Array<string>, };
+
 export type ApplicationTargetPayload = { profileId: string, applicationId: string, };
 
 export type ExitApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, };
@@ -151,6 +155,10 @@ export function exportProfile(payload: ProfileIdPayload): Promise<string> {
 
 export function importProfile(payload: ImportProfilePayload): Promise<AppSnapshot> {
   return invoke<AppSnapshot>("import_profile", { payload });
+}
+
+export function approveProfile(payload: ApproveProfilePayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("approve_profile", { payload });
 }
 
 export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {

@@ -51,6 +51,16 @@ pub struct ImportProfilePayload {
     pub document: String,
 }
 
+/// Explicit executable-configuration approval for one reviewed Racing Profile.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ApproveProfilePayload {
+    pub profile_id: String,
+    pub configuration_reviewed: bool,
+    pub approved_privileged_application_ids: Vec<String>,
+}
+
 /// Racing Profile and configured application accepted by start commands.
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +146,11 @@ impl From<CoreError> for CommandError {
                 "profile_not_found",
                 error.to_string(),
                 Some("Refresh the profile list and try again."),
+            ),
+            CoreError::ProfileNeedsReview(_) | CoreError::InvalidProfileApproval(_) => (
+                "profile_needs_review",
+                error.to_string(),
+                Some("Review every executable setting and approve privileged entries."),
             ),
             CoreError::ApplicationNotFound(_) => (
                 "application_not_found",
@@ -355,6 +370,18 @@ impl NativeCommandHost {
     ) -> Result<AppSnapshot, CommandError> {
         self.execute_command(AppCommand::ImportProfile {
             document: payload.document,
+        })
+        .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn approve_profile(
+        &self,
+        payload: ApproveProfilePayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::ApproveProfile {
+            profile_id: payload.profile_id,
+            configuration_reviewed: payload.configuration_reviewed,
+            approved_privileged_application_ids: payload.approved_privileged_application_ids,
         })
         .map(|(_, snapshot)| snapshot)
     }
@@ -652,6 +679,14 @@ pub fn import_profile(
     payload: ImportProfilePayload,
 ) -> Result<AppSnapshot, CommandError> {
     commands.import_profile(payload)
+}
+
+#[tauri::command]
+pub fn approve_profile(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ApproveProfilePayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.approve_profile(payload)
 }
 
 #[tauri::command]

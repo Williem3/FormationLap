@@ -17,8 +17,8 @@ blocked until this program is complete and separately reviewed.
 | Profile-ID containment and legacy repair                 | Complete    | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
 | Helper caller authentication and preview identity        | Complete    | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
 | Ordered adjacent elevation and ownership acknowledgement | Complete    | Saved-position launch test, durable journal-before-ack test, and real helper compensation test                                                                                            |
-| Imported-profile review                                  | In progress | Next slice                                                                                                                                                                                |
-| Local storage and startup migration                      | Pending     | —                                                                                                                                                                                         |
+| Imported-profile review                                  | Complete    | Native review state, exact privileged-entry approval, invalidation tests, and React quarantine behavior                                                                                   |
+| Local storage and startup migration                      | In progress | Next slice                                                                                                                                                                                |
 | Opt-in native update coordination                        | Pending     | —                                                                                                                                                                                         |
 | Signed-build equality and adversarial qualification      | Pending     | —                                                                                                                                                                                         |
 
@@ -193,6 +193,65 @@ ownership rules across the privilege seam.
   contracts, catalog, and capability audit.
 - `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
   - 126 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+
+## Imported-profile review
+
+Only portable imports now enter native-owned `NeedsReview`; existing stored
+profiles deserialize as `Approved` and retain their behavior. Profile summaries
+expose the review state, while the editable RacingProfile payload cannot grant
+itself approval.
+
+FormationLapCore rejects Start Session while a profile needs review. The narrow
+`approve_profile` command requires one complete configuration confirmation and
+the exact set of application IDs whose recipes launch elevated or use a custom
+stop executable. Unknown, duplicate, or missing approvals fail closed.
+
+ProfileLibrary recomputes path diagnostics for direct executables, working
+directories, monitored executables, and custom-stop executables. Missing,
+relative, non-executable, or known shell-host paths remain quarantined.
+Changing an approved elevated source, arguments, working directory, elevation,
+or custom-stop recipe returns the complete profile to `NeedsReview`.
+
+The Dashboard labels quarantined profiles, disables Start Session, and offers a
+focused review action. The Profile editor preserves every imported value,
+displays every reviewed field, requires the overall confirmation and one
+checkbox per privileged entry, and submits approval through NativeBridge only
+after saving the reviewed values.
+
+### Red-green evidence
+
+1. `newly_imported_profile_cannot_start_until_its_configuration_is_approved`
+   first failed at compile time because no review state, Core error, or approval
+   command existed. It now proves import quarantine, Session rejection, and
+   native approval.
+2. `imported_profile_quarantines_missing_secondary_executable_paths` first
+   failed because only the source executable participated in path repair. It
+   now proves working-directory, monitored-executable, and custom-stop paths
+   prevent approval.
+3. `keeps an imported profile quarantined until executable settings are
+reviewed` first failed because the Dashboard had no review heading or
+   disabled action. It now drives import, selection, editor confirmation, native
+   approval, and the re-enabled Start Session action through NativeBridge.
+4. Focused native tests prove exact elevated/custom-stop approvals and
+   save-time invalidation after approved elevated arguments or custom-stop
+   arguments change.
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --test racing_profiles --all-features -- --test-threads=1`
+  - all 20 ProfileLibrary behavior tests passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --test profile_commands --all-features -- --test-threads=1`
+  - all 7 native command tests passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --test privileged_operations --all-features -- --test-threads=1`
+  - 14 passed, 1 manual UAC test ignored; privileged fixtures now perform
+    explicit approval.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- Frontend verification passed formatting, lint, type checking, 29 React tests,
+  3 accessibility tests, 24 release tests, generated contracts, catalog, and
+  the twenty-seven-command capability audit.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 131 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
 
 ## Publication boundary
 

@@ -1123,6 +1123,79 @@ describe("Formation Lap shell", () => {
     ).toBeVisible();
   });
 
+  it("keeps an imported profile quarantined until executable settings are reviewed", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Import profile" }),
+    );
+    fireEvent.change(screen.getByLabelText("Portable profile JSON"), {
+      target: {
+        value: JSON.stringify({
+          schemaVersion: 1,
+          name: "Imported review",
+          primarySim: {
+            name: "Automobilista 2",
+            launchRecipe: {
+              source: { kind: "steam", appId: 1066890, selector: null },
+              arguments: ["-novr"],
+              workingDirectory: null,
+              monitoredProcess: null,
+              monitoredExecutablePath: null,
+              consoleVisibility: "hidden",
+              elevated: false,
+              startupTimeoutSeconds: 30,
+              postStartDelayMilliseconds: 0,
+              shutdownStrategy: { kind: "closeWindows" },
+            },
+          },
+          supportingApplications: [],
+          vrEnabled: false,
+          preferredVrLaunchMode: null,
+          closeSession: { stopSteamVr: false },
+        }),
+      },
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Import Racing Profile" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Imported review/ }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Review imported executable settings",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Start session" }),
+    ).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Review profile configuration" }),
+    );
+    await user.click(
+      screen.getByLabelText(
+        "I reviewed executable paths, arguments, working directories, elevation, monitored executables, and stop recipes.",
+      ),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save and approve profile" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Start session" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("heading", {
+        name: "Review imported executable settings",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("persists desktop settings and applies theme and reduced-motion preferences", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

@@ -2,6 +2,7 @@ import type {
   ApplicationRequirement,
   ApplicationTargetPayload,
   AppSnapshot,
+  ApproveProfilePayload,
   CloseSessionSettings,
   CreateProfilePayload,
   DuplicateProfilePayload,
@@ -257,6 +258,12 @@ export class InMemoryNativeBridge implements NativeBridge {
     if (!profile) {
       return Promise.reject(new Error("Racing Profile was not found"));
     }
+    const summary = this.#snapshot.profiles.find(
+      (candidate) => candidate.id === payload.profileId,
+    );
+    if (summary?.reviewStatus === "needsReview") {
+      return Promise.reject(new Error("Racing Profile needs review"));
+    }
     this.#snapshot.session = {
       state: "starting",
       activeProfileId: profile.id,
@@ -461,6 +468,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: profile.id,
       name: profile.name,
       primarySimName: profile.primarySim.name,
+      reviewStatus: "approved",
     });
     this.#snapshot.profiles.sort((left, right) =>
       left.name.localeCompare(right.name),
@@ -476,6 +484,14 @@ export class InMemoryNativeBridge implements NativeBridge {
     );
     if (!summary) {
       return Promise.reject(new Error("Racing Profile was not found"));
+    }
+    const stored = this.#profilesById.get(payload.profile.id);
+    if (
+      summary.reviewStatus !== "needsReview" &&
+      stored &&
+      this.#privilegedRecipeChanged(stored, payload.profile)
+    ) {
+      summary.reviewStatus = "needsReview";
     }
     summary.name = payload.profile.name;
     summary.primarySimName = payload.profile.primarySim.name;
@@ -512,6 +528,10 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: duplicate.id,
       name: duplicate.name,
       primarySimName: duplicate.primarySim.name,
+      reviewStatus:
+        this.#snapshot.profiles.find(
+          (profile) => profile.id === payload.sourceProfileId,
+        )?.reviewStatus ?? "approved",
     });
     this.#profilesById.set(duplicate.id, structuredClone(duplicate));
     return this.getAppSnapshot();
@@ -599,6 +619,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: profile.id,
       name: profile.name,
       primarySimName: profile.primarySim.name,
+      reviewStatus: "needsReview",
     });
     this.#snapshot.profiles.sort((left, right) =>
       left.name.localeCompare(right.name),
@@ -607,10 +628,96 @@ export class InMemoryNativeBridge implements NativeBridge {
     return this.getAppSnapshot();
   }
 
+  approveProfile(payload: ApproveProfilePayload): Promise<AppSnapshot> {
+    const profile = this.#profilesById.get(payload.profileId);
+    const summary = this.#snapshot.profiles.find(
+      (candidate) => candidate.id === payload.profileId,
+    );
+    if (!profile || !summary || !payload.configurationReviewed) {
+      return Promise.reject(new Error("Racing Profile approval is invalid"));
+    }
+    const required = [
+      profile.primarySim,
+      ...profile.supportingApplications.map(
+        (supporting) => supporting.application,
+      ),
+    ]
+      .filter(
+        (application) =>
+          application.launchRecipe.elevated ||
+          application.launchRecipe.shutdownStrategy.kind === "customStop",
+      )
+      .map((application) => application.id)
+      .sort();
+    const approved = [
+      ...new Set(payload.approvedPrivilegedApplicationIds),
+    ].sort();
+    if (
+      approved.length !== payload.approvedPrivilegedApplicationIds.length ||
+      JSON.stringify(approved) !== JSON.stringify(required) ||
+      [
+        profile.primarySim,
+        ...profile.supportingApplications.map(
+          (supporting) => supporting.application,
+        ),
+      ].some((application) => application.pathNeedsRepair)
+    ) {
+      return Promise.reject(new Error("Racing Profile approval is incomplete"));
+    }
+    summary.reviewStatus = "approved";
+    return this.getAppSnapshot();
+  }
+
   #id(prefix: string): string {
     const id = `${prefix}-${this.#nextId}`;
     this.#nextId += 1;
     return id;
+  }
+
+  #privilegedRecipeChanged(
+    stored: RacingProfile,
+    updated: RacingProfile,
+  ): boolean {
+    const storedApplications = new Map(
+      [
+        stored.primarySim,
+        ...stored.supportingApplications.map(
+          (supporting) => supporting.application,
+        ),
+      ].map((application) => [application.id, application]),
+    );
+    return [
+      updated.primarySim,
+      ...updated.supportingApplications.map(
+        (supporting) => supporting.application,
+      ),
+    ].some((application) => {
+      const previous = storedApplications.get(application.id);
+      const currentApproval = this.#privilegedRecipeApprovalValue(application);
+      return previous
+        ? this.#privilegedRecipeApprovalValue(previous) !== currentApproval
+        : currentApproval !== null;
+    });
+  }
+
+  #privilegedRecipeApprovalValue(
+    application: RacingProfile["primarySim"],
+  ): string | null {
+    const recipe = application.launchRecipe;
+    const customStop =
+      recipe.shutdownStrategy.kind === "customStop"
+        ? recipe.shutdownStrategy
+        : null;
+    if (!recipe.elevated && !customStop) {
+      return null;
+    }
+    return JSON.stringify({
+      elevated: recipe.elevated,
+      source: recipe.elevated ? recipe.source : null,
+      arguments: recipe.elevated ? recipe.arguments : null,
+      workingDirectory: recipe.elevated ? recipe.workingDirectory : null,
+      customStop,
+    });
   }
 
   #profileFromSummary(summary: ProfileSummary): RacingProfile {

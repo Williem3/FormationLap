@@ -47,7 +47,7 @@ First identify its release tier:
 Verify the checksum, then inspect the per-user NSIS installer:
 
 ```powershell
-$version = "1.0.0"
+$version = "0.9.0-preview.1"
 $installer = "Formation-Lap_${version}_x64-setup.exe"
 $expected = (Get-Content SHA256SUMS.txt |
   Select-String ([regex]::Escape($installer))).Line.Split(" ")[0]

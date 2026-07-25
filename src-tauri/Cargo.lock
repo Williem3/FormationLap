@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "formation-lap"
-version = "1.0.0"
+version = "0.9.0-preview.1"
 dependencies = [
  "base64 0.22.1",
  "minisign-verify",

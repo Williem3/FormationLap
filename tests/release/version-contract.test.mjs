@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -88,4 +94,32 @@ test("rejects a tag that does not identify the synchronized version", () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("repository is prepared as the disclosed 0.9.0-preview.1 candidate", () => {
+  const version = "0.9.0-preview.1";
+  const result = verify(repositoryRoot, `v${version}`);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const notes = readFileSync(
+    join(repositoryRoot, "docs", "releases", `${version}.md`),
+    "utf8",
+  );
+  const [heading, firstParagraph] = notes.trim().split(/\r?\n\r?\n/, 2);
+  assert.equal(
+    heading,
+    "# Formation Lap 0.9.0-preview.1 — unsigned technical preview",
+  );
+  for (const disclosure of [
+    /unsigned/i,
+    /Authenticode/i,
+    /SmartScreen/i,
+    /unknown publisher/i,
+    /not a Stable/i,
+  ]) {
+    assert.match(firstParagraph, disclosure);
+  }
+
+  const readme = readFileSync(join(repositoryRoot, "README.md"), "utf8");
+  assert.match(readme, /\$version = "0\.9\.0-preview\.1"/);
 });

@@ -391,6 +391,112 @@ fn refresh_advances_the_saved_sequence_and_confirms_the_primary_sim_last() {
 }
 
 #[test]
+fn refresh_ignores_a_stale_stopped_process_for_a_newly_pending_session_step() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let stale_identity = ProcessIdentity {
+        pid: 10_901,
+        creation_time: "133822946901000000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let first_identity = ProcessIdentity {
+        pid: 10_902,
+        creation_time: "133822946902000000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let second_identity = ProcessIdentity {
+        pid: 10_903,
+        creation_time: "133822946903000000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let runtime = ScriptedProcessRuntime {
+        matching_processes: VecDeque::from([Vec::new(), Vec::new(), Vec::new()]),
+        launch_results: VecDeque::from([
+            Ok(stale_identity),
+            Ok(first_identity),
+            Ok(second_identity),
+        ]),
+        graceful_stop_results: VecDeque::from([Ok(GracefulStopResult::Requested)]),
+        wait_for_exit_results: VecDeque::from([Ok(true)]),
+        ..ScriptedProcessRuntime::default()
+    };
+    let mut core = FormationLapCore::open_with_runtime(storage.path(), runtime)
+        .expect("empty Session storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Stale stopped process".to_owned(),
+            primary_sim_name: "Primary Sim".to_owned(),
+        })
+        .expect("fixture profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should be selected");
+    profile.supporting_applications = vec![
+        SupportingApplication {
+            application: application("new-first", "First Support", &executable_path),
+            requirement: ApplicationRequirement::Required,
+            keep_running: false,
+        },
+        SupportingApplication {
+            application: application("new-second", "Second Support", &executable_path),
+            requirement: ApplicationRequirement::Required,
+            keep_running: false,
+        },
+    ];
+    profile.primary_sim = application(&profile.primary_sim.id, "Primary Sim", &executable_path);
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("fixture profile should be configured");
+    let second_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("configured profile should remain selected")
+        .supporting_applications[1]
+        .application
+        .id
+        .clone();
+
+    core.execute(AppCommand::StartApplication {
+        profile_id: profile_id.clone(),
+        application_id: second_application_id.clone(),
+    })
+    .expect("manual start should create the stale process record");
+    core.execute(AppCommand::ExitApplication {
+        application_id: second_application_id,
+        pre_existing_confirmed: false,
+    })
+    .expect("manual exit should leave a stopped process record");
+
+    core.execute(AppCommand::StartSession { profile_id })
+        .expect("Session should start");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("first Supporting Application should become ready");
+
+    assert_eq!(
+        core.snapshot()
+            .session
+            .applications
+            .iter()
+            .map(|application| application.state.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            SessionApplicationState::Running,
+            SessionApplicationState::Starting,
+            SessionApplicationState::Pending,
+        ]
+    );
+}
+
+#[test]
 fn required_launch_failure_blocks_the_primary_sim_and_returns_to_idle() {
     let storage = TempStorage::new();
     let executable_path = std::env::current_exe()

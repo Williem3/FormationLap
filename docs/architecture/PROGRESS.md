@@ -3,7 +3,7 @@
 This is the only source of truth for milestone status. The milestone definitions
 and exit criteria live in [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 ## Status values
 
@@ -95,6 +95,9 @@ M10 security hardening is in progress, owned by Codex `/root`.
   active implementation file scope.
 - The Dashboard now preserves native launch-recovery messages and explains
   immediate startup exits. There is no active implementation file scope.
+- A new Session keeps its Pending startup steps when a terminal Process snapshot
+  from an earlier manual action is still in memory. There is no active
+  implementation file scope.
 
 Known environment facts:
 
@@ -234,3 +237,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Made Browse start in the current direct, monitored, or custom-stop executable's parent directory when that executable exists; missing paths retain the normal picker fallback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (32 tests); `cargo test --manifest-path src-tauri/Cargo.toml --lib native_file_picker` passed (2 tests); `pnpm.cmd contracts:check` passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Rendered extended-length Windows paths in the familiar `C:\...` form throughout Manual Entry and launch-recipe fields without weakening native canonical-path validation | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (33 tests); the regression test covers `\\?\C:\...` display normalization | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Preserved structured native launch errors on the Dashboard and described the immediate-exit failure state, so elevated helper rejection and bad startup arguments have actionable feedback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (35 tests); regression coverage verifies native recovery copy and failed-startup guidance | No blocker; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Prevented a stale terminal Process record from replacing a newly Pending Session step, which had stranded ordered startup after the first application became ready | Red/green `refresh_ignores_a_stale_stopped_process_for_a_newly_pending_session_step`; 17 Session orchestration tests, Rust format check, `cargo clippy --lib -- -D warnings`, TypeScript typecheck, and ESLint passed | Restart the development app, cancel any currently stuck startup, and start the Session again. A tool-created untracked `target-codex-session/` cache remains access-denied and was deliberately excluded from this commit; external signed Beta and Windows qualification remain the next M10 action |

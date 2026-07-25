@@ -1928,6 +1928,11 @@ impl FormationLapCore {
             let Some(process) = self.application_processes.get(&application.application_id) else {
                 continue;
             };
+            if application.state == crate::SessionApplicationState::Pending
+                && process.identity.is_none()
+            {
+                continue;
+            }
             application.state = match process.status {
                 ProcessStatus::Starting => crate::SessionApplicationState::Starting,
                 ProcessStatus::Running => crate::SessionApplicationState::Running,

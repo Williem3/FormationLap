@@ -129,7 +129,7 @@ fn a_vr_session_selects_the_profiles_curated_vr_recipe() {
         "Le Mans Ultimate",
         2_399_420,
         true,
-        Some(VrLaunchMode::OpenXr),
+        Some(VrLaunchMode::OpenVr),
     );
 
     assert_eq!(recipes.len(), 1);
@@ -138,9 +138,28 @@ fn a_vr_session_selects_the_profiles_curated_vr_recipe() {
         recipes[0].source,
         LaunchSource::Steam {
             app_id: 2_399_420,
-            selector: Some(SteamLaunchSelector::Option { index: 3 }),
+            selector: Some(SteamLaunchSelector::OpenVr),
         }
     );
+}
+
+#[test]
+fn le_mans_ultimate_rejects_the_unsupported_openxr_steam_launch_mode() {
+    let error = try_launch_steam_profile(
+        "Le Mans Ultimate",
+        2_399_420,
+        true,
+        Some(VrLaunchMode::OpenXr),
+        None,
+        true,
+    )
+    .expect_err("Le Mans Ultimate only declares a SteamVR launch recipe");
+
+    assert!(matches!(
+        error,
+        CoreError::InvalidLaunchRecipe(message)
+            if message.contains("does not support the selected VR Launch Mode")
+    ));
 }
 
 #[test]
@@ -375,14 +394,6 @@ fn every_curated_steam_sim_resolves_each_declared_ordinary_and_vr_recipe() {
             2_399_420,
             Some(VrLaunchMode::OpenVr),
             SteamLaunchSelector::OpenVr,
-            &[][..],
-            "Le Mans Ultimate.exe",
-        ),
-        (
-            "Le Mans Ultimate",
-            2_399_420,
-            Some(VrLaunchMode::OpenXr),
-            SteamLaunchSelector::Option { index: 3 },
             &[][..],
             "Le Mans Ultimate.exe",
         ),

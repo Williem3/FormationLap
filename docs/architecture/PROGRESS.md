@@ -87,6 +87,9 @@ M10 security hardening is in progress, owned by Codex `/root`.
   derive working directory and process identity, and the recipe editor gives
   the executable path visual priority. There is no active implementation file
   scope.
+- The native executable picker opens at the selected recipe executable's
+  parent folder when that file exists, and otherwise keeps Windows' normal
+  fallback. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -223,3 +226,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Added an explicit native Windows executable picker to Manual Entry and Racing Profile paths, including direct, monitored, and custom-stop recipes; selected direct executables seed an empty working directory | `pnpm.cmd verify`, all-feature Clippy, and all-feature Rust tests passed; 30 React tests include native-picker selection behavior; generated contracts and capability audit are current | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Moved Racing Profile save/approval errors from the editor footer to the header beside the Save action | `pnpm.cmd test -- src/app/App.test.tsx`, `pnpm.cmd lint`, and `pnpm.cmd typecheck` passed; 31 React tests include header-placement coverage | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Made Native Launch Quarantine name each executable path that blocks approval, simplified direct executable recipes with derived working/process identity, and repaired Browse presentation | `pnpm.cmd test -- src/app/App.test.tsx` passed: 32 React tests including repair and automatic-direct-recipe coverage; typecheck passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Made Browse start in the current direct, monitored, or custom-stop executable's parent directory when that executable exists; missing paths retain the normal picker fallback | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `pnpm.cmd test -- src/app/App.test.tsx` passed (32 tests); `cargo test --manifest-path src-tauri/Cargo.toml --lib native_file_picker` passed (2 tests); `pnpm.cmd contracts:check` passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |

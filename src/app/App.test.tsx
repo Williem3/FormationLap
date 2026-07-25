@@ -841,7 +841,9 @@ describe("Formation Lap shell", () => {
       }),
     );
 
-    expect(pickExecutablePath).toHaveBeenCalledOnce();
+    expect(pickExecutablePath).toHaveBeenCalledWith(
+      String.raw`C:\Fixtures\healthy.exe`,
+    );
     expect(
       screen.getByRole("button", { name: "Browse for Primary Sim executable" }),
     ).toHaveClass("path-browse-button");

@@ -115,6 +115,7 @@ fn configure_profile(mut profile: RacingProfile, executable_path: &Path) -> Raci
             .parent()
             .map(|parent| parent.to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,

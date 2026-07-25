@@ -322,6 +322,29 @@ mod windows_adapter {
     };
 
     struct OwnedHandle(HANDLE);
+
+    struct VerifiedProcessHandle {
+        handle: OwnedHandle,
+    }
+
+    #[derive(Clone, Copy)]
+    struct ProcessRights(u32);
+
+    enum VerifiedProcessError {
+        Unavailable,
+        Replaced(ProcessIdentity),
+        Runtime(ProcessRuntimeError),
+    }
+
+    struct ExpectedProcess {
+        canonical_executable_path: Option<PathBuf>,
+        executable_name: Option<String>,
+    }
+
+    impl ProcessRights {
+        const SYNCHRONIZE: Self = Self(SYNCHRONIZE_ACCESS);
+        const TERMINATE_AND_SYNCHRONIZE: Self = Self(PROCESS_TERMINATE | SYNCHRONIZE_ACCESS);
+    }
     const SYNCHRONIZE_ACCESS: u32 = 0x0010_0000;
     const OUTPUT_LIMIT_BYTES: usize = 65_536;
 
@@ -438,26 +461,61 @@ mod windows_adapter {
         }
     }
 
-    fn expected_executable(recipe: &LaunchRecipe) -> Result<Option<PathBuf>, ProcessRuntimeError> {
-        match &recipe.source {
-            LaunchSource::DirectExecutable { .. } => direct_executable(recipe).map(Some),
-            LaunchSource::Steam { .. } => {
-                let monitored_process = recipe.monitored_process.as_deref().ok_or_else(|| {
-                    ProcessRuntimeError::new(
-                        "Steam launch requires a monitored process executable name",
-                    )
-                })?;
-                let monitored_path = Path::new(monitored_process);
-                if monitored_process.trim().is_empty()
-                    || monitored_path.file_name().and_then(|name| name.to_str())
-                        != Some(monitored_process)
-                {
-                    return Err(ProcessRuntimeError::new(
-                        "Steam monitored process must be an executable file name",
-                    ));
-                }
-                Ok(None)
+    fn expected_process(recipe: &LaunchRecipe) -> Result<ExpectedProcess, ProcessRuntimeError> {
+        if let Some(monitored_process) = recipe.monitored_process.as_deref() {
+            let monitored_name = Path::new(monitored_process);
+            if monitored_process.trim().is_empty()
+                || monitored_name.file_name().and_then(|name| name.to_str())
+                    != Some(monitored_process)
+            {
+                return Err(ProcessRuntimeError::new(
+                    "monitored process must be an executable file name",
+                ));
             }
+            let canonical_executable_path = recipe
+                .monitored_executable_path
+                .as_deref()
+                .map(Path::new)
+                .map(Path::canonicalize)
+                .transpose()
+                .map_err(|error| {
+                    runtime_error("monitored executable path is not accessible", error)
+                })?;
+            if canonical_executable_path
+                .as_deref()
+                .and_then(Path::file_name)
+                .is_some_and(|name| {
+                    !name
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case(monitored_process)
+                })
+            {
+                return Err(ProcessRuntimeError::new(
+                    "monitored executable path does not match the monitored process name",
+                ));
+            }
+            return Ok(ExpectedProcess {
+                canonical_executable_path,
+                executable_name: Some(monitored_process.to_owned()),
+            });
+        }
+
+        if recipe.monitored_executable_path.is_some() {
+            return Err(ProcessRuntimeError::new(
+                "monitored executable path requires a monitored process name",
+            ));
+        }
+
+        match &recipe.source {
+            LaunchSource::DirectExecutable { .. } => {
+                direct_executable(recipe).map(|canonical_executable_path| ExpectedProcess {
+                    canonical_executable_path: Some(canonical_executable_path),
+                    executable_name: None,
+                })
+            }
+            LaunchSource::Steam { .. } => Err(ProcessRuntimeError::new(
+                "Steam launch requires a monitored process executable name",
+            )),
         }
     }
 
@@ -466,15 +524,7 @@ mod windows_adapter {
             .to_string()
     }
 
-    pub(super) fn process_identity(pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
-        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-        if handle.is_null() {
-            return Err(runtime_error(
-                "process identity could not be opened",
-                io::Error::last_os_error(),
-            ));
-        }
-        let handle = OwnedHandle(handle);
+    fn process_creation_time(handle: &OwnedHandle) -> Result<String, ProcessRuntimeError> {
         let mut creation_time = FILETIME {
             dwLowDateTime: 0,
             dwHighDateTime: 0,
@@ -497,7 +547,10 @@ mod windows_adapter {
                 io::Error::last_os_error(),
             ));
         }
+        Ok(creation_time_value(creation_time))
+    }
 
+    fn process_executable_path(handle: &OwnedHandle) -> Result<String, ProcessRuntimeError> {
         let mut path_buffer = vec![0_u16; 32_768];
         let mut path_length = u32::try_from(path_buffer.len())
             .map_err(|_| ProcessRuntimeError::new("process path buffer is too large"))?;
@@ -518,32 +571,91 @@ mod windows_adapter {
             })?
             .to_string_lossy()
             .into_owned();
+        Ok(canonical_executable_path)
+    }
 
+    fn process_identity_from_handle(
+        pid: u32,
+        handle: &OwnedHandle,
+    ) -> Result<ProcessIdentity, ProcessRuntimeError> {
         Ok(ProcessIdentity {
             pid,
-            creation_time: creation_time_value(creation_time),
-            canonical_executable_path,
+            creation_time: process_creation_time(handle)?,
+            canonical_executable_path: process_executable_path(handle)?,
         })
     }
 
-    fn expected_process_matches(
+    pub(super) fn process_identity(pid: u32) -> Result<ProcessIdentity, ProcessRuntimeError> {
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            return Err(runtime_error(
+                "process identity could not be opened",
+                io::Error::last_os_error(),
+            ));
+        }
+        process_identity_from_handle(pid, &OwnedHandle(handle))
+    }
+
+    fn with_verified_process<T>(
         identity: &ProcessIdentity,
-        expected_executable: Option<&Path>,
-        monitored_process: Option<&str>,
-    ) -> bool {
-        if let Some(monitored_process) = monitored_process {
+        required_rights: ProcessRights,
+        action: impl FnOnce(&VerifiedProcessHandle) -> Result<T, ProcessRuntimeError>,
+    ) -> Result<T, VerifiedProcessError> {
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | required_rights.0,
+                0,
+                identity.pid,
+            )
+        };
+        if handle.is_null() {
+            return Err(VerifiedProcessError::Unavailable);
+        }
+        let verified = VerifiedProcessHandle {
+            handle: OwnedHandle(handle),
+        };
+        let creation_time =
+            process_creation_time(&verified.handle).map_err(VerifiedProcessError::Runtime)?;
+        if unsafe { WaitForSingleObject(verified.handle.0, 0) } == WAIT_OBJECT_0 {
+            return Err(VerifiedProcessError::Unavailable);
+        }
+        if creation_time != identity.creation_time {
+            return match process_executable_path(&verified.handle) {
+                Ok(canonical_executable_path) => {
+                    Err(VerifiedProcessError::Replaced(ProcessIdentity {
+                        pid: identity.pid,
+                        creation_time,
+                        canonical_executable_path,
+                    }))
+                }
+                Err(_) => Err(VerifiedProcessError::Unavailable),
+            };
+        }
+        let canonical_executable_path = match process_executable_path(&verified.handle) {
+            Ok(path) => path,
+            Err(_) => return Err(VerifiedProcessError::Unavailable),
+        };
+        if !canonical_executable_path.eq_ignore_ascii_case(&identity.canonical_executable_path) {
+            return Err(VerifiedProcessError::Replaced(ProcessIdentity {
+                pid: identity.pid,
+                creation_time,
+                canonical_executable_path,
+            }));
+        }
+        action(&verified).map_err(VerifiedProcessError::Runtime)
+    }
+
+    fn expected_process_matches(identity: &ProcessIdentity, expected: &ExpectedProcess) -> bool {
+        if let Some(expected_path) = expected.canonical_executable_path.as_deref() {
             return Path::new(&identity.canonical_executable_path)
-                .file_name()
-                .is_some_and(|name| {
-                    name.to_string_lossy()
-                        .eq_ignore_ascii_case(monitored_process)
-                });
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&expected_path.to_string_lossy());
         }
 
-        expected_executable.is_some_and(|expected_executable| {
+        expected.executable_name.as_deref().is_some_and(|name| {
             Path::new(&identity.canonical_executable_path)
-                .to_string_lossy()
-                .eq_ignore_ascii_case(&expected_executable.to_string_lossy())
+                .file_name()
+                .is_some_and(|candidate| candidate.to_string_lossy().eq_ignore_ascii_case(name))
         })
     }
 
@@ -619,14 +731,10 @@ mod windows_adapter {
         1
     }
 
-    fn exact_identity_is_current(identity: &ProcessIdentity) -> bool {
-        process_identity(identity.pid).is_ok_and(|current| current == *identity)
-    }
-
     pub(super) fn matching_processes(
         recipe: &LaunchRecipe,
     ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
-        let expected_executable = expected_executable(recipe)?;
+        let expected = expected_process(recipe)?;
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(runtime_error(
@@ -645,11 +753,7 @@ mod windows_adapter {
 
         while has_entry {
             if let Ok(identity) = process_identity(entry.th32ProcessID)
-                && expected_process_matches(
-                    &identity,
-                    expected_executable.as_deref(),
-                    recipe.monitored_process.as_deref(),
-                )
+                && expected_process_matches(&identity, &expected)
             {
                 matches.push(identity);
             }
@@ -837,33 +941,24 @@ mod windows_adapter {
     pub(super) fn observe(
         identity: &ProcessIdentity,
     ) -> Result<ProcessObservation, ProcessRuntimeError> {
-        let Ok(current_identity) = process_identity(identity.pid) else {
-            return Ok(ProcessObservation::Exited);
-        };
-        if current_identity != *identity {
-            return Ok(ProcessObservation::Replaced { current_identity });
-        }
-
-        let handle = unsafe {
-            OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE_ACCESS,
-                0,
-                identity.pid,
-            )
-        };
-        if handle.is_null() {
-            return Ok(ProcessObservation::Exited);
-        }
-        let handle = OwnedHandle(handle);
-        match unsafe { WaitForSingleObject(handle.0, 0) } {
-            WAIT_OBJECT_0 => Ok(ProcessObservation::Exited),
-            WAIT_TIMEOUT => Ok(ProcessObservation::Running {
-                responsiveness: process_responsiveness(identity.pid)?,
-            }),
-            _ => Err(runtime_error(
-                "process status could not be observed",
-                io::Error::last_os_error(),
-            )),
+        match with_verified_process(identity, ProcessRights::SYNCHRONIZE, |process| {
+            match unsafe { WaitForSingleObject(process.handle.0, 0) } {
+                WAIT_OBJECT_0 => Ok(ProcessObservation::Exited),
+                WAIT_TIMEOUT => Ok(ProcessObservation::Running {
+                    responsiveness: process_responsiveness(identity.pid)?,
+                }),
+                _ => Err(runtime_error(
+                    "process status could not be observed",
+                    io::Error::last_os_error(),
+                )),
+            }
+        }) {
+            Ok(observation) => Ok(observation),
+            Err(VerifiedProcessError::Unavailable) => Ok(ProcessObservation::Exited),
+            Err(VerifiedProcessError::Replaced(current_identity)) => {
+                Ok(ProcessObservation::Replaced { current_identity })
+            }
+            Err(VerifiedProcessError::Runtime(error)) => Err(error),
         }
     }
 
@@ -871,68 +966,76 @@ mod windows_adapter {
         identity: &ProcessIdentity,
         strategy: &crate::ShutdownStrategy,
     ) -> Result<super::GracefulStopResult, ProcessRuntimeError> {
-        if !exact_identity_is_current(identity) {
-            return Ok(super::GracefulStopResult::Unavailable);
-        }
-        match strategy {
-            crate::ShutdownStrategy::CloseWindows => {
-                let mut request = CloseWindowRequest {
-                    pid: identity.pid,
-                    requested_count: 0,
-                };
-                if unsafe {
-                    EnumWindows(
-                        Some(request_window_close),
-                        &mut request as *mut CloseWindowRequest as LPARAM,
-                    )
-                } == 0
-                {
-                    return Err(runtime_error(
-                        "process windows could not be closed",
-                        io::Error::last_os_error(),
-                    ));
+        match with_verified_process(
+            identity,
+            ProcessRights::SYNCHRONIZE,
+            |_process| match strategy {
+                crate::ShutdownStrategy::CloseWindows => {
+                    let mut request = CloseWindowRequest {
+                        pid: identity.pid,
+                        requested_count: 0,
+                    };
+                    if unsafe {
+                        EnumWindows(
+                            Some(request_window_close),
+                            &mut request as *mut CloseWindowRequest as LPARAM,
+                        )
+                    } == 0
+                    {
+                        return Err(runtime_error(
+                            "process windows could not be closed",
+                            io::Error::last_os_error(),
+                        ));
+                    }
+                    Ok(if request.requested_count == 0 {
+                        super::GracefulStopResult::Unavailable
+                    } else {
+                        super::GracefulStopResult::Requested
+                    })
                 }
-                Ok(if request.requested_count == 0 {
-                    super::GracefulStopResult::Unavailable
-                } else {
-                    super::GracefulStopResult::Requested
-                })
-            }
-            crate::ShutdownStrategy::CustomStop {
-                executable_path,
-                arguments,
-            } => {
-                let executable = Path::new(executable_path).canonicalize().map_err(|error| {
-                    runtime_error("custom stop executable is not launchable", error)
-                })?;
-                let working_directory = executable.parent().ok_or_else(|| {
-                    ProcessRuntimeError::new(
-                        "custom stop executable does not have a working directory",
-                    )
-                })?;
-                let status = Command::new(&executable)
-                    .args(arguments)
-                    .current_dir(working_directory)
-                    .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map_err(|error| runtime_error("custom stop could not run", error))?;
-                if !status.success() {
-                    return Err(ProcessRuntimeError::new(format!(
-                        "custom stop exited unsuccessfully with {status}"
-                    )));
+                crate::ShutdownStrategy::CustomStop {
+                    executable_path,
+                    arguments,
+                } => {
+                    let executable =
+                        Path::new(executable_path).canonicalize().map_err(|error| {
+                            runtime_error("custom stop executable is not launchable", error)
+                        })?;
+                    let working_directory = executable.parent().ok_or_else(|| {
+                        ProcessRuntimeError::new(
+                            "custom stop executable does not have a working directory",
+                        )
+                    })?;
+                    let status = Command::new(&executable)
+                        .args(arguments)
+                        .current_dir(working_directory)
+                        .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .status()
+                        .map_err(|error| runtime_error("custom stop could not run", error))?;
+                    if !status.success() {
+                        return Err(ProcessRuntimeError::new(format!(
+                            "custom stop exited unsuccessfully with {status}"
+                        )));
+                    }
+                    Ok(super::GracefulStopResult::Requested)
                 }
-                Ok(super::GracefulStopResult::Requested)
-            }
-            crate::ShutdownStrategy::ConsoleInterrupt => {
-                if unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, identity.pid) } == 0 {
-                    return Ok(super::GracefulStopResult::Unavailable);
+                crate::ShutdownStrategy::ConsoleInterrupt => {
+                    if unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, identity.pid) } == 0 {
+                        return Ok(super::GracefulStopResult::Unavailable);
+                    }
+                    Ok(super::GracefulStopResult::Requested)
                 }
-                Ok(super::GracefulStopResult::Requested)
+                crate::ShutdownStrategy::ForceOnly => Ok(super::GracefulStopResult::Unavailable),
+            },
+        ) {
+            Ok(result) => Ok(result),
+            Err(VerifiedProcessError::Unavailable | VerifiedProcessError::Replaced(_)) => {
+                Ok(super::GracefulStopResult::Unavailable)
             }
-            crate::ShutdownStrategy::ForceOnly => Ok(super::GracefulStopResult::Unavailable),
+            Err(VerifiedProcessError::Runtime(error)) => Err(error),
         }
     }
 
@@ -940,59 +1043,49 @@ mod windows_adapter {
         identity: &ProcessIdentity,
         timeout: Duration,
     ) -> Result<bool, ProcessRuntimeError> {
-        if !exact_identity_is_current(identity) {
-            return Ok(true);
-        }
-        let handle = unsafe {
-            OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE_ACCESS,
-                0,
-                identity.pid,
-            )
-        };
-        if handle.is_null() {
-            return Ok(true);
-        }
-        let handle = OwnedHandle(handle);
-        let timeout_milliseconds = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
-        match unsafe { WaitForSingleObject(handle.0, timeout_milliseconds) } {
-            WAIT_OBJECT_0 => Ok(true),
-            WAIT_TIMEOUT => Ok(false),
-            _ => Err(runtime_error(
-                "process exit could not be awaited",
-                io::Error::last_os_error(),
-            )),
+        match with_verified_process(identity, ProcessRights::SYNCHRONIZE, |process| {
+            let timeout_milliseconds = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
+            match unsafe { WaitForSingleObject(process.handle.0, timeout_milliseconds) } {
+                WAIT_OBJECT_0 => Ok(true),
+                WAIT_TIMEOUT => Ok(false),
+                _ => Err(runtime_error(
+                    "process exit could not be awaited",
+                    io::Error::last_os_error(),
+                )),
+            }
+        }) {
+            Ok(exited) => Ok(exited),
+            Err(VerifiedProcessError::Unavailable | VerifiedProcessError::Replaced(_)) => Ok(true),
+            Err(VerifiedProcessError::Runtime(error)) => Err(error),
         }
     }
 
     pub(super) fn force_stop(identity: &ProcessIdentity) -> Result<(), ProcessRuntimeError> {
-        if !exact_identity_is_current(identity) {
-            return Ok(());
-        }
-        let handle =
-            unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE_ACCESS, 0, identity.pid) };
-        if handle.is_null() {
-            return Err(runtime_error(
-                "process could not be opened for force stop",
-                io::Error::last_os_error(),
-            ));
-        }
-        let handle = OwnedHandle(handle);
-        if unsafe { TerminateProcess(handle.0, 1) } == 0 {
-            return Err(runtime_error(
-                "process could not be force stopped",
-                io::Error::last_os_error(),
-            ));
-        }
-        match unsafe { WaitForSingleObject(handle.0, 5_000) } {
-            WAIT_OBJECT_0 => Ok(()),
-            WAIT_TIMEOUT => Err(ProcessRuntimeError::new(
-                "force-stopped process did not exit within five seconds",
-            )),
-            _ => Err(runtime_error(
-                "force-stopped process exit could not be awaited",
-                io::Error::last_os_error(),
-            )),
+        match with_verified_process(
+            identity,
+            ProcessRights::TERMINATE_AND_SYNCHRONIZE,
+            |process| {
+                if unsafe { TerminateProcess(process.handle.0, 1) } == 0 {
+                    return Err(runtime_error(
+                        "process could not be force stopped",
+                        io::Error::last_os_error(),
+                    ));
+                }
+                match unsafe { WaitForSingleObject(process.handle.0, 5_000) } {
+                    WAIT_OBJECT_0 => Ok(()),
+                    WAIT_TIMEOUT => Err(ProcessRuntimeError::new(
+                        "force-stopped process did not exit within five seconds",
+                    )),
+                    _ => Err(runtime_error(
+                        "force-stopped process exit could not be awaited",
+                        io::Error::last_os_error(),
+                    )),
+                }
+            },
+        ) {
+            Ok(()) => Ok(()),
+            Err(VerifiedProcessError::Unavailable | VerifiedProcessError::Replaced(_)) => Ok(()),
+            Err(VerifiedProcessError::Runtime(error)) => Err(error),
         }
     }
 }

@@ -1815,6 +1815,7 @@ function discoveredSupportingApplicationToProfile(
           application.installation,
         ),
         monitoredProcess: null,
+        monitoredExecutablePath: null,
         consoleVisibility: "hidden",
         elevated: false,
         startupTimeoutSeconds: 30,
@@ -2332,6 +2333,7 @@ function ProfileEditor({
             arguments: [],
             workingDirectory: null,
             monitoredProcess: null,
+            monitoredExecutablePath: null,
             consoleVisibility: "hidden",
             elevated: false,
             startupTimeoutSeconds: 30,
@@ -2827,11 +2829,28 @@ function ApplicationRecipeFields({
                 update((next) => {
                   next.launchRecipe.monitoredProcess =
                     event.currentTarget.value || null;
+                  next.launchRecipe.monitoredExecutablePath = null;
                 })
               }
             />
           </label>
         </div>
+        <label className="field">
+          <span>{label} monitored executable path</span>
+          <input
+            value={application.launchRecipe.monitoredExecutablePath ?? ""}
+            onChange={(event) =>
+              update((next) => {
+                next.launchRecipe.monitoredExecutablePath =
+                  event.currentTarget.value || null;
+              })
+            }
+          />
+          <small>
+            Required before a launcher-discovered process can be Session-owned.
+            Test Game Launch can learn this path for review.
+          </small>
+        </label>
         <div className="recipe-number-grid">
           <label className="field">
             <span>Startup timeout · seconds</span>

@@ -87,6 +87,7 @@ fn direct_launch_preserves_arguments_working_directory_and_stable_identity() {
         .concat(),
         working_directory: Some(working_directory.to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -166,6 +167,7 @@ fn virtual_desktop_switcher_compatible_recipe_runs_as_an_ordinary_application() 
         .concat(),
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,
@@ -199,12 +201,29 @@ fn virtual_desktop_switcher_compatible_recipe_runs_as_an_ordinary_application() 
 fn launcher_style_launch_returns_the_monitored_process_identity() {
     let temporary = TempDirectory::new();
     let report_path = temporary.path().join("monitored report.json");
+    let decoy_report_path = temporary.path().join("decoy report.json");
     let fixture_source = PathBuf::from(env!(
         "CARGO_BIN_EXE_formation-lap-process-fixture",
         "process fixture should be built with the process-fixtures feature"
     ));
-    let monitored_path = temporary.path().join("monitored-process-fixture.exe");
-    fs::copy(fixture_source, &monitored_path).expect("monitored fixture should be copied");
+    let monitored_directory = temporary.path().join("expected");
+    let decoy_directory = temporary.path().join("decoy");
+    fs::create_dir_all(&monitored_directory).expect("monitored directory should be created");
+    fs::create_dir_all(&decoy_directory).expect("decoy directory should be created");
+    let monitored_path = monitored_directory.join("monitored-process-fixture.exe");
+    let decoy_path = decoy_directory.join("monitored-process-fixture.exe");
+    fs::copy(&fixture_source, &monitored_path).expect("monitored fixture should be copied");
+    fs::copy(&fixture_source, &decoy_path).expect("decoy fixture should be copied");
+    let mut decoy = process::Command::new(&decoy_path)
+        .args([
+            "--report",
+            &decoy_report_path.to_string_lossy(),
+            "--lifetime-ms",
+            "5000",
+        ])
+        .spawn()
+        .expect("same-name decoy fixture should launch");
+    wait_for_file(&decoy_report_path);
     let launcher_path = PathBuf::from(env!(
         "CARGO_BIN_EXE_formation-lap-launcher-fixture",
         "launcher fixture should be built with the process-fixtures feature"
@@ -223,6 +242,13 @@ fn launcher_style_launch_returns_the_monitored_process_identity() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: Some("monitored-process-fixture.exe".to_owned()),
+        monitored_executable_path: Some(
+            monitored_path
+                .canonicalize()
+                .expect("monitored fixture should canonicalize")
+                .to_string_lossy()
+                .into_owned(),
+        ),
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -231,6 +257,13 @@ fn launcher_style_launch_returns_the_monitored_process_identity() {
     };
     let mut runtime = WindowsProcessRuntime::new();
 
+    assert!(
+        runtime
+            .matching_processes(&recipe)
+            .expect("same-name Processes should be observable safely")
+            .is_empty(),
+        "a filename match from another canonical path must not be adopted"
+    );
     let identity = runtime
         .launch(&recipe)
         .expect("the monitored child should be observed after its launcher exits");
@@ -242,6 +275,8 @@ fn launcher_style_launch_returns_the_monitored_process_identity() {
             .expect("monitored fixture should canonicalize")
     );
     wait_for_file(&report_path);
+    decoy.kill().expect("decoy fixture should be cleaned up");
+    decoy.wait().expect("decoy fixture should exit");
 }
 
 #[test]
@@ -264,6 +299,7 @@ fn observation_rejects_reused_pid_metadata_and_reports_background_exit() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -327,6 +363,7 @@ fn slow_and_failing_fixture_modes_expose_real_process_transitions() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -403,6 +440,7 @@ fn observation_distinguishes_responsive_and_hung_windowed_processes() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -471,6 +509,7 @@ fn close_windows_gracefully_stops_a_windowed_fixture_before_force_is_needed() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -523,6 +562,7 @@ fn custom_stop_runs_structured_arguments_and_allows_the_target_to_exit() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -575,6 +615,7 @@ fn console_interrupt_gracefully_stops_a_visible_console_fixture() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Visible,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -622,6 +663,7 @@ fn hidden_console_output_capture_keeps_only_a_bounded_tail() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,
@@ -665,6 +707,7 @@ fn force_only_shutdown_requires_force_and_terminates_the_exact_identity() {
         ],
         working_directory: Some(temporary.path().to_string_lossy().into_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,

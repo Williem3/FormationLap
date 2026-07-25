@@ -197,6 +197,59 @@ fn starting_a_configured_application_records_session_owned_stable_identity() {
 }
 
 #[test]
+fn filename_only_launcher_identity_is_observed_without_session_ownership() {
+    let storage = TempStorage::new();
+    let launched_identity = ProcessIdentity {
+        pid: 4_913,
+        creation_time: "133822944050000000".to_owned(),
+        canonical_executable_path: r"C:\Games\Observed\sim.exe".to_owned(),
+    };
+    let runtime = ScriptedProcessRuntime {
+        matching_processes: VecDeque::new(),
+        launch_results: VecDeque::from([Ok(launched_identity.clone())]),
+        observations: VecDeque::new(),
+        graceful_stop_results: VecDeque::new(),
+        wait_for_exit_results: VecDeque::new(),
+        force_stop_results: VecDeque::new(),
+    };
+    let (mut core, profile_id, application_id) = configured_core(&storage, runtime);
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("configured profile should be selected");
+    profile.primary_sim.launch_recipe.monitored_process = Some("sim.exe".to_owned());
+    profile.primary_sim.launch_recipe.monitored_executable_path = None;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("filename-only launcher recipe should remain readable");
+
+    let outcome = core
+        .execute(AppCommand::StartApplication {
+            profile_id,
+            application_id: application_id.clone(),
+        })
+        .expect("filename-only launcher Process should remain observable");
+
+    assert_eq!(
+        outcome,
+        CommandOutcome::ApplicationAlreadyRunning {
+            application_id: application_id.clone(),
+        }
+    );
+    assert_eq!(
+        core.snapshot().application_processes,
+        vec![ApplicationProcessSnapshot {
+            application_id,
+            status: ProcessStatus::RunningPreExisting,
+            ownership: Some(ProcessOwnership::PreExisting),
+            identity: Some(launched_identity),
+            output: None,
+        }]
+    );
+}
+
+#[test]
 fn starting_an_already_running_application_observes_it_without_taking_ownership() {
     let storage = TempStorage::new();
     let existing_identity = ProcessIdentity {

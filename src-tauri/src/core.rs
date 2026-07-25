@@ -1213,22 +1213,27 @@ impl FormationLapCore {
                 let target = crate::launch_recipe::sanitized_target(&primary_sim.launch_recipe)
                     .map_err(CoreError::InvalidLaunchRecipe)?;
                 self.launch_or_adopt(&primary_sim.id, primary_sim.launch_recipe.clone())?;
-                let observed_process = self
+                let observed_identity = self
                     .application_processes
                     .get(&primary_sim.id)
                     .and_then(|process| process.identity.as_ref())
-                    .and_then(|identity| {
-                        std::path::Path::new(&identity.canonical_executable_path)
-                            .file_name()
-                            .and_then(|name| name.to_str())
-                    })
-                    .filter(|name| !name.trim().is_empty())
+                    .cloned()
                     .ok_or_else(|| {
                         CoreError::InvalidLaunchRecipe(
-                            "observed Process does not have a valid executable name".to_owned(),
+                            "Test Game Launch did not observe a stable Process identity".to_owned(),
                         )
-                    })?
-                    .to_owned();
+                    })?;
+                let observed_process =
+                    std::path::Path::new(&observed_identity.canonical_executable_path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .filter(|name| !name.trim().is_empty())
+                        .ok_or_else(|| {
+                            CoreError::InvalidLaunchRecipe(
+                                "observed Process does not have a valid executable name".to_owned(),
+                            )
+                        })?
+                        .to_owned();
                 let monitored_process = primary_sim
                     .launch_recipe
                     .monitored_process
@@ -1237,6 +1242,7 @@ impl FormationLapCore {
                     .and_then(|name| name.to_str())
                     .filter(|name| !name.trim().is_empty())
                     .map(str::to_owned);
+                let mut learned_identity = false;
                 if profile
                     .primary_sim
                     .launch_recipe
@@ -1245,6 +1251,19 @@ impl FormationLapCore {
                 {
                     profile.primary_sim.launch_recipe.monitored_process =
                         Some(observed_process.clone());
+                    learned_identity = true;
+                }
+                if profile
+                    .primary_sim
+                    .launch_recipe
+                    .monitored_executable_path
+                    .is_none()
+                {
+                    profile.primary_sim.launch_recipe.monitored_executable_path =
+                        Some(observed_identity.canonical_executable_path.clone());
+                    learned_identity = true;
+                }
+                if learned_identity {
                     self.profile_library.save(profile.clone())?;
                 }
                 let diagnostic = crate::GameLaunchDiagnostic {
@@ -1299,10 +1318,20 @@ impl FormationLapCore {
                         identity,
                     )
                 } else {
+                    let identity = self.execute_elevated_launch(&launch_recipe)?;
+                    let ownership = if launch_identity_is_unambiguous(&launch_recipe) {
+                        ProcessOwnership::SessionOwned
+                    } else {
+                        ProcessOwnership::PreExisting
+                    };
                     (
-                        ProcessStatus::Starting,
-                        ProcessOwnership::SessionOwned,
-                        self.execute_elevated_launch(&launch_recipe)?,
+                        if ownership == ProcessOwnership::SessionOwned {
+                            ProcessStatus::Starting
+                        } else {
+                            ProcessStatus::RunningPreExisting
+                        },
+                        ownership,
+                        identity,
                     )
                 }
             }
@@ -1315,10 +1344,20 @@ impl FormationLapCore {
                     identity,
                 )
             } else {
+                let identity = self.process_runtime.launch(&launch_recipe)?;
+                let ownership = if launch_identity_is_unambiguous(&launch_recipe) {
+                    ProcessOwnership::SessionOwned
+                } else {
+                    ProcessOwnership::PreExisting
+                };
                 (
-                    ProcessStatus::Starting,
-                    ProcessOwnership::SessionOwned,
-                    self.process_runtime.launch(&launch_recipe)?,
+                    if ownership == ProcessOwnership::SessionOwned {
+                        ProcessStatus::Starting
+                    } else {
+                        ProcessStatus::RunningPreExisting
+                    },
+                    ownership,
+                    identity,
                 )
             }
         };
@@ -1370,7 +1409,10 @@ impl FormationLapCore {
                 );
                 continue;
             }
-            application_ids.push(application.id.clone());
+            application_ids.push((
+                application.id.clone(),
+                launch_identity_is_unambiguous(&application.launch_recipe),
+            ));
             operations.push(elevated_launch_operation(&application.launch_recipe)?);
         }
         if operations.is_empty() {
@@ -1390,10 +1432,17 @@ impl FormationLapCore {
                 "elevated launch batch returned the wrong number of results",
             )));
         }
-        for (application_id, result) in application_ids.into_iter().zip(response.results) {
+        for ((application_id, identity_is_unambiguous), result) in
+            application_ids.into_iter().zip(response.results)
+        {
             let prepared = match result {
-                ElevatedOperationResult::Launched { process_identity } => {
+                ElevatedOperationResult::Launched { process_identity }
+                    if identity_is_unambiguous =>
+                {
                     PreparedElevatedLaunch::SessionOwned(process_identity)
+                }
+                ElevatedOperationResult::Launched { process_identity } => {
+                    PreparedElevatedLaunch::PreExisting(process_identity)
                 }
                 ElevatedOperationResult::Failed { message } => {
                     PreparedElevatedLaunch::Failed(message)
@@ -2037,4 +2086,8 @@ fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOpe
         console_visibility: recipe.console_visibility.clone(),
         startup_timeout_seconds: recipe.startup_timeout_seconds,
     })
+}
+
+fn launch_identity_is_unambiguous(recipe: &crate::LaunchRecipe) -> bool {
+    recipe.monitored_process.is_none() || recipe.monitored_executable_path.is_some()
 }

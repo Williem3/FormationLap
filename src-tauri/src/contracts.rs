@@ -83,6 +83,8 @@ pub struct LaunchRecipe {
     pub arguments: Vec<String>,
     pub working_directory: Option<String>,
     pub monitored_process: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitored_executable_path: Option<String>,
     pub console_visibility: ConsoleVisibility,
     pub elevated: bool,
     pub startup_timeout_seconds: u32,
@@ -129,6 +131,7 @@ impl Default for LaunchRecipe {
             arguments: Vec::new(),
             working_directory: None,
             monitored_process: None,
+            monitored_executable_path: None,
             console_visibility: ConsoleVisibility::Hidden,
             elevated: false,
             startup_timeout_seconds: 30,

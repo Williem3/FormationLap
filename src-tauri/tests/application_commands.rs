@@ -131,6 +131,7 @@ fn start_application_command_returns_authoritative_native_process_state() {
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 3,

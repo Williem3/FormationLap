@@ -590,6 +590,7 @@ mod platform {
                 arguments: arguments.clone(),
                 working_directory: working_directory.clone(),
                 monitored_process: monitored_process.clone(),
+                monitored_executable_path: None,
                 console_visibility: console_visibility.clone(),
                 elevated: false,
                 startup_timeout_seconds: *startup_timeout_seconds,

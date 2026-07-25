@@ -33,3 +33,17 @@ Stable releases, and their qualifying Beta candidates, remain Authenticode- and
 Tauri-signed through the fail-closed official release workflow. Relabeling or
 promoting preview bytes was rejected because it would make trust depend on
 release metadata rather than the artifact that users execute.
+
+Because previews retain elevated launch capability without Authenticode, their
+main executable and helper also ship with a release-generated authorization
+manifest containing both SHA-256 hashes, version, helper protocol version, and
+release channel. The release identity key signs the manifest, and both
+executables embed its public key. Signed Beta/Stable builds instead require
+successful WinVerifyTrust validation and the same approved signer certificate
+for the main executable and helper.
+
+First-party update downloads are accepted only over HTTPS from the exact
+`Williem3/FormationLap` release path with expected tag, version, architecture,
+filename, controlled redirects, bounded metadata/installer sizes, and valid
+Tauri signature. Automatic checks are opt-in for new installations; manual
+Check Now remains available.

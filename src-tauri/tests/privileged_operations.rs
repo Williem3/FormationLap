@@ -532,6 +532,7 @@ fn direct_recipe(executable_path: &str, elevated: bool) -> LaunchRecipe {
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated,
         startup_timeout_seconds: 30,

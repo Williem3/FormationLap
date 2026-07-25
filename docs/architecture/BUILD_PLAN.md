@@ -117,6 +117,8 @@ Profiles whose state survives restart and is recoverable from storage damage.
 - Profile validation and stable identifiers.
 - ProfileLibrary with atomic JSON replacement, bounded backups, and migrations.
 - Import/export format with machine-specific path-repair diagnostics.
+- UUID/filename containment, trusted source paths, legacy backup repair, and
+  Needs Review quarantine for newly imported executable configuration.
 - First-run profile wizard.
 - Profiles sidebar and editor matching the approved concepts.
 - Source choice for Steam or direct executable.
@@ -313,7 +315,8 @@ its main process remains non-administrative.
 - Signed-build-compatible one-shot helper binary.
 - Current-user-only authenticated IPC and single-use nonce.
 - Canonical target and bounded operation validation.
-- Batched elevated startup.
+- Sequence-position elevated startup with adjacent-only batching and ownership
+  acknowledgement.
 - Elevated close/restart path.
 - Development test adapter and adversarial protocol tests.
 
@@ -323,8 +326,12 @@ its main process remains non-administrative.
 - Helper rejects version mismatch, replay, wrong user, wrong parent identity,
   noncanonical paths, arbitrary shell text, and out-of-scope operations.
 - Helper exits after every success or failure.
-- One Session startup causes at most one UAC prompt for its elevated launch
-  batch.
+- One adjacent elevated run causes at most one UAC prompt; interleaved normal
+  entries are never reordered to reduce prompts.
+- Helper authenticates the real main executable by user, interactive Session,
+  exact sibling path, release identity, protocol version, and nonce.
+- Missing ownership acknowledgement compensates by stopping the just-launched
+  elevated Process.
 - No long-running privileged process or service remains.
 - Elevated launch and close pass a documented manual Windows test.
 
@@ -384,7 +391,8 @@ notification-only advice for configured applications.
 
 - Stable and Beta channel selection.
 - Tauri signed self-update check and install flow.
-- Daily maximum check schedule and manual Check Now.
+- Opt-in daily maximum check schedule and always-available manual Check Now.
+- Native UpdateCoordinator cancellation and exclusive activity lease.
 - Active-Session update suppression.
 - GitHub Releases, Winget, and official-page Update Provider adapters.
 - Current, Update Available, and Unknown states.
@@ -395,7 +403,10 @@ notification-only advice for configured applications.
 
 - Invalid or missing Tauri update signatures are rejected.
 - Update installation cannot start during an Active Session.
-- Automatic checks happen at most once per day and can be disabled.
+- New-install automatic checks default off; an explicitly saved existing
+  `true` is preserved and checks happen at most once per day.
+- Session start cancels and awaits provider work; installation and Session
+  activity cannot overlap.
 - Third-party providers send no centralized inventory.
 - Unknown is shown instead of guessing when current/latest versions cannot be
   compared reliably.
@@ -430,6 +441,10 @@ installable through the official GitHub release path.
 - Stable and Beta release procedures.
 - Separately gated, clearly disclosed unsigned `v0.x` technical-preview
   procedure that retains updater signatures and supply-chain evidence.
+- Private verified Process handles, monitored-path ownership, profile-ID
+  containment, authenticated helper release identity, ordered elevation
+  acknowledgement, import review, local-storage migration, owned startup
+  registration, and opt-in native update coordination.
 - Release candidate test pass on Windows 10 22H2 and Windows 11.
 
 ### Exit criteria
@@ -443,6 +458,12 @@ installable through the official GitHub release path.
 - Accessibility checks cover keyboard, contrast, screen scaling, and reduced
   motion.
 - Threat checklist has no unresolved critical or high-severity issue.
+- Preview main/helper hashes are bound by a signed release identity manifest;
+  signed Beta/Stable binaries pass WinVerifyTrust and approved-signer equality.
+- Adversarial qualification covers same-name process paths, PID replacement,
+  caller spoofing, manifest tampering, lost ownership acknowledgement, import
+  traversal, storage conflicts, update cancellation, redirects, and size
+  limits.
 - Product specification and UI system match shipped behavior.
 - A signed Beta candidate is tested before the Stable version-one tag.
 - Any earlier public technical preview is a `v0.x` prerelease, cannot trigger

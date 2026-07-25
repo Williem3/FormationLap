@@ -42,16 +42,21 @@ A Racing Profile contains:
 - A remembered VR toggle and a preferred VR Launch Mode.
 - Required/Optional classification for each Supporting Application.
 - Per-entry startup timeout, optional post-start delay, arguments, working
-  directory, monitored process override, console visibility, elevation,
-  shutdown strategy, and keep-running behavior.
+  directory, monitored process name and optional canonical monitored executable
+  path, console visibility, elevation, shutdown strategy, and keep-running
+  behavior.
 - Session-close behavior, including whether to stop SteamVR when eligible.
 
 Profile structure is read-only during its Active Session. Runtime controls
 remain available.
 
-Profiles are stored locally and can be imported or exported as JSON. Import
-preserves portable metadata such as Steam App IDs while clearly flagging
-machine-specific executable paths that need repair.
+Profiles are stored locally and can be imported or exported as JSON. Existing
+installed profiles remain approved. A newly imported portable profile preserves
+all values but enters Needs Review and cannot start a Session until the user
+reviews executable paths, arguments, working directories, elevation, monitored
+executables, and custom-stop recipes. Elevated and custom-stop entries require
+explicit approval; changing an approved privileged recipe invalidates that
+approval. Missing or suspicious paths require file re-selection.
 
 ## First-run and discovery
 
@@ -112,7 +117,8 @@ An executable Launch Recipe includes:
 - Executable path.
 - Arguments as a structured string passed directly to the executable.
 - Working directory, defaulting to the executable's directory.
-- Expected or overridden monitored process.
+- Expected or overridden monitored process name and optional canonical
+  executable path.
 - Visible or hidden console mode.
 - Normal or elevated launch.
 
@@ -136,6 +142,9 @@ with arguments, including long-running terminal programs such as
 - Start Session becomes Cancel Startup while sequencing.
 - Cancel Startup stops future launches and cleans up processes started by that
   attempt while preserving Pre-existing Processes.
+- Elevated entries execute at their saved positions. Only adjacent elevated
+  entries may share a UAC transaction, so batching never reorders the Startup
+  Sequence.
 
 ## Status model
 
@@ -167,6 +176,11 @@ Formation Lap:
 Session-owned identity includes process ID, creation time, and expected
 executable identity so a reused process ID cannot be mistaken for an old
 process.
+
+Every ProcessRuntime action opens the PID once, verifies creation time and the
+canonical executable path from that handle, and keeps the same handle through
+the action. A filename-only monitored match may be shown as observed, but it
+cannot become Session-owned or be stopped automatically.
 
 Explicit Exit or Restart actions may target a Pre-existing Process only after a
 confirmation that names the ownership risk.
@@ -247,6 +261,8 @@ Launch:
 - Launches only the Primary Sim.
 - Records the exact URI or arguments used.
 - Observes the process that appears.
+- Learns the canonical monitored executable path for a launcher-based profile
+  and asks the user to confirm it before that path can establish ownership.
 - Produces a copyable local diagnostic report.
 - Never mutates the signed Curated Catalog.
 
@@ -254,27 +270,40 @@ Launch:
 
 The main Formation Lap process never runs as administrator.
 
-Elevated operations use a signed, one-shot helper:
+Elevated operations use an authenticated, one-shot helper:
 
-- Startup operations are validated and batched behind one UAC prompt where
-  possible.
+- Startup operations execute at their saved position and batch only adjacent
+  elevated entries behind one UAC prompt where possible.
 - Closing elevated applications may require one additional UAC prompt.
+- The helper derives the named-pipe server PID from Windows, then verifies the
+  same user and interactive Session, exact canonical sibling main executable,
+  release identity, protocol version, and one-time nonce before accepting typed
+  work.
+- Each elevated launch is acknowledged only after FormationLapCore journals its
+  stable Process identity. If acknowledgement is lost, the helper compensates
+  by stopping the untracked Process.
 - The helper exits after the requested batch.
 - No persistent privileged service is installed.
 
-Unsigned `v0.x` technical previews use the same typed, authenticated, one-shot
-helper protocol, but Windows identifies the preview helper as an unknown
-publisher. That exception never applies to version one or later Stable
-releases.
+Signed Beta and Stable builds require successful WinVerifyTrust validation and
+the same approved signer certificate for the main executable and helper.
+Unsigned `v0.x` technical previews instead verify a release-generated,
+release-identity-key-signed manifest containing both executable SHA-256 values,
+version, protocol version, and release channel. Windows still identifies the
+preview helper as an unknown publisher. The exception never applies to a signed
+Beta or Stable release.
 
 ## Updates
 
 ### Formation Lap
 
-- Check at most once per day.
+- New installations default automatic checks off; an explicitly saved existing
+  `true` remains enabled.
+- When enabled, check at most once per day.
+- Manual Check Now is always available and consents to that check.
 - Show a non-blocking notification.
-- Never update during an Active Session.
-- Allow update checks to be disabled.
+- Cancel and await any in-flight check before a Session becomes Active.
+- Never install during a Session or start a Session during installation.
 - Support Stable and opt-in Beta channels.
 - Verify Tauri update signatures before installation.
 
@@ -282,6 +311,12 @@ The updater signature is required independently of Windows Authenticode.
 Unsigned `v0.x` technical previews may therefore update only to another
 Tauri-signed official prerelease and must retain their unsigned-preview
 disclosure.
+
+Formation Lap updater downloads are constrained before fetch to HTTPS, the
+exact `Williem3/FormationLap` repository, expected tag/version/architecture/file
+name, controlled redirect hosts, and bounded metadata and installer sizes.
+First-run and Settings copy names every contacted provider, and privacy status
+states `Local data · Online checks on/off`.
 
 ### Other applications
 
@@ -303,6 +338,16 @@ central inventory service.
 - All profiles, settings, overrides, journals, logs, and backups remain local.
 - State uses versioned, human-readable JSON with atomic replacement.
 - Recoverable backups protect against corruption and failed migrations.
+- New storage lives under `%LOCALAPPDATA%`. On the first upgraded launch, a
+  roaming `%APPDATA%` store is copied through a validated temporary local
+  directory only when local storage is empty, atomically activated, and left in
+  place as a recoverable backup. Conflicting stores are never merged silently.
+- Profile filesystem operations use the trusted source path retained by
+  ProfileLibrary. IDs must be UUIDs matching their filenames before save or
+  delete; invalid legacy files are backed up and repaired into new UUID-backed
+  profiles.
+- Start-with-Windows uses a namespaced HKCU Run value. Migration and uninstall
+  touch an older value only when it exactly identifies the current executable.
 - Diagnostic logs are bounded and export only when requested.
 - Formation Lap has no account, analytics, cloud storage, or usage telemetry.
 

@@ -144,6 +144,11 @@ behavior without owning Session policy.
 
 The seam is real because lifecycle policy must be exercised deterministically
 while the Windows implementation must also be verified independently.
+The production adapter privately opens one `VerifiedProcessHandle` with every
+right required by an action, reads creation time and canonical executable path
+from that handle, compares the complete identity, and holds the handle until
+the observation, wait, graceful request, or termination finishes. This
+deepening does not change the ProcessRuntime interface.
 
 ### ProfileLibrary
 
@@ -157,6 +162,9 @@ diagnostics.
 - Save one validated profile.
 - Delete one profile with recoverable backup.
 - Import or export one portable profile document.
+- Retain each trusted source path independently from document content.
+- Repair invalid legacy IDs into UUID-named documents while preserving backups.
+- Keep newly imported executable configuration in Needs Review until approved.
 
 Tests use a real temporary directory. Do not add a filesystem port solely for
 mocking.
@@ -195,15 +203,36 @@ Windows Authenticode but still requires the embedded Tauri trust root and a
 valid updater signature. Network activity is disabled while race-safe behavior
 applies. Update results are exposed only after the Session returns to Idle.
 
+### UpdateCoordinator
+
+**Responsibility:** Own asynchronous online checks and first-party installation
+as native activities serialized with FormationLapCore Session transitions.
+
+**Interface capabilities:**
+
+- `check(trigger)` for explicit or opted-in scheduled checks.
+- `install(checked_version)` under an exclusive core-owned activity lease.
+- `cancel_for_session_start()` and await provider completion or cancellation.
+
+UpdateCoordinator owns tasks, cancellation, URL/redirect/size constraints, and
+the checked-version token. UpdateAdvisor continues to model update knowledge;
+React only sends intent and renders snapshots. A new installation has automatic
+checks off, while an explicitly persisted existing `true` is preserved.
+
 ### PrivilegeBroker
 
 **Responsibility:** Validate and execute the smallest possible elevated batch.
 
-The normal adapter launches the fixed one-shot helper through UAC. Signed
-version-one artifacts verify its Windows publisher during release packaging;
-an explicitly disclosed `v0.x` technical preview may show an unknown publisher.
-Tests use an in-process adapter that records validated operations. The helper
-does not accept arbitrary shell text and cannot remain resident.
+The normal adapter verifies the fixed sibling helper's release identity, creates
+a current-user-only named pipe, and launches the helper through UAC. The helper
+derives the pipe server PID from Windows and verifies the same user and
+interactive Session, exact canonical sibling `formation-lap.exe`, release
+identity, protocol version, and nonce before typed request validation. Signed
+Beta/Stable artifacts require WinVerifyTrust and signer-certificate equality.
+Unsigned previews require a release-identity-key-signed manifest plus exact
+main/helper hashes. Tests use an in-process adapter that records validated
+operations. The helper does not accept arbitrary shell text and cannot remain
+resident.
 
 ### NativeBridge
 
@@ -276,10 +305,15 @@ stable identity returned through the ProcessRuntime seam.
 
 Pre-existing Processes are observed but never adopted for automatic cleanup.
 Explicit user actions require a separate confirmation path.
+Direct recipes use the canonical source path as executable identity. Launcher
+and Steam recipes may name an optional canonical monitored executable path. A
+filename-only match can be displayed, but FormationLapCore must classify it as
+Pre-existing until Test Game Launch learns a path and the user confirms it.
 
 ## Persistence
 
-Formation Lap uses the Tauri application configuration directory:
+Formation Lap stores new state under the per-user local application-data
+directory:
 
 ```text
 Formation Lap/
@@ -301,6 +335,12 @@ Persistence rules:
 - Failed migration never overwrites the last valid document.
 - Session journal writes happen as ownership changes, not only on clean exit.
 - Exported profiles omit transient process identities and diagnostic state.
+- On first upgraded launch, an empty local store may be populated only by
+  copying a roaming store into a temporary local directory, validating every
+  document, and atomically activating it. The roaming copy remains a backup;
+  conflicting stores are never merged.
+- Profile save/delete paths come from ProfileLibrary's trusted inventory, never
+  an untrusted document ID. UUID IDs must match filenames.
 
 ## Windows implementation
 
@@ -312,6 +352,7 @@ The Windows adapter is responsible for:
 - Window enumeration and close requests.
 - Repeated window responsiveness checks.
 - Exit observation.
+- One verified Process handle held through each action.
 - Steam library and process discovery.
 - Protocol launch through validated Steam URIs.
 - Local executable icon extraction.
@@ -330,9 +371,15 @@ The one-shot helper request must contain:
 - A bounded list of typed launch or termination operations.
 - Canonical executable targets and direct argument arrays.
 
-The helper validates the complete request before doing work, reports structured
-results through a current-user-only IPC channel, and exits. It exposes no
-general shell, file-write, or network operation.
+Elevated operations are released at their saved sequence positions. Only
+adjacent elevated entries share a transaction. After each launch, the helper
+returns a stable identity and waits for an ownership acknowledgement; the core
+journals ownership before acknowledging. Missing acknowledgement causes the
+helper to stop the just-launched Process before it exits or continues.
+
+The helper authenticates its caller and validates the complete request before
+doing work, reports structured results through a current-user-only IPC channel,
+and exits. It exposes no general shell, file-write, or network operation.
 
 ## Security model
 

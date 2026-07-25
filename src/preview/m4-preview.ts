@@ -23,6 +23,7 @@ function application(
         Math.max(0, executablePath.lastIndexOf("\\")),
       ),
       monitoredProcess: null,
+      monitoredExecutablePath: null,
       consoleVisibility: "hidden",
       elevated: false,
       startupTimeoutSeconds: 30,
@@ -66,6 +67,7 @@ const primarySim = {
       selector: null,
     },
     monitoredProcess: "LeMansUltimate.exe",
+    monitoredExecutablePath: null,
   },
 };
 

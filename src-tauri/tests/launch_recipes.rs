@@ -172,6 +172,7 @@ fn a_profile_launch_recipe_overrides_curated_defaults() {
         arguments: vec!["-user-choice".to_owned()],
         working_directory: None,
         monitored_process: Some("CustomRaceRoom.exe".to_owned()),
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,
@@ -201,6 +202,7 @@ fn standalone_iracing_keeps_its_direct_executable_recipe() {
         arguments: vec!["-hosted".to_owned()],
         working_directory: Some(r"C:\iRacing".to_owned()),
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,
@@ -497,6 +499,7 @@ fn test_game_launch_starts_only_the_primary_sim_and_writes_a_sanitized_report() 
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,
@@ -564,6 +567,17 @@ fn test_game_launch_starts_only_the_primary_sim_and_writes_a_sanitized_report() 
         Some("Le Mans Ultimate.exe"),
         "the observed Process name should become a per-profile override"
     );
+    assert_eq!(
+        core.snapshot()
+            .selected_profile
+            .expect("tested profile should remain selected")
+            .primary_sim
+            .launch_recipe
+            .monitored_executable_path
+            .as_deref(),
+        Some(r"C:\Private Games\LMU\Le Mans Ultimate.exe"),
+        "the observed canonical path should become a per-profile review candidate"
+    );
 }
 
 fn launch_steam_profile(
@@ -625,6 +639,7 @@ fn try_launch_steam_profile(
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
+        monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
         elevated: false,
         startup_timeout_seconds: 30,

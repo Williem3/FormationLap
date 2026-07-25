@@ -4,10 +4,11 @@ on:
   push:
     tags:
       - "v*"
+      - "!v0.*"
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v-prefixed tag to rebuild and publish
+        description: Existing v1-or-later tag to rebuild and publish
         required: true
         type: string
 
@@ -41,8 +42,8 @@ jobs:
         env:
           REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          if ($env:REQUESTED_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
-            throw "Release tag is not a supported v-prefixed SemVer."
+          if ($env:REQUESTED_TAG -notmatch '^v(?:[1-9]\d*)\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Signed releases require a v1-or-later SemVer tag."
           }
           $tagCommit = git rev-list -n 1 $env:REQUESTED_TAG
           $headCommit = git rev-parse HEAD

@@ -1846,6 +1846,17 @@ function directoryFromPath(path: string): string | null {
   return lastSeparator > 0 ? path.slice(0, lastSeparator) : null;
 }
 
+function displayWindowsPath(path: string): string {
+  const extendedUncPrefix = "\\\\?\\UNC\\";
+  const extendedPathPrefix = "\\\\?\\";
+  if (path.startsWith(extendedUncPrefix)) {
+    return `\\\\${path.slice(extendedUncPrefix.length)}`;
+  }
+  return path.startsWith(extendedPathPrefix)
+    ? path.slice(extendedPathPrefix.length)
+    : path;
+}
+
 function executableNameFromPath(path: string): string | null {
   const lastSeparator = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
   const fileName = path.slice(lastSeparator + 1);
@@ -2130,7 +2141,11 @@ function ProfileWizard({
                         inputMode={
                           primarySimSource === "steam" ? "numeric" : "text"
                         }
-                        value={sourceValue}
+                        value={
+                          primarySimSource === "direct"
+                            ? displayWindowsPath(sourceValue)
+                            : sourceValue
+                        }
                         onChange={(event) =>
                           onSourceValueChange(event.currentTarget.value)
                         }
@@ -2175,7 +2190,7 @@ function ProfileWizard({
                     <small>
                       {primarySimSource === "steam"
                         ? `Steam App ID ${sourceValue}`
-                        : sourceValue}
+                        : displayWindowsPath(sourceValue)}
                     </small>
                   </span>
                 </div>
@@ -2945,7 +2960,7 @@ function ApplicationRecipeFields({
                 value={
                   source.kind === "steam"
                     ? String(source.appId || "")
-                    : source.executablePath
+                    : displayWindowsPath(source.executablePath)
                 }
                 onChange={(event) =>
                   update((next) => {
@@ -3098,7 +3113,9 @@ function ApplicationRecipeFields({
               <span>{label} monitored executable path</span>
               <div className="path-input">
                 <input
-                  value={application.launchRecipe.monitoredExecutablePath ?? ""}
+                  value={displayWindowsPath(
+                    application.launchRecipe.monitoredExecutablePath ?? "",
+                  )}
                   onChange={(event) =>
                     update((next) => {
                       next.launchRecipe.monitoredExecutablePath =
@@ -3240,7 +3257,7 @@ function ApplicationRecipeFields({
               <span>Stop executable path</span>
               <div className="path-input">
                 <input
-                  value={shutdown.executablePath}
+                  value={displayWindowsPath(shutdown.executablePath)}
                   onChange={(event) =>
                     update((next) => {
                       const nextShutdown = next.launchRecipe.shutdownStrategy;

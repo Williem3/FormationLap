@@ -861,6 +861,30 @@ describe("Formation Lap shell", () => {
     ).toBeVisible();
   });
 
+  it("omits the Windows extended-length prefix from displayed executable paths", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    const selectedProfile = snapshot.selectedProfile;
+    if (!selectedProfile) {
+      throw new Error("fixture profile should be selected");
+    }
+    selectedProfile.primarySim.launchRecipe.source = {
+      kind: "directExecutable",
+      executablePath: String.raw`\\?\C:\Fixtures\healthy.exe`,
+    };
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    await user.click(screen.getByText("Launch Recipe details"));
+
+    expect(screen.getByLabelText("Primary Sim executable path")).toHaveValue(
+      String.raw`C:\Fixtures\healthy.exe`,
+    );
+  });
+
   it("selects another Racing Profile from the sidebar", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge({

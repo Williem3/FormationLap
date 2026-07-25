@@ -1276,32 +1276,39 @@ button:disabled {
   letter-spacing: 0.04em;
 }
 
-.rail-node-starting .rail-index,
-.rail-node-running .rail-index {
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-.rail-node-runningPreExisting .rail-index,
-.rail-node-notResponding .rail-index {
+.rail-node[data-rail-tone="warm"] .rail-index {
   border-color: var(--warm);
+  background: color-mix(in srgb, var(--warm) 10%, var(--surface));
   color: var(--warm-ink);
 }
 
-.rail-node-failed .rail-index {
+.rail-node[data-rail-tone="running"] .rail-index {
+  border-color: var(--running);
+  background: color-mix(in srgb, var(--running) 10%, var(--surface));
+  color: var(--running-ink);
+}
+
+.rail-node[data-rail-tone="danger"] .rail-index {
   border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger-ink);
+}
+
+.rail-node[data-rail-tone="warm"] small {
+  color: var(--warm-ink);
+}
+
+.rail-node[data-rail-tone="running"] small {
+  color: var(--running-ink);
+}
+
+.rail-node[data-rail-tone="danger"] small {
   color: var(--danger-ink);
 }
 
 .rail-node-pending .rail-index,
-.rail-node-stopped .rail-index,
 .rail-node-detached .rail-index {
   border-style: dashed;
-}
-
-.rail-node-stopping .rail-index {
-  border-color: var(--accent);
-  color: var(--accent-ink);
 }
 
 .recovery-offer,

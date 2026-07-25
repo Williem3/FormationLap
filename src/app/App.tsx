@@ -3915,6 +3915,30 @@ const sessionApplicationStateLabels: Record<
   detached: "Detached",
 };
 
+type FormationRailTone = "danger" | "neutral" | "running" | "warm";
+
+function formationRailTone(
+  status:
+    | ApplicationProcessSnapshot["status"]
+    | SessionApplicationSnapshot["state"],
+): FormationRailTone {
+  switch (status) {
+    case "running":
+    case "runningPreExisting":
+      return "running";
+    case "pending":
+    case "starting":
+    case "stopping":
+    case "notResponding":
+      return "warm";
+    case "stopped":
+    case "failed":
+      return "danger";
+    case "detached":
+      return "neutral";
+  }
+}
+
 function FormationRail({
   applications,
   applicationProcesses,
@@ -3938,8 +3962,13 @@ function FormationRail({
         const label = state
           ? sessionApplicationStateLabels[state]
           : processStatusLabels[process?.status ?? "stopped"];
+        const tone = formationRailTone(status);
         return (
-          <li className={`rail-node rail-node-${status}`} key={application.id}>
+          <li
+            className={`rail-node rail-node-${status}`}
+            data-rail-tone={tone}
+            key={application.id}
+          >
             <span className="rail-index" aria-hidden="true">
               {String(index + 1).padStart(2, "0")}
             </span>

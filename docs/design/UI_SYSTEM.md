@@ -25,10 +25,9 @@ The Formation Rail is the product's one expressive visual device. It represents
 the actual startup sequence: supporting applications form ordered nodes that
 lead to a larger final game node.
 
-- Before startup, the rail is neutral gray with the final game outlined in Lap
-  Blue.
-- During startup, completed segments move from Lap Blue toward Tire Warmth.
-- When the session is ready, completed segments and nodes use Running Green.
+- Stopped and failed nodes use the danger tone; pending and in-transition nodes
+  use Tire Warmth; both Session-owned and Pre-existing running nodes use
+  Running Green.
 - A failed required app interrupts the rail before the game node.
 - Every node includes an icon and accessible text; color is never the only state
   signal.

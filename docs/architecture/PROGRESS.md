@@ -119,11 +119,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   Curated Catalog. Selecting the unsupported OpenXR mode is rejected before a
   Session starts instead of silently launching Steam option 3. There is no
   active implementation file scope.
-- Dashboard lifecycle rows now use local executable icons supplied by the
-  native snapshot. Canonical Windows `\\?\\` paths are normalized only at the
-  Shell icon-extraction boundary; launch validation and Process identity retain
-  their canonical path. The generic fallback remains for missing paths. There
-  is no active implementation file scope.
+- Formation Rail nodes now map directly to lifecycle tone: red for
+  stopped/failed, Tire Warmth for pending/transitions, and Running Green for
+  both Session-owned and Pre-existing running Processes. There is no active
+  implementation file scope.
 
 Known environment facts:
 
@@ -272,3 +271,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Corrected Le Mans Ultimate's Curated Catalog VR route to its documented SteamVR mode and rejected the unsupported OpenXR Steam option | Red/green `le_mans_ultimate_rejects_the_unsupported_openxr_steam_launch_mode`; 9 launch-recipe tests, catalog validation, Rust format, and targeted Clippy passed | Rebuild/restart Formation Lap, select OpenVR / SteamVR for Le Mans Ultimate, then retry Test Game Launch or Start Session; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Replaced Dashboard lifecycle-row heartbeat/flag placeholders with locally resolved executable icons while retaining the generic fallback for missing paths | Red/green React icon rendering test; `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (37 tests), Rust library tests (32), format, Clippy, and generated-contract check passed | Rebuild/restart Formation Lap to load the native icon snapshot; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Repaired local executable icon lookup for canonical Windows `\\?\\` paths without changing the canonical path retained for launch and Process identity | Red/green `executable_icon_handles_an_extended_length_executable_path`; Rust library tests (33) and native format passed | Close and relaunch Formation Lap after rebuilding to load this native fix; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Gave Formation Rail nodes explicit lifecycle tones: stopped/failed red, pending and transitions Tire Warmth, and both running ownership states green | Red/green React rail-tone coverage; `pnpm.cmd test -- src/app/App.test.tsx` (38 tests), ESLint, TypeScript typecheck, and diff whitespace checks passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |

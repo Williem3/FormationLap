@@ -280,6 +280,89 @@ describe("Formation Lap shell", () => {
     expect(screen.getByText("Did not finish startup")).toBeVisible();
   });
 
+  it("gives Formation Rail stopped, pending, and running nodes their lifecycle tones", async () => {
+    const snapshot = lifecycleSnapshot();
+    const profile = snapshot.selectedProfile!;
+    const stoppedApplication = {
+      ...profile.primarySim,
+      id: "stopped-lifecycle",
+      name: "Stopped fixture",
+    };
+    const pendingApplication = {
+      ...profile.primarySim,
+      id: "pending-lifecycle",
+      name: "Pending fixture",
+    };
+    const preExistingApplication = {
+      ...profile.primarySim,
+      id: "pre-existing-lifecycle",
+      name: "Pre-existing fixture",
+    };
+    profile.supportingApplications = [
+      stoppedApplication,
+      pendingApplication,
+      preExistingApplication,
+    ].map((application) => ({
+      application,
+      requirement: "optional" as const,
+      keepRunning: false,
+    }));
+    snapshot.session = {
+      state: "starting",
+      activeProfileId: profile.id,
+      applications: [
+        {
+          applicationId: stoppedApplication.id,
+          name: stoppedApplication.name,
+          role: "supporting",
+          requirement: "optional",
+          state: "stopped",
+        },
+        {
+          applicationId: pendingApplication.id,
+          name: pendingApplication.name,
+          role: "supporting",
+          requirement: "optional",
+          state: "pending",
+        },
+        {
+          applicationId: preExistingApplication.id,
+          name: preExistingApplication.name,
+          role: "supporting",
+          requirement: "optional",
+          state: "runningPreExisting",
+        },
+        {
+          applicationId: profile.primarySim.id,
+          name: profile.primarySim.name,
+          role: "primarySim",
+          requirement: null,
+          state: "running",
+        },
+      ],
+      summary: null,
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    const rail = await screen.findByRole("list", {
+      name: "Startup sequence",
+    });
+    expect(within(rail).getByText("Stopped fixture").closest("li")).toHaveAttribute(
+      "data-rail-tone",
+      "danger",
+    );
+    expect(within(rail).getByText("Pending fixture").closest("li")).toHaveAttribute(
+      "data-rail-tone",
+      "warm",
+    );
+    expect(
+      within(rail).getByText("Pre-existing fixture").closest("li"),
+    ).toHaveAttribute("data-rail-tone", "running");
+    expect(
+      within(rail).getByText("Healthy fixture").closest("li"),
+    ).toHaveAttribute("data-rail-tone", "running");
+  });
+
   it("starts one configured application and renders authoritative lifecycle state", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

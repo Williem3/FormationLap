@@ -1,6 +1,9 @@
 :root {
   color-scheme: light dark;
-  font-family: "Inter Variable", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --ui-font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--ui-font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
@@ -558,7 +561,7 @@ button:disabled {
 
 .step-index {
   color: var(--accent-ink);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -718,7 +721,7 @@ button:disabled {
   grid-column: 2;
   margin-top: 7px;
   color: var(--running-ink);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -829,7 +832,7 @@ button:disabled {
 
 .recommendation-rank {
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -1057,7 +1060,7 @@ button:disabled {
 .order-divider small,
 .game-divider small {
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1100,7 +1103,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1166,7 +1169,7 @@ button:disabled {
 
 .game-launch-result dt {
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1270,7 +1273,7 @@ button:disabled {
 
 .rail-node small {
   margin-top: 2px;
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   letter-spacing: 0.04em;
 }
@@ -1512,7 +1515,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -1839,7 +1842,7 @@ button:disabled {
   border-radius: 8px;
   background: var(--surface);
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1977,7 +1980,7 @@ button:disabled {
 
 .utility-data {
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -1998,7 +2001,7 @@ button:disabled {
 .settings-value {
   flex: none;
   color: var(--muted);
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.07em;

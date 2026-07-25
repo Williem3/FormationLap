@@ -1953,10 +1953,7 @@ function profileApplicationIcon(
     (candidate) => candidate.applicationId === applicationId,
   )?.icon;
   return icon?.kind === "localData" ? (
-    <img
-      alt=""
-      src={`data:${icon.media_type};base64,${icon.data_base64}`}
-    />
+    <img alt="" src={`data:${icon.media_type};base64,${icon.data_base64}`} />
   ) : (
     fallback
   );
@@ -3696,11 +3693,10 @@ function Dashboard({
           )}
           <div className="profile-dashboard-heading">
             <div>
-              <p className="eyebrow">Startup sequence</p>
               <h2 id="sequence-title">
                 {formationRailReady
                   ? "And Away we go!"
-                  : "Driver's Start Your Engines!"}
+                  : "Drivers Start Your Engines!"}
               </h2>
             </div>
             <div className="profile-dashboard-controls">
@@ -3931,8 +3927,7 @@ type FormationRailTone = "danger" | "neutral" | "running" | "warm";
 
 function formationRailTone(
   status:
-    | ApplicationProcessSnapshot["status"]
-    | SessionApplicationSnapshot["state"],
+    ApplicationProcessSnapshot["status"] | SessionApplicationSnapshot["state"],
 ): FormationRailTone {
   switch (status) {
     case "running":
@@ -3998,7 +3993,7 @@ function FormationRail({
   sessionApplications: SessionApplicationSnapshot[];
 }) {
   return (
-    <ol className="formation-rail" aria-label="Startup sequence">
+    <ol className="formation-rail" aria-label="Formation Rail">
       {applications.map((application) => {
         const sessionApplication = sessionApplications.find(
           (candidate) => candidate.applicationId === application.id,

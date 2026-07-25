@@ -35,8 +35,8 @@ Lighting/mood: quiet, trustworthy, engineered, premium without luxury theatrics
 Color palette: Paddock White #F4F5F7, Fog Panel #E8EBEF, Carbon Ink #15171B,
 Telemetry Gray #68717D, Lap Blue #3478F6, Tire Warmth #E89B3C; reserve green and
 red only for process state
-Typography: humanist sans similar to Inter for interface copy; restrained
-condensed timing-style face for statuses and numeric data
+Typography: Apple-style system sans similar to SF Pro for interface copy;
+compact utility data uses the same family with tabular numerals
 Text (verbatim): "Formation Lap", "Start session", "Close session", "Running",
 "Pre-existing", "Not Responding", "Stopped", "VR", "Required", "Optional"
 Signature: the Formation Rail is a thin continuous route through ordered

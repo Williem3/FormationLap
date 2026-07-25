@@ -119,9 +119,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   Curated Catalog. Selecting the unsupported OpenXR mode is rejected before a
   Session starts instead of silently launching Steam option 3. There is no
   active implementation file scope.
-- The Dashboard Formation Rail heading now reads `Driver's Start Your Engines!`
-  until every node is running, then reads `And Away we go!`. There is no active
-  implementation file scope.
+- The Dashboard no longer shows a redundant Startup Sequence label; its
+  race-start copy reads `Drivers Start Your Engines!`. Inter and Barlow are
+  removed in favor of an Apple-style system stack with the native Windows
+  fallback. There is no active implementation file scope.
 
 Known environment facts:
 
@@ -273,3 +274,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Gave Formation Rail nodes explicit lifecycle tones: stopped/failed red, pending and transitions Tire Warmth, and both running ownership states green | Red/green React rail-tone coverage; `pnpm.cmd test -- src/app/App.test.tsx` (38 tests), ESLint, TypeScript typecheck, and diff whitespace checks passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Replaced Formation Rail ordinal circles with solid start-light state markers and hid the horizontal scrollbar without disabling overflow scrolling | Red/green React marker regression; `pnpm.cmd test -- src/app/App.test.tsx` (39 tests), ESLint, TypeScript typecheck, and diff whitespace checks passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Made the Formation Rail heading contextual: `Driver's Start Your Engines!` until all nodes are green, then `And Away we go!` | Red/green React heading coverage; `pnpm.cmd test -- src/app/App.test.tsx` (40 tests), ESLint, TypeScript typecheck, and diff whitespace checks passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Removed the redundant Formation Rail eyebrow, corrected its race-start heading, renamed the accessible rail label, and replaced bundled Inter/Barlow UI fonts with an Apple-style system stack | Red/green React heading coverage; `pnpm.cmd install --lockfile-only --offline`, format, `pnpm.cmd test -- src/app/App.test.tsx` (40 tests), ESLint, TypeScript typecheck, and production build passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |

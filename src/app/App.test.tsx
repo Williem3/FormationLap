@@ -205,7 +205,7 @@ describe("Formation Lap shell", () => {
     expect(
       await screen.findByRole("button", { name: "Cancel startup" }),
     ).toBeEnabled();
-    const rail = screen.getByRole("list", { name: "Startup sequence" });
+    const rail = screen.getByRole("list", { name: "Formation Rail" });
     expect(within(rail).getByText("Healthy fixture")).toBeVisible();
     expect(within(rail).getByText("Starting")).toBeVisible();
   });
@@ -272,7 +272,7 @@ describe("Formation Lap shell", () => {
     render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
 
     const rail = await screen.findByRole("list", {
-      name: "Startup sequence",
+      name: "Formation Rail",
     });
     expect(within(rail).getByText("Failed")).toBeVisible();
     expect(within(rail).queryByText("Running")).not.toBeInTheDocument();
@@ -345,16 +345,14 @@ describe("Formation Lap shell", () => {
     render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
 
     const rail = await screen.findByRole("list", {
-      name: "Startup sequence",
+      name: "Formation Rail",
     });
-    expect(within(rail).getByText("Stopped fixture").closest("li")).toHaveAttribute(
-      "data-rail-tone",
-      "danger",
-    );
-    expect(within(rail).getByText("Pending fixture").closest("li")).toHaveAttribute(
-      "data-rail-tone",
-      "warm",
-    );
+    expect(
+      within(rail).getByText("Stopped fixture").closest("li"),
+    ).toHaveAttribute("data-rail-tone", "danger");
+    expect(
+      within(rail).getByText("Pending fixture").closest("li"),
+    ).toHaveAttribute("data-rail-tone", "warm");
     expect(
       within(rail).getByText("Pre-existing fixture").closest("li"),
     ).toHaveAttribute("data-rail-tone", "running");
@@ -369,21 +367,25 @@ describe("Formation Lap shell", () => {
     );
 
     const rail = await screen.findByRole("list", {
-      name: "Startup sequence",
+      name: "Formation Rail",
     });
     expect(rail.querySelector(".race-light")).toBeTruthy();
     expect(container.querySelector(".rail-index")).toBeNull();
   });
 
-  it("celebrates when every Formation Rail node is running", async () => {
+  it("uses race-start copy and celebrates when every Formation Rail node is running", async () => {
     const initial = render(
       <App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />,
     );
     expect(
       await screen.findByRole("heading", {
-        name: "Driver's Start Your Engines!",
+        name: "Drivers Start Your Engines!",
       }),
     ).toBeVisible();
+    expect(screen.queryByText("Startup sequence")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Startup sequence" }),
+    ).not.toBeInTheDocument();
     initial.unmount();
 
     const ready = lifecycleSnapshot();

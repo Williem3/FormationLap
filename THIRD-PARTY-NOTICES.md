@@ -15,6 +15,6 @@ Every official release also includes a Cyclone-free SPDX 2.3 SBOM named
 `Formation-Lap_<version>.spdx.json`. The generated files for a particular
 version are authoritative because they reflect that tag's lockfiles.
 
-The Inter and Barlow Condensed fonts are provided by Fontsource packages and
-retain the upstream SIL Open Font License 1.1. Formation Lap does not bundle
-game artwork, third-party application installers, or vendor-owned branding.
+Formation Lap uses operating-system-supplied system fonts and does not bundle
+third-party font packages, game artwork, third-party application installers, or
+vendor-owned branding.

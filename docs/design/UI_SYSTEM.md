@@ -77,21 +77,23 @@ token directly as small text simply because its non-text contrast passes.
 
 ## Typography
 
-Use locally bundled, open-source variable fonts:
+Use an Apple-style system stack without bundling proprietary fonts:
 
-- **Inter Variable** for headings, controls, and body copy.
-- **Barlow Condensed** for compact timing, status, version, and numeric data.
-- Fall back to `"Segoe UI Variable", "Segoe UI", sans-serif`.
+- Prefer **SF Pro** through `-apple-system` and `BlinkMacSystemFont` where the
+  platform supplies it.
+- On Windows, use **Segoe UI Variable** / **Segoe UI** as the native fallback.
+- Use the same stack for headings, controls, copy, and compact utility data;
+  use monospaced system fonts only for code and diagnostic output.
 
-| Role            | Size / line height | Weight                |
-| --------------- | ------------------ | --------------------- |
-| Display         | `28 / 36`          | 600                   |
-| Page heading    | `24 / 32`          | 600                   |
-| Section heading | `20 / 28`          | 600                   |
-| Row title       | `16 / 24`          | 600                   |
-| Body            | `14 / 20`          | 400                   |
-| Caption         | `12 / 16`          | 400                   |
-| Utility data    | `12 / 16`          | 500, Barlow Condensed |
+| Role            | Size / line height | Weight |
+| --------------- | ------------------ | ------ |
+| Display         | `28 / 36`          | 600    |
+| Page heading    | `24 / 32`          | 600    |
+| Section heading | `20 / 28`          | 600    |
+| Row title       | `16 / 24`          | 600    |
+| Body            | `14 / 20`          | 400    |
+| Caption         | `12 / 16`          | 400    |
+| Utility data    | `12 / 16`          | 500    |
 
 Use sentence case. Labels describe what users control, not implementation
 details.

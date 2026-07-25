@@ -1419,9 +1419,7 @@ button:disabled {
 
 .lifecycle-row {
   display: grid;
-  grid-template-columns:
-    36px minmax(168px, 1fr) minmax(100px, auto) minmax(148px, auto)
-    minmax(172px, auto);
+  grid-template-columns: 36px minmax(168px, 1fr) 150px 200px 240px;
   column-gap: 32px;
   row-gap: 12px;
   align-items: center;
@@ -1513,6 +1511,11 @@ button:disabled {
 }
 
 .classification-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 28px;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;

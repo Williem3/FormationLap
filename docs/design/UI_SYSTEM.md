@@ -127,8 +127,8 @@ Contains, in order:
 1. Drag handle when editing.
 2. Local executable icon or generic fallback.
 3. Application name and one concise supporting line.
-4. Required/Optional classification in its own stable column.
-5. Status indicator with icon and text in a separate stable column.
+4. Required/Optional classification centered in its own fixed-width column.
+5. Status indicator with icon and text in a separate fixed-width column.
 6. Output action in the lifecycle-action column: `View Output` when native
    output is captured, otherwise a disabled `No Output` placeholder.
 7. Update state when known.

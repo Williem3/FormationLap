@@ -119,10 +119,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   Curated Catalog. Selecting the unsupported OpenXR mode is rejected before a
   Session starts instead of silently launching Steam option 3. There is no
   active implementation file scope.
-- Dashboard lifecycle rows now separate Requirement, Status, and Output into
-  stable columns. Every application shows `View Output` when captured output
-  exists, otherwise a disabled `No Output` placeholder. There is no active
-  implementation file scope.
+- Dashboard lifecycle rows now use fixed Requirement, Status, and action
+  tracks, so variable labels cannot shift one row out of alignment. Requirement
+  text is centered within its pill. There is no active implementation file
+  scope.
 
 Known environment facts:
 
@@ -276,3 +276,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Made the Formation Rail heading contextual: `Driver's Start Your Engines!` until all nodes are green, then `And Away we go!` | Red/green React heading coverage; `pnpm.cmd test -- src/app/App.test.tsx` (40 tests), ESLint, TypeScript typecheck, and diff whitespace checks passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Removed the redundant Formation Rail eyebrow, corrected its race-start heading, renamed the accessible rail label, and replaced bundled Inter/Barlow UI fonts with an Apple-style system stack | Red/green React heading coverage; `pnpm.cmd install --lockfile-only --offline`, format, `pnpm.cmd test -- src/app/App.test.tsx` (40 tests), ESLint, TypeScript typecheck, and production build passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Separated Dashboard lifecycle-row Requirement, Status, and Output/action columns; every app now exposes `View Output` when captured output exists or a disabled `No Output` placeholder | Red/green React coverage for unavailable output; `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (41 tests), production build, and `git diff --check` passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Fixed Dashboard lifecycle-row geometry: centered Requirement pills and fixed Requirement, Status, and action tracks prevent long labels from offsetting a row | `pnpm.cmd format`, ESLint, TypeScript typecheck, `pnpm.cmd test -- src/app/App.test.tsx` (41 tests), production build, and `git diff --check` passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |

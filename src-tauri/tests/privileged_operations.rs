@@ -805,6 +805,13 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
             exited: false,
         }],
     }));
+    broker.queue_response(Ok(ElevatedHelperResponse {
+        protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+        nonce: "development-force-stop".to_owned(),
+        accepted: true,
+        error: None,
+        results: vec![ElevatedOperationResult::ForceTerminated],
+    }));
     let mut core = FormationLapCore::open_with_runtime_and_privilege_broker(
         storage.path(),
         PrivilegedStartupRuntime,
@@ -858,6 +865,25 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
         core.snapshot().application_processes[0].status,
         ProcessStatus::Stopping
     );
+
+    let primary_application_id = core.snapshot().application_processes[0]
+        .application_id
+        .clone();
+    assert_eq!(
+        core.execute(AppCommand::ForceStopApplication {
+            application_id: primary_application_id.clone(),
+            pre_existing_confirmed: false,
+            force_confirmed: true,
+        })
+        .expect("a Stopping Session-owned Process should be force-stoppable during close"),
+        CommandOutcome::ApplicationStopped {
+            application_id: primary_application_id,
+        }
+    );
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("forced termination should let remaining Session cleanup finish");
+    assert_eq!(core.snapshot().session.state, SessionState::Idle);
+    assert_eq!(observed_broker.recorded_batches().len(), 3);
 }
 
 fn direct_recipe(executable_path: &str, elevated: bool) -> LaunchRecipe {

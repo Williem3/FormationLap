@@ -743,7 +743,7 @@ impl FormationLapCore {
                 pre_existing_confirmed,
                 force_confirmed,
             } => {
-                self.ensure_manual_lifecycle_is_available("Force Stop Application")?;
+                self.ensure_force_stop_is_available()?;
                 if !force_confirmed {
                     return Ok(CommandOutcome::ForceStopConfirmationRequired { application_id });
                 }
@@ -1763,6 +1763,19 @@ impl FormationLapCore {
             return Err(CoreError::InvalidSessionTransition {
                 current: self.session.state.clone(),
                 command,
+            });
+        }
+        Ok(())
+    }
+
+    fn ensure_force_stop_is_available(&self) -> Result<(), CoreError> {
+        if !matches!(
+            self.session.state,
+            crate::SessionState::Idle | crate::SessionState::Active | crate::SessionState::Closing
+        ) {
+            return Err(CoreError::InvalidSessionTransition {
+                current: self.session.state.clone(),
+                command: "Force Stop Application",
             });
         }
         Ok(())

@@ -3426,6 +3426,8 @@ function Dashboard({
     sessionState !== "idle" && session?.activeProfileId === selectedProfile?.id;
   const lifecycleControlsLocked =
     !["idle", "active"].includes(sessionState) || isBusy;
+  const forceStopAvailable =
+    !isBusy && ["idle", "active", "closing"].includes(sessionState);
 
   return (
     <>
@@ -3757,7 +3759,9 @@ function Dashboard({
                     update={updates?.applications.find(
                       (candidate) => candidate.applicationId === application.id,
                     )}
-                    isBusy={lifecycleControlsLocked}
+                    isBusy={isBusy}
+                    lifecycleControlsLocked={lifecycleControlsLocked}
+                    forceStopAvailable={forceStopAvailable}
                     onStart={onStartApplication}
                     onExit={onExitApplication}
                     onRestart={onRestartApplication}
@@ -3781,7 +3785,9 @@ function Dashboard({
                   candidate.applicationId === selectedProfile.primarySim.id,
               )}
               update={undefined}
-              isBusy={lifecycleControlsLocked}
+              isBusy={isBusy}
+              lifecycleControlsLocked={lifecycleControlsLocked}
+              forceStopAvailable={forceStopAvailable}
               isPrimary
               onStart={onStartApplication}
               onExit={onExitApplication}
@@ -3926,6 +3932,8 @@ interface ApplicationLifecycleRowProps {
   process: ApplicationProcessSnapshot | undefined;
   update: ApplicationUpdateSnapshot | undefined;
   isBusy: boolean;
+  lifecycleControlsLocked: boolean;
+  forceStopAvailable: boolean;
   isPrimary?: boolean;
   onStart(application: ProfileApplication): void;
   onExit(
@@ -3950,6 +3958,8 @@ function ApplicationLifecycleRow({
   process,
   update,
   isBusy,
+  lifecycleControlsLocked,
+  forceStopAvailable,
   isPrimary = false,
   onStart,
   onExit,
@@ -4027,7 +4037,9 @@ function ApplicationLifecycleRow({
           <button
             type="button"
             className="secondary-button compact-action"
-            disabled={isBusy || application.pathNeedsRepair}
+            disabled={
+              isBusy || lifecycleControlsLocked || application.pathNeedsRepair
+            }
             onClick={() => onStart(application)}
             aria-label={`Start ${application.name}`}
           >
@@ -4037,7 +4049,7 @@ function ApplicationLifecycleRow({
           <button
             type="button"
             className="danger-button compact-action"
-            disabled={isBusy}
+            disabled={isBusy || !forceStopAvailable}
             onClick={() => onForceStop(application, process)}
             aria-label={`Force stop ${application.name}`}
           >
@@ -4048,7 +4060,7 @@ function ApplicationLifecycleRow({
             <button
               type="button"
               className="secondary-button compact-action"
-              disabled={isBusy}
+              disabled={isBusy || lifecycleControlsLocked}
               onClick={() => onExit(application, process)}
               aria-label={`Exit ${application.name}`}
             >
@@ -4057,7 +4069,7 @@ function ApplicationLifecycleRow({
             <button
               type="button"
               className="secondary-button compact-action"
-              disabled={isBusy}
+              disabled={isBusy || lifecycleControlsLocked}
               onClick={() => onRestart(application, process)}
               aria-label={`Restart ${application.name}`}
             >

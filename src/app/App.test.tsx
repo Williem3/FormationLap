@@ -312,6 +312,36 @@ describe("Formation Lap shell", () => {
     ).toBeVisible();
   });
 
+  it("keeps Force stop available for a Stopping Process while closing a Session", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [processSnapshot({ status: "stopping" })];
+    snapshot.session = {
+      state: "closing",
+      activeProfileId: "profile-lifecycle",
+      applications: [
+        {
+          applicationId: "sim-lifecycle",
+          name: "Healthy fixture",
+          role: "primarySim",
+          requirement: null,
+          state: "stopping",
+        },
+      ],
+      summary: null,
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    const forceStop = await screen.findByRole("button", {
+      name: "Force stop Healthy fixture",
+    });
+    expect(forceStop).toBeEnabled();
+    await user.click(forceStop);
+    expect(
+      screen.getByRole("heading", { name: "Force stop Healthy fixture?" }),
+    ).toBeVisible();
+  });
+
   it("shows bounded local console output and truncation state", async () => {
     const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();

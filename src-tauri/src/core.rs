@@ -775,6 +775,10 @@ impl FormationLapCore {
                 process.ownership = None;
                 process.identity = None;
                 self.failed_responsiveness_checks.remove(&application_id);
+                self.sync_session_application_states();
+                if self.session.state == crate::SessionState::Closing {
+                    self.advance_session_close()?;
+                }
                 if let Some(recipe) = self.pending_restarts.remove(&application_id) {
                     let ownership = self.launch_or_adopt(&application_id, recipe)?;
                     Ok(if ownership == ProcessOwnership::PreExisting {

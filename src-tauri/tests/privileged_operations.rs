@@ -880,9 +880,11 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
             application_id: primary_application_id,
         }
     );
-    core.execute(AppCommand::RefreshProcesses)
-        .expect("forced termination should let remaining Session cleanup finish");
-    assert_eq!(core.snapshot().session.state, SessionState::Idle);
+    assert_eq!(
+        core.snapshot().session.state,
+        SessionState::Idle,
+        "forced termination should immediately let the remaining Session cleanup finish"
+    );
     assert_eq!(observed_broker.recorded_batches().len(), 3);
 }
 

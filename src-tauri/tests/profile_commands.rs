@@ -265,3 +265,116 @@ fn import_command_exposes_review_state_and_native_approval() {
         ProfileReviewStatus::Approved
     );
 }
+
+#[test]
+fn first_local_open_atomically_copies_and_validates_the_roaming_store() {
+    let storage = TempStorage::new();
+    let roaming = storage.path().join("roaming");
+    let local = storage.path().join("local");
+    fs::create_dir_all(&roaming).expect("roaming storage should be created");
+    fs::create_dir_all(&local).expect("empty local storage should be created");
+    let roaming_commands =
+        NativeCommandHost::open(&roaming).expect("roaming command host should open");
+    roaming_commands
+        .create_profile(CreateProfilePayload {
+            name: "Migrated endurance".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("roaming profile should be created");
+    drop(roaming_commands);
+
+    let commands = NativeCommandHost::open_with_roaming_migration(&local, &roaming)
+        .expect("valid roaming storage should migrate");
+    let snapshot = commands
+        .get_app_snapshot()
+        .expect("migrated command host should answer");
+
+    assert_eq!(snapshot.profiles.len(), 1);
+    assert_eq!(snapshot.profiles[0].name, "Migrated endurance");
+    assert!(
+        fs::read_dir(local.join("profiles"))
+            .expect("local profiles should be activated")
+            .next()
+            .is_some(),
+        "the validated copy should be activated in local storage"
+    );
+    assert!(
+        fs::read_dir(roaming.join("profiles"))
+            .expect("roaming profiles should remain readable")
+            .next()
+            .is_some(),
+        "the roaming source must remain as a recoverable backup"
+    );
+}
+
+#[test]
+fn invalid_roaming_documents_never_activate_local_storage() {
+    let storage = TempStorage::new();
+    let roaming = storage.path().join("roaming");
+    let local = storage.path().join("local");
+    fs::create_dir_all(roaming.join("backups")).expect("roaming backup storage should be created");
+    fs::create_dir_all(&local).expect("empty local storage should be created");
+    fs::write(
+        roaming.join("backups").join("corrupt.json"),
+        b"{ definitely not json",
+    )
+    .expect("invalid roaming fixture should be written");
+
+    let error = match NativeCommandHost::open_with_roaming_migration(&local, &roaming) {
+        Ok(_) => panic!("invalid roaming storage must not activate"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code, "invalid_local_state");
+    assert!(
+        fs::read_dir(&local)
+            .expect("local storage should remain readable")
+            .next()
+            .is_none(),
+        "the empty local destination must remain untouched"
+    );
+    assert!(
+        roaming.join("backups").join("corrupt.json").exists(),
+        "the invalid roaming source must remain recoverable"
+    );
+}
+
+#[test]
+fn populated_local_and_roaming_stores_are_never_merged() {
+    let storage = TempStorage::new();
+    let roaming = storage.path().join("roaming");
+    let local = storage.path().join("local");
+    let roaming_commands =
+        NativeCommandHost::open(&roaming).expect("roaming command host should open");
+    roaming_commands
+        .create_profile(CreateProfilePayload {
+            name: "Roaming profile".to_owned(),
+            primary_sim_name: "Assetto Corsa Competizione".to_owned(),
+        })
+        .expect("roaming profile should be created");
+    drop(roaming_commands);
+    let local_commands = NativeCommandHost::open(&local).expect("local command host should open");
+    local_commands
+        .create_profile(CreateProfilePayload {
+            name: "Local profile".to_owned(),
+            primary_sim_name: "iRacing".to_owned(),
+        })
+        .expect("local profile should be created");
+    drop(local_commands);
+
+    let commands = NativeCommandHost::open_with_roaming_migration(&local, &roaming)
+        .expect("a populated local store should take precedence");
+    let snapshot = commands
+        .get_app_snapshot()
+        .expect("local command host should answer");
+
+    assert_eq!(snapshot.profiles.len(), 1);
+    assert_eq!(snapshot.profiles[0].name, "Local profile");
+    assert!(
+        fs::read_dir(roaming.join("profiles"))
+            .expect("roaming profiles should remain readable")
+            .next()
+            .is_some(),
+        "the conflicting roaming store should remain untouched"
+    );
+}

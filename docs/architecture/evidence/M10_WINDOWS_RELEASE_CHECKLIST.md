@@ -44,23 +44,26 @@ matrix.
 Repeat every row on a clean/reset 64-bit Windows 10 22H2 machine and a current
 Windows 11 machine.
 
-| Check                                                                 | Windows 10 22H2 | Windows 11 | Evidence |
-| --------------------------------------------------------------------- | --------------- | ---------- | -------- |
-| Per-user install completes without administrator rights               | Pending         | Pending    | —        |
-| Start Menu shortcut and branded installer/uninstaller are correct     | Pending         | Pending    | —        |
-| First launch opens the onboarding flow                                | Pending         | Pending    | —        |
-| Curated discovery and Manual Entry work                               | Pending         | Pending    | —        |
-| Profile save/export/import round trip works                           | Pending         | Pending    | —        |
-| Startup Sequence launches Supporting Applications, then Primary Sim   | Pending         | Pending    | —        |
-| Failure retry/skip/cancel paths remain usable                         | Pending         | Pending    | —        |
-| Session-owned close and Pre-existing confirmation behave correctly    | Pending         | Pending    | —        |
-| Explicit elevated launch/close shows one UAC prompt and succeeds      | Pending         | Pending    | —        |
-| Tray hide/show/exit and interrupted-Session recovery work             | Pending         | Pending    | —        |
-| Stable/Beta update check stays race-safe while Primary Sim runs       | Pending         | Pending    | —        |
-| Signed Beta-to-newer-Beta update installs only after explicit intent  | Pending         | Pending    | —        |
-| Third-party update advice never downloads an installer                | Pending         | Pending    | —        |
-| Uninstall removes binaries, shortcuts, and uninstaller registry entry | Pending         | Pending    | —        |
-| User profiles remain until explicitly deleted                         | Pending         | Pending    | —        |
+| Check                                                                  | Windows 10 22H2 | Windows 11 | Evidence |
+| ---------------------------------------------------------------------- | --------------- | ---------- | -------- |
+| Per-user install completes without administrator rights                | Pending         | Pending    | —        |
+| Start Menu shortcut and branded installer/uninstaller are correct      | Pending         | Pending    | —        |
+| First launch opens the onboarding flow                                 | Pending         | Pending    | —        |
+| Curated discovery and Manual Entry work                                | Pending         | Pending    | —        |
+| Profile save/export/import round trip works                            | Pending         | Pending    | —        |
+| Empty roaming storage migrates to LocalAppData without deleting backup | Pending         | Pending    | —        |
+| Conflicting local and roaming stores are not merged                    | Pending         | Pending    | —        |
+| Startup Sequence launches Supporting Applications, then Primary Sim    | Pending         | Pending    | —        |
+| Failure retry/skip/cancel paths remain usable                          | Pending         | Pending    | —        |
+| Session-owned close and Pre-existing confirmation behave correctly     | Pending         | Pending    | —        |
+| Explicit elevated launch/close shows one UAC prompt and succeeds       | Pending         | Pending    | —        |
+| Tray hide/show/exit and interrupted-Session recovery work              | Pending         | Pending    | —        |
+| Stable/Beta update check stays race-safe while Primary Sim runs        | Pending         | Pending    | —        |
+| Signed Beta-to-newer-Beta update installs only after explicit intent   | Pending         | Pending    | —        |
+| Third-party update advice never downloads an installer                 | Pending         | Pending    | —        |
+| Uninstall removes binaries, shortcuts, and uninstaller registry entry  | Pending         | Pending    | —        |
+| Uninstall removes only exact-owned Formation Lap startup values        | Pending         | Pending    | —        |
+| User profiles remain until explicitly deleted                          | Pending         | Pending    | —        |
 
 ## Accessibility and visual matrix
 

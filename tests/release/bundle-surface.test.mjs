@@ -25,6 +25,10 @@ const releaseBundleConfiguration = JSON.parse(
     "utf8",
   ),
 );
+const installerHooks = readFileSync(
+  resolve(import.meta.dirname, "..", "..", "src-tauri", "windows", "hooks.nsh"),
+  "utf8",
+);
 
 function binBlock(name) {
   const blocks = manifest.split("[[bin]]").slice(1);
@@ -77,4 +81,20 @@ test("release bundles install the helper authorization manifest as a native reso
   assert.deepEqual(releaseBundleConfiguration.bundle.resources, {
     "release-identity/formation-lap-release-identity.json": "",
   });
+});
+
+test("the uninstaller removes only exact-owned startup registrations", () => {
+  assert.equal(
+    tauriConfiguration.bundle.windows.nsis.installerHooks,
+    "./windows/hooks.nsh",
+  );
+  assert.match(installerHooks, /NSIS_HOOK_PREUNINSTALL/);
+  assert.match(installerHooks, /NSIS_HOOK_POSTUNINSTALL/);
+  assert.match(
+    installerHooks,
+    /com\.formationlap\.desktop\.StartWithWindows\.v1/,
+  );
+  assert.match(installerHooks, /\$\{MAINBINARYNAME\}\.exe.*--minimized/);
+  assert.match(installerHooks, /Formation Lap/);
+  assert.match(installerHooks, /WriteRegStr/);
 });

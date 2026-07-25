@@ -62,18 +62,28 @@ First export any profiles you want to keep. Close Formation Lap, including the
 system-tray process. The per-user application configuration directory is:
 
 ```text
-%APPDATA%\com.formationlap.desktop
+%LOCALAPPDATA%\com.formationlap.desktop
 ```
 
 Rename that directory to keep a reversible backup, then start Formation Lap.
 Delete the backup only after confirming the new state is correct.
 
+An upgraded installation can also retain the former roaming backup at:
+
+```text
+%APPDATA%\com.formationlap.desktop
+```
+
+Formation Lap copies that store only when the local directory is empty,
+validates the temporary copy before activation, and never merges two populated
+stores.
+
 ## Uninstall completely
 
 Use Windows **Settings → Apps → Installed apps → Formation Lap → Uninstall**.
 The uninstaller removes application binaries and shortcuts. It preserves the
-local configuration directory to avoid silently deleting profiles. Remove the
-directory above manually only if a full data deletion is intended.
+local configuration directory by default to avoid silently deleting profiles.
+Remove the directory above manually only if a full data deletion is intended.
 
 ## Development setup failures
 

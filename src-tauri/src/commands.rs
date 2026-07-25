@@ -187,6 +187,15 @@ impl From<CoreError> for CommandError {
                 error.to_string(),
                 Some("Start a fresh update check and try again."),
             ),
+            CoreError::Storage(ref storage_error)
+                if storage_error.kind() == std::io::ErrorKind::InvalidData =>
+            {
+                (
+                    "invalid_local_state",
+                    "Formation Lap found local profile data it cannot safely open.".to_owned(),
+                    Some("Restore a valid backup or export diagnostics."),
+                )
+            }
             CoreError::Storage(_) => (
                 "storage_failed",
                 "Formation Lap could not update local profile storage.".to_owned(),
@@ -233,6 +242,19 @@ pub struct NativeCommandHost {
 impl NativeCommandHost {
     pub fn open(storage_root: impl AsRef<Path>) -> Result<Self, CommandError> {
         Self::from_core(FormationLapCore::open(storage_root).map_err(CommandError::from)?)
+    }
+
+    pub fn open_with_roaming_migration(
+        local_storage_root: impl AsRef<Path>,
+        roaming_storage_root: impl AsRef<Path>,
+    ) -> Result<Self, CommandError> {
+        let local_storage_root = local_storage_root.as_ref();
+        crate::storage_migration::prepare_local_storage(
+            local_storage_root,
+            roaming_storage_root.as_ref(),
+        )
+        .map_err(CommandError::from)?;
+        Self::open(local_storage_root)
     }
 
     pub fn open_with_runtime(

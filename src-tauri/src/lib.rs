@@ -17,6 +17,7 @@ mod profile_library;
 mod release_identity;
 mod session_journal;
 mod settings;
+mod storage_migration;
 mod update_advisor;
 mod update_providers;
 
@@ -240,9 +241,11 @@ pub fn run() {
         .plugin(navigation_guard)
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let storage_root = app.path().app_config_dir()?;
-            let commands = NativeCommandHost::open(storage_root)
-                .map_err(|error| std::io::Error::other(error.message))?;
+            let storage_root = app.path().app_local_data_dir()?;
+            let roaming_storage_root = app.path().app_config_dir()?;
+            let commands =
+                NativeCommandHost::open_with_roaming_migration(storage_root, roaming_storage_root)
+                    .map_err(|error| std::io::Error::other(error.message))?;
             let settings = commands
                 .get_app_snapshot()
                 .map_err(|error| std::io::Error::other(error.message))?

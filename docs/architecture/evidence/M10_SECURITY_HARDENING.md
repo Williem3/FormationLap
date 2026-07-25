@@ -11,16 +11,16 @@ blocked until this program is complete and separately reviewed.
 
 ## Slice status
 
-| Slice                                                    | Status      | Durable behavior evidence                                                                                                                                                                 |
-| -------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Verified Process handles and monitored paths             | Complete    | `launcher_style_launch_returns_the_monitored_process_identity`, `filename_only_launcher_identity_is_observed_without_session_ownership`, all 11 real Windows ProcessRuntime fixture tests |
-| Profile-ID containment and legacy repair                 | Complete    | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
-| Helper caller authentication and preview identity        | Complete    | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
-| Ordered adjacent elevation and ownership acknowledgement | Complete    | Saved-position launch test, durable journal-before-ack test, and real helper compensation test                                                                                            |
-| Imported-profile review                                  | Complete    | Native review state, exact privileged-entry approval, invalidation tests, and React quarantine behavior                                                                                   |
-| Local storage and startup migration                      | In progress | Next slice                                                                                                                                                                                |
-| Opt-in native update coordination                        | Pending     | —                                                                                                                                                                                         |
-| Signed-build equality and adversarial qualification      | Pending     | —                                                                                                                                                                                         |
+| Slice                                                    | Status   | Durable behavior evidence                                                                                                                                                                 |
+| -------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Verified Process handles and monitored paths             | Complete | `launcher_style_launch_returns_the_monitored_process_identity`, `filename_only_launcher_identity_is_observed_without_session_ownership`, all 11 real Windows ProcessRuntime fixture tests |
+| Profile-ID containment and legacy repair                 | Complete | `invalid_legacy_profile_identity_is_repaired_without_selecting_a_filesystem_path`; all 16 ProfileLibrary behavior tests                                                                   |
+| Helper caller authentication and preview identity        | Complete | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
+| Ordered adjacent elevation and ownership acknowledgement | Complete | Saved-position launch test, durable journal-before-ack test, and real helper compensation test                                                                                            |
+| Imported-profile review                                  | Complete | Native review state, exact privileged-entry approval, invalidation tests, and React quarantine behavior                                                                                   |
+| Local storage and startup migration                      | Complete | Three command-host migration tests, six startup policy tests, NSIS bundle contract, and a real debug NSIS build                                                                           |
+| Opt-in native update coordination                        | Pending  | —                                                                                                                                                                                         |
+| Signed-build equality and adversarial qualification      | Pending  | —                                                                                                                                                                                         |
 
 ## Verified Process handles and monitored paths
 
@@ -252,6 +252,63 @@ reviewed` first failed because the Dashboard had no review heading or
   the twenty-seven-command capability audit.
 - `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
   - 131 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+
+## Local storage and startup migration
+
+The production host now opens Tauri's per-user local-data path. When that path
+is empty and the former roaming path has data, NativeCommandHost copies the
+roaming tree to a uniquely named temporary local sibling. The copier rejects
+links, Windows reparse points, and non-file entries, flushes copied files,
+parses every JSON document and every JSONL record, and opens FormationLapCore
+against the temporary copy for authoritative live-schema validation. Only then
+does one directory rename activate the local store. Validation failure leaves
+the empty local destination untouched, while a populated local store always
+wins without merging; roaming data is never removed.
+
+Start with Windows now uses the namespaced
+`com.formationlap.desktop.StartWithWindows.v1` HKCU Run value. The native
+adapter reads both namespaced and legacy values before acting. It refuses to
+overwrite or delete a foreign namespaced value, accepts the exact current
+command plus the prior canonical Windows path spelling as owned, and deletes
+the legacy `Formation Lap` value only when it is an exact owned command.
+
+The Tauri NSIS hooks apply the same comparison during uninstall. They remove
+the namespaced value only for the installed executable and preserve a foreign
+legacy product-name value across Tauri's built-in product-name cleanup.
+Updater-driven uninstall leaves both registrations in place.
+
+### Red-green evidence
+
+1. `first_local_open_atomically_copies_and_validates_the_roaming_store` first
+   failed because NativeCommandHost had no migration entry point. It now proves
+   the local copy activates and the roaming profile remains.
+2. `invalid_roaming_documents_never_activate_local_storage` places malformed
+   JSON in a backup that FormationLapCore would not otherwise open and proves
+   every copied document is validated before activation.
+3. `populated_local_and_roaming_stores_are_never_merged` proves that a local
+   profile remains authoritative and the conflicting roaming profile remains
+   untouched.
+4. Startup policy tests prove exact legacy migration, foreign-value
+   preservation, exact disable cleanup, and compatibility with the previous
+   canonical-path command spelling. The release contract requires the
+   pre/post-uninstall hooks and namespaced value in every NSIS bundle.
+
+### Verification
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --test profile_commands --all-features -- --test-threads=1`
+  - all 10 command-host tests passed, including the three migration cases.
+- `cargo test --manifest-path src-tauri/Cargo.toml --lib desktop_host::tests --all-features -- --test-threads=1`
+  - all 6 desktop-host policy and single-instance tests passed.
+- `pnpm.cmd verify`
+  - formatting, lint, type checking, 29 React tests, 3 accessibility tests, 25
+    release tests, synchronized contracts/catalog, and capability audit passed.
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings`
+  - passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml --all-features -- --test-threads=1`
+  - 138 passed, 0 failed, 1 separately evidenced manual UAC test ignored.
+- `pnpm.cmd tauri build --debug --bundles nsis --no-sign --ci`
+  - built the native application and the branded NSIS installer with the
+    configured hooks.
 
 ## Publication boundary
 

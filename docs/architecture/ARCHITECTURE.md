@@ -348,6 +348,7 @@ Persistence rules:
 The Windows adapter is responsible for:
 
 - Direct executable launch without shell interpretation.
+- Namespaced, exact-owned current-user startup registration and legacy cleanup.
 - Optional visible or hidden consoles.
 - Console process groups and graceful interrupt delivery.
 - Window enumeration and close requests.
@@ -360,6 +361,13 @@ The Windows adapter is responsible for:
 
 The adapter returns observations and typed errors. It does not decide whether a
 failure blocks the game or whether a process should be automatically closed.
+
+The startup adapter reads both
+`com.formationlap.desktop.StartWithWindows.v1` and the legacy `Formation Lap`
+HKCU Run value before changing either. It refuses a foreign namespaced value,
+migrates or removes the legacy value only when its complete command identifies
+the current executable, and applies the same exact-ownership rule during NSIS
+uninstall.
 
 ## Elevated helper protocol
 

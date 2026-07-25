@@ -953,7 +953,11 @@ mod windows_icon {
 #[cfg(windows)]
 mod windows_icon {
     use std::{
-        ffi::OsStr, mem::size_of, os::windows::ffi::OsStrExt, path::Path, ptr::null_mut,
+        ffi::OsStr,
+        mem::size_of,
+        os::windows::ffi::OsStrExt,
+        path::{Path, PathBuf},
+        ptr::null_mut,
         sync::Mutex,
     };
     use windows_sys::Win32::{
@@ -1006,7 +1010,8 @@ mod windows_icon {
 
     pub(super) fn extract(executable_path: &Path) -> Option<Vec<u8>> {
         let _guard = SHELL_ICON_EXTRACTION.lock().ok()?;
-        let path = wide_null(executable_path.as_os_str());
+        let shell_path = shell_compatible_path(executable_path);
+        let path = wide_null(shell_path.as_os_str());
         let mut shell_info = SHFILEINFOW::default();
         let shell_info_size = u32::try_from(size_of::<SHFILEINFOW>()).ok()?;
         if unsafe {
@@ -1024,6 +1029,17 @@ mod windows_icon {
         }
         let icon = OwnedIcon(shell_info.hIcon);
         encode_icon(icon.0)
+    }
+
+    fn shell_compatible_path(executable_path: &Path) -> PathBuf {
+        let executable_path = executable_path.as_os_str().to_string_lossy();
+        if let Some(unc_path) = executable_path.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{unc_path}"));
+        }
+        if let Some(local_path) = executable_path.strip_prefix(r"\\?\") {
+            return PathBuf::from(local_path);
+        }
+        PathBuf::from(executable_path.as_ref())
     }
 
     fn wide_null(value: &OsStr) -> Vec<u16> {
@@ -1457,4 +1473,29 @@ pub fn validate_catalog_documents(
         installed_primary_sims: Vec::new(),
         installed_supporting_applications: Vec::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ApplicationIcon, executable_icon};
+    use std::path::PathBuf;
+
+    #[cfg(windows)]
+    #[test]
+    fn executable_icon_handles_an_extended_length_executable_path() {
+        let windows_directory = std::env::var_os("WINDIR")
+            .map(PathBuf::from)
+            .expect("Windows must provide WINDIR");
+        let executable_path = windows_directory.join("System32").join("notepad.exe");
+        assert!(
+            executable_path.is_file(),
+            "the Windows Notepad executable must be available"
+        );
+        let extended_path = PathBuf::from(format!(r"\\?\{}", executable_path.display()));
+
+        assert!(matches!(
+            executable_icon(&extended_path),
+            ApplicationIcon::LocalData { .. }
+        ));
+    }
 }

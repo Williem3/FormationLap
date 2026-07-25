@@ -120,9 +120,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   Session starts instead of silently launching Steam option 3. There is no
   active implementation file scope.
 - Dashboard lifecycle rows now use local executable icons supplied by the
-  native snapshot. Direct recipes resolve their exact executable, Steam
-  recipes use a learned monitored path, and the generic fallback remains for
-  missing paths. There is no active implementation file scope.
+  native snapshot. Canonical Windows `\\?\\` paths are normalized only at the
+  Shell icon-extraction boundary; launch validation and Process identity retain
+  their canonical path. The generic fallback remains for missing paths. There
+  is no active implementation file scope.
 
 Known environment facts:
 
@@ -270,3 +271,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Traced same-executable companion Processes behind the Windows ProcessRuntime, allowing a Session-owned launcher and its companion UI to be observed, window-closed, awaited, and force-stopped as one group | Red/green Windows fixture `close_windows_follows_a_same_executable_companion_created_by_the_session`; all 12 Windows ProcessRuntime fixture tests, targeted Clippy, Rust format, and diff whitespace checks passed | Rebuild/restart Formation Lap, then retry ApexTraceVR normal Close Session; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Corrected Le Mans Ultimate's Curated Catalog VR route to its documented SteamVR mode and rejected the unsupported OpenXR Steam option | Red/green `le_mans_ultimate_rejects_the_unsupported_openxr_steam_launch_mode`; 9 launch-recipe tests, catalog validation, Rust format, and targeted Clippy passed | Rebuild/restart Formation Lap, select OpenVR / SteamVR for Le Mans Ultimate, then retry Test Game Launch or Start Session; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Replaced Dashboard lifecycle-row heartbeat/flag placeholders with locally resolved executable icons while retaining the generic fallback for missing paths | Red/green React icon rendering test; `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (37 tests), Rust library tests (32), format, Clippy, and generated-contract check passed | Rebuild/restart Formation Lap to load the native icon snapshot; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Repaired local executable icon lookup for canonical Windows `\\?\\` paths without changing the canonical path retained for launch and Process identity | Red/green `executable_icon_handles_an_extended_length_executable_path`; Rust library tests (33) and native format passed | Close and relaunch Formation Lap after rebuilding to load this native fix; external signed Beta and Windows qualification remain the next M10 action |

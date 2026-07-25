@@ -1127,7 +1127,7 @@ describe("Formation Lap shell", () => {
     ).toBeVisible();
   });
 
-  it("keeps an imported profile quarantined until executable settings are reviewed", async () => {
+  it("returns to the Dashboard after approving an elevated imported profile", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
     render(<App bridge={bridge} />);
@@ -1149,7 +1149,7 @@ describe("Formation Lap shell", () => {
               monitoredProcess: null,
               monitoredExecutablePath: null,
               consoleVisibility: "hidden",
-              elevated: false,
+              elevated: true,
               startupTimeoutSeconds: 30,
               postStartDelayMilliseconds: 0,
               shutdownStrategy: { kind: "closeWindows" },
@@ -1185,6 +1185,9 @@ describe("Formation Lap shell", () => {
       screen.getByLabelText(
         "I reviewed executable paths, arguments, working directories, elevation, monitored executables, and stop recipes.",
       ),
+    );
+    await user.click(
+      screen.getByLabelText(/Approve privileged recipe for Automobilista 2/),
     );
     await user.click(
       screen.getByRole("button", { name: "Save and approve profile" }),

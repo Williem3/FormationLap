@@ -76,9 +76,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   certificate equality for signed Beta/Stable main-helper pairs and adds
   adversarial release qualification around signed/preview identity boundaries.
 - All eight requested repository hardening slices are implemented. There is no
-  active implementation file scope; M10 remains `in_progress` only because a
-  paid, separately authorized signed Beta and the Windows 10/11 release matrix
-  are external qualification work.
+  active implementation file scope; the elevated-profile approval renderer
+  failure is fixed and covered by a regression test. M10 remains `in_progress`
+  because a paid, separately authorized signed Beta and the Windows 10/11
+  release matrix are external qualification work.
 - Local candidate commits `0bb2c75` and `c5e8faa`, plus the eight focused
   security-hardening commits, remain unpublished. No push, tag, workflow
   dispatch, signing operation, or GitHub release is authorized.
@@ -213,3 +214,5 @@ When blocked:
 1. Set Status to `blocked` only when the work truly cannot continue.
 2. Record the exact missing permission, decision, dependency, or external state.
 3. Name the smallest action that would unblock progress.
+
+| 2026-07-25 | Codex `/root` | M10 | Fixed the blank renderer after elevated-profile approval by reading the checkbox state before scheduling the React updater; added elevated approval regression coverage | `pnpm.cmd verify` passed: format, lint, typecheck, 29 React tests, accessibility and release contracts, generated-contract, catalog, and capability checks | No blocker; external signed Beta and Windows qualification remain the next M10 action |

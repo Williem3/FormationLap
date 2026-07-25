@@ -2503,16 +2503,17 @@ function ProfileEditor({
                     checked={approvedPrivilegedApplicationIds.includes(
                       application.id,
                     )}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const isApproved = event.currentTarget.checked;
                       setApprovedPrivilegedApplicationIds((current) =>
-                        event.currentTarget.checked
+                        isApproved
                           ? [...current, application.id]
                           : current.filter(
                               (applicationId) =>
                                 applicationId !== application.id,
                             ),
-                      )
-                    }
+                      );
+                    }}
                   />
                   <span>
                     <strong>

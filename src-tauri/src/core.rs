@@ -1232,7 +1232,9 @@ impl FormationLapCore {
                                 .post_start_ready_at
                                 .entry(application_id.clone())
                                 .or_insert_with(|| Instant::now() + post_start_delay);
-                            process.status = if Instant::now() < ready_at {
+                            process.status = if previous_status == ProcessStatus::Stopping {
+                                ProcessStatus::Stopping
+                            } else if Instant::now() < ready_at {
                                 ProcessStatus::Starting
                             } else if *failed_checks >= 2 {
                                 ProcessStatus::NotResponding
@@ -2047,6 +2049,9 @@ impl FormationLapCore {
             if process.ownership != Some(ProcessOwnership::SessionOwned) {
                 continue;
             }
+            if process.status == ProcessStatus::Stopping {
+                return Ok(());
+            }
             let Some(identity) = process.identity else {
                 continue;
             };
@@ -2055,8 +2060,22 @@ impl FormationLapCore {
                 .get(&application_id)
                 .cloned()
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-            let (graceful, exited) =
-                self.request_graceful_stop(&identity, &recipe.shutdown_strategy, recipe.elevated)?;
+            let (graceful, exited) = match self.request_graceful_stop(
+                &identity,
+                &recipe.shutdown_strategy,
+                recipe.elevated,
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    self.application_processes
+                        .get_mut(&application_id)
+                        .expect("Session Process should remain present during cleanup")
+                        .status = ProcessStatus::Stopping;
+                    self.session.applications[index].state =
+                        crate::SessionApplicationState::Stopping;
+                    return Err(error);
+                }
+            };
             if graceful == crate::GracefulStopResult::Requested && exited {
                 let process = self
                     .application_processes

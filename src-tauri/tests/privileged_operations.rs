@@ -1,3 +1,5 @@
+#[cfg(feature = "process-fixtures")]
+use formation_lap_lib::WindowsProcessRuntime;
 use formation_lap_lib::{
     AppCommand, ApplicationRequirement, CommandOutcome, ConsoleVisibility,
     DevelopmentPrivilegeBroker, ELEVATED_HELPER_PROTOCOL_VERSION, ElevatedHelperRequest,
@@ -5,8 +7,8 @@ use formation_lap_lib::{
     FormationLapCore, GracefulStopResult, HelperProtocolError, HelperValidationContext,
     LaunchRecipe, LaunchSource, MAX_ELEVATED_OPERATIONS, PrivilegeBroker, ProcessIdentity,
     ProcessObservation, ProcessOutput, ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError,
-    RacingProfile, SessionState, ShutdownStrategy, SupportingApplication, WindowsPrivilegeBroker,
-    WindowsProcessRuntime, decode_helper_request,
+    ProcessStatus, RacingProfile, SessionState, ShutdownStrategy, SupportingApplication,
+    WindowsPrivilegeBroker, decode_helper_request,
 };
 use std::{
     fs,
@@ -770,6 +772,91 @@ fn cancelling_startup_closes_every_process_from_the_elevated_launch_batch() {
         batches[1]
             .iter()
             .all(|operation| matches!(operation, ElevatedOperation::GracefulStop { .. }))
+    );
+}
+
+#[test]
+fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
+    let storage = TempStorage::new();
+    let broker = DevelopmentPrivilegeBroker::default();
+    let observed_broker = broker.clone();
+    let executable_path = canonical_current_executable();
+    let identity = ProcessIdentity {
+        pid: 11_201,
+        creation_time: "created-11201".to_owned(),
+        canonical_executable_path: executable_path.clone(),
+    };
+    broker.queue_response(Ok(ElevatedHelperResponse {
+        protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+        nonce: "development-start".to_owned(),
+        accepted: true,
+        error: None,
+        results: vec![ElevatedOperationResult::Launched {
+            process_identity: identity,
+        }],
+    }));
+    broker.queue_response(Ok(ElevatedHelperResponse {
+        protocol_version: ELEVATED_HELPER_PROTOCOL_VERSION,
+        nonce: "development-close".to_owned(),
+        accepted: true,
+        error: None,
+        results: vec![ElevatedOperationResult::GracefulStopRequested {
+            requested: true,
+            exited: false,
+        }],
+    }));
+    let mut core = FormationLapCore::open_with_runtime_and_privilege_broker(
+        storage.path(),
+        PrivilegedStartupRuntime,
+        broker,
+    )
+    .expect("the core should open with the approved test adapters");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            name: "Elevated close".to_owned(),
+            primary_sim_name: "Primary".to_owned(),
+        })
+        .expect("the profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("unexpected create outcome: {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the created profile should be selected");
+    profile.primary_sim.launch_recipe = direct_recipe(&executable_path, true);
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(RacingProfile {
+            id: profile_id.clone(),
+            ..profile
+        }),
+    })
+    .expect("the elevated Primary Sim should save");
+    approve_privileged_profile(&mut core, &profile_id);
+
+    core.execute(AppCommand::StartSession { profile_id })
+        .expect("the elevated Primary Sim should start");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("the Primary Sim should become active");
+    assert_eq!(core.snapshot().session.state, SessionState::Active);
+
+    core.execute(AppCommand::CloseSession)
+        .expect("the Active Session should close");
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("the first elevated close request should be accepted");
+    assert_eq!(core.snapshot().session.state, SessionState::Closing);
+    assert_eq!(
+        core.snapshot().application_processes[0].status,
+        ProcessStatus::Stopping
+    );
+
+    core.execute(AppCommand::RefreshProcesses)
+        .expect("a pending elevated close must not trigger another UAC request");
+    assert_eq!(observed_broker.recorded_batches().len(), 2);
+    assert_eq!(
+        core.snapshot().application_processes[0].status,
+        ProcessStatus::Stopping
     );
 }
 

@@ -375,6 +375,25 @@ describe("Formation Lap shell", () => {
     expect(container.querySelector(".rail-index")).toBeNull();
   });
 
+  it("celebrates when every Formation Rail node is running", async () => {
+    const initial = render(
+      <App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />,
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Driver's Start Your Engines!",
+      }),
+    ).toBeVisible();
+    initial.unmount();
+
+    const ready = lifecycleSnapshot();
+    ready.applicationProcesses = [processSnapshot({ status: "running" })];
+    render(<App bridge={new InMemoryNativeBridge(ready)} />);
+    expect(
+      await screen.findByRole("heading", { name: "And Away we go!" }),
+    ).toBeVisible();
+  });
+
   it("starts one configured application and renders authoritative lifecycle state", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

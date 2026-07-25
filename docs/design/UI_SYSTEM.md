@@ -162,6 +162,8 @@ where it prevents ambiguity. Controls align to a consistent right edge.
 - Header contains profile name, VR toggle, Edit Profile, and the single primary
   Start Session or Close Session action.
 - Formation Rail follows the header.
+- The Formation Rail heading reads `Driver's Start Your Engines!` until every
+  node is running, then reads `And Away we go!`.
 - Supporting applications appear before a visually separated game row.
 - Session-level state occupies a quiet footer area.
 

@@ -3449,6 +3449,19 @@ function Dashboard({
     !["idle", "active"].includes(sessionState) || isBusy;
   const forceStopAvailable =
     !isBusy && ["idle", "active", "closing"].includes(sessionState);
+  const railApplications = selectedProfile
+    ? [
+        ...selectedProfile.supportingApplications.map(
+          (supporting) => supporting.application,
+        ),
+        selectedProfile.primarySim,
+      ]
+    : [];
+  const formationRailReady = formationRailIsReady(
+    railApplications,
+    applicationProcesses,
+    session?.applications ?? [],
+  );
 
   return (
     <>
@@ -3684,7 +3697,11 @@ function Dashboard({
           <div className="profile-dashboard-heading">
             <div>
               <p className="eyebrow">Startup sequence</p>
-              <h2 id="sequence-title">Local application control</h2>
+              <h2 id="sequence-title">
+                {formationRailReady
+                  ? "And Away we go!"
+                  : "Driver's Start Your Engines!"}
+              </h2>
             </div>
             <div className="profile-dashboard-controls">
               <button
@@ -3747,12 +3764,7 @@ function Dashboard({
           )}
 
           <FormationRail
-            applications={[
-              ...selectedProfile.supportingApplications.map(
-                (supporting) => supporting.application,
-              ),
-              selectedProfile.primarySim,
-            ]}
+            applications={railApplications}
             applicationProcesses={applicationProcesses}
             sessionApplications={session?.applications ?? []}
           />
@@ -3937,6 +3949,43 @@ function formationRailTone(
     case "detached":
       return "neutral";
   }
+}
+
+function formationRailStatus(
+  applicationId: string,
+  applicationProcesses: ApplicationProcessSnapshot[],
+  sessionApplications: SessionApplicationSnapshot[],
+) {
+  const sessionApplication = sessionApplications.find(
+    (candidate) => candidate.applicationId === applicationId,
+  );
+  return (
+    sessionApplication?.state ??
+    applicationProcesses.find(
+      (candidate) => candidate.applicationId === applicationId,
+    )?.status ??
+    "stopped"
+  );
+}
+
+function formationRailIsReady(
+  applications: ProfileApplication[],
+  applicationProcesses: ApplicationProcessSnapshot[],
+  sessionApplications: SessionApplicationSnapshot[],
+) {
+  return (
+    applications.length > 0 &&
+    applications.every(
+      (application) =>
+        formationRailTone(
+          formationRailStatus(
+            application.id,
+            applicationProcesses,
+            sessionApplications,
+          ),
+        ) === "running",
+    )
+  );
 }
 
 function FormationRail({

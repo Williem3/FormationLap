@@ -1844,6 +1844,12 @@ function directoryFromPath(path: string): string | null {
   return lastSeparator > 0 ? path.slice(0, lastSeparator) : null;
 }
 
+function executableNameFromPath(path: string): string | null {
+  const lastSeparator = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  const fileName = path.slice(lastSeparator + 1);
+  return fileName.length > 0 ? fileName : null;
+}
+
 function discoveredSupportingApplicationToProfile(
   application: DiscoveredSupportingApplication,
 ): SupportingApplication {
@@ -2390,6 +2396,9 @@ function ProfileEditor({
   const pathsNeedRepair = profileApplications.some(
     (application) => application.pathNeedsRepair,
   );
+  const applicationsNeedingRepair = profileApplications.filter(
+    (application) => application.pathNeedsRepair,
+  );
   const approvalComplete =
     configurationReviewed &&
     privilegedApplications.every((application) =>
@@ -2577,9 +2586,16 @@ function ProfileEditor({
                 </label>
               ))}
               {pathsNeedRepair && (
-                <p className="form-error" role="alert">
-                  Repair every flagged executable path before approval.
-                </p>
+                <div className="profile-repair-list" role="alert">
+                  <strong>Select an executable for:</strong>
+                  <ul>
+                    {applicationsNeedingRepair.map((application) => (
+                      <li key={application.id}>
+                        {application.name} needs an executable path.
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </section>
           )}
@@ -2869,6 +2885,17 @@ function ApplicationRecipeFields({
   };
   const source = application.launchRecipe.source;
   const shutdown = application.launchRecipe.shutdownStrategy;
+  const setDirectExecutable = (next: ProfileApplication, path: string) => {
+    const nextSource = next.launchRecipe.source;
+    if (nextSource.kind !== "directExecutable") {
+      return;
+    }
+    nextSource.executablePath = path;
+    next.pathNeedsRepair = path.length === 0;
+    next.launchRecipe.workingDirectory = directoryFromPath(path);
+    next.launchRecipe.monitoredProcess = executableNameFromPath(path);
+    next.launchRecipe.monitoredExecutablePath = path || null;
+  };
   const selectExecutable = async (
     change: (next: ProfileApplication, path: string) => void,
   ) => {
@@ -2923,9 +2950,7 @@ function ApplicationRecipeFields({
                         Number.parseInt(event.currentTarget.value, 10) || 0;
                       next.pathNeedsRepair = false;
                     } else {
-                      nextSource.executablePath = event.currentTarget.value;
-                      next.pathNeedsRepair =
-                        event.currentTarget.value.length === 0;
+                      setDirectExecutable(next, event.currentTarget.value);
                     }
                   })
                 }
@@ -2941,10 +2966,7 @@ function ApplicationRecipeFields({
                       if (nextSource.kind !== "directExecutable") {
                         return;
                       }
-                      nextSource.executablePath = path;
-                      next.pathNeedsRepair = false;
-                      next.launchRecipe.workingDirectory ??=
-                        directoryFromPath(path);
+                      setDirectExecutable(next, path);
                     })
                   }
                 >
@@ -3033,63 +3055,72 @@ function ApplicationRecipeFields({
             }
           />
         </label>
-        <div className="field-grid">
-          <label className="field">
-            <span>{label} working directory</span>
-            <input
-              value={application.launchRecipe.workingDirectory ?? ""}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.workingDirectory =
-                    event.currentTarget.value || null;
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>{label} monitored process</span>
-            <input
-              value={application.launchRecipe.monitoredProcess ?? ""}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.monitoredProcess =
-                    event.currentTarget.value || null;
-                  next.launchRecipe.monitoredExecutablePath = null;
-                })
-              }
-            />
-          </label>
-        </div>
-        <label className="field">
-          <span>{label} monitored executable path</span>
-          <div className="path-input">
-            <input
-              value={application.launchRecipe.monitoredExecutablePath ?? ""}
-              onChange={(event) =>
-                update((next) => {
-                  next.launchRecipe.monitoredExecutablePath =
-                    event.currentTarget.value || null;
-                })
-              }
-            />
-            <button
-              type="button"
-              className="secondary-button path-browse-button"
-              aria-label={`Browse for ${label} monitored executable`}
-              onClick={() =>
-                void selectExecutable((next, path) => {
-                  next.launchRecipe.monitoredExecutablePath = path;
-                })
-              }
-            >
-              Browseâ€¦
-            </button>
-          </div>
-          <small>
-            Required before a launcher-discovered process can be Session-owned.
-            Test Game Launch can learn this path for review.
-          </small>
-        </label>
+        {source.kind === "steam" ? (
+          <>
+            <div className="field-grid">
+              <label className="field">
+                <span>{label} working directory</span>
+                <input
+                  value={application.launchRecipe.workingDirectory ?? ""}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.launchRecipe.workingDirectory =
+                        event.currentTarget.value || null;
+                    })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>{label} monitored process</span>
+                <input
+                  value={application.launchRecipe.monitoredProcess ?? ""}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.launchRecipe.monitoredProcess =
+                        event.currentTarget.value || null;
+                      next.launchRecipe.monitoredExecutablePath = null;
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>{label} monitored executable path</span>
+              <div className="path-input">
+                <input
+                  value={application.launchRecipe.monitoredExecutablePath ?? ""}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.launchRecipe.monitoredExecutablePath =
+                        event.currentTarget.value || null;
+                    })
+                  }
+                />
+                <button
+                  type="button"
+                  className="secondary-button path-browse-button"
+                  aria-label={`Browse for ${label} monitored executable`}
+                  onClick={() =>
+                    void selectExecutable((next, path) => {
+                      next.launchRecipe.monitoredExecutablePath = path;
+                    })
+                  }
+                >
+                  Browseâ€¦
+                </button>
+              </div>
+              <small>
+                Required before a launcher-discovered process can be
+                Session-owned. Test Game Launch can learn this path for review.
+              </small>
+            </label>
+          </>
+        ) : (
+          <p className="recipe-derived-details">
+            Formation Lap will launch from this executable&apos;s folder and
+            monitor this exact executable automatically.
+          </p>
+        )}
         <div className="recipe-number-grid">
           <label className="field">
             <span>Startup timeout · seconds</span>

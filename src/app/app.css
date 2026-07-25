@@ -912,6 +912,12 @@ button:disabled {
   flex: 0 0 auto;
   min-height: 42px;
   padding: 8px 12px;
+  font-size: 0;
+}
+
+.path-browse-button::after {
+  content: "Browse";
+  font-size: 13px;
 }
 
 .field textarea {
@@ -1719,6 +1725,22 @@ button:disabled {
   margin-top: 10px;
 }
 
+.profile-repair-list {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger-ink);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.profile-repair-list ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 .settings-checks {
   display: grid;
   gap: 12px;
@@ -1883,6 +1905,20 @@ button:disabled {
 
 .recipe-fields {
   padding-top: 4px;
+}
+
+.recipe-fields > .field-grid:first-of-type {
+  grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.recipe-derived-details {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .recipe-number-grid {

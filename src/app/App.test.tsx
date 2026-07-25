@@ -805,6 +805,23 @@ describe("Formation Lap shell", () => {
     expect(error.closest(".editor-header")).not.toBeNull();
   });
 
+  it("names each executable that blocks imported-profile approval", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.primarySim.pathNeedsRepair = true;
+    snapshot.profiles[0]!.reviewStatus = "needsReview";
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    expect(
+      screen.getByText("Healthy fixture needs an executable path."),
+    ).toBeVisible();
+  });
+
   it("selects an executable through the native file picker instead of requiring a typed path", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
@@ -825,9 +842,21 @@ describe("Formation Lap shell", () => {
     );
 
     expect(pickExecutablePath).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Browse for Primary Sim executable" }),
+    ).toHaveClass("path-browse-button");
     expect(screen.getByLabelText("Primary Sim executable path")).toHaveValue(
       String.raw`C:\Racing\iRacing\iRacingSim64DX11.exe`,
     );
+    expect(
+      screen.queryByLabelText("Primary Sim working directory"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Primary Sim monitored process"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/monitor this exact executable automatically/),
+    ).toBeVisible();
   });
 
   it("selects another Racing Profile from the sidebar", async () => {

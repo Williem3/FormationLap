@@ -83,9 +83,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
 - Local candidate commits `0bb2c75` and `c5e8faa`, plus the eight focused
   security-hardening commits, remain unpublished. No push, tag, workflow
   dispatch, signing operation, or GitHub release is authorized.
-- The Racing Profile save/approval error is now rendered alongside the header
-  Save action, backed by a focused React regression test. There is no active
-  implementation file scope.
+- Native Launch Quarantine now names each blocked executable, direct recipes
+  derive working directory and process identity, and the recipe editor gives
+  the executable path visual priority. There is no active implementation file
+  scope.
 
 Known environment facts:
 
@@ -221,3 +222,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Fixed the blank renderer after elevated-profile approval by reading the checkbox state before scheduling the React updater; added elevated approval regression coverage | `pnpm.cmd verify` passed: format, lint, typecheck, 29 React tests, accessibility and release contracts, generated-contract, catalog, and capability checks | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Added an explicit native Windows executable picker to Manual Entry and Racing Profile paths, including direct, monitored, and custom-stop recipes; selected direct executables seed an empty working directory | `pnpm.cmd verify`, all-feature Clippy, and all-feature Rust tests passed; 30 React tests include native-picker selection behavior; generated contracts and capability audit are current | No blocker; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Moved Racing Profile save/approval errors from the editor footer to the header beside the Save action | `pnpm.cmd test -- src/app/App.test.tsx`, `pnpm.cmd lint`, and `pnpm.cmd typecheck` passed; 31 React tests include header-placement coverage | No blocker; external signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Made Native Launch Quarantine name each executable path that blocks approval, simplified direct executable recipes with derived working/process identity, and repaired Browse presentation | `pnpm.cmd test -- src/app/App.test.tsx` passed: 32 React tests including repair and automatic-direct-recipe coverage; typecheck passed | No blocker; external signed Beta and Windows qualification remain the next M10 action |

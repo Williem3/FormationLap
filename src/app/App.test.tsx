@@ -766,7 +766,11 @@ describe("Formation Lap shell", () => {
             requirement: "optional",
             keepRunning: false,
           },
-          icon: { kind: "generic" },
+          icon: {
+            kind: "localData",
+            media_type: "image/x-icon",
+            data_base64: "AAABAA==",
+          },
         },
       ],
     };
@@ -846,6 +850,11 @@ describe("Formation Lap shell", () => {
       within(recommendationRegion).getByText("Other detected applications"),
     ).toBeVisible();
     expect(screen.getByLabelText("Add Go Fast")).toBeVisible();
+    expect(
+      recommendationRegion.querySelector(
+        'img[src="data:image/x-icon;base64,AAABAA=="]',
+      ),
+    ).not.toBeNull();
 
     await user.click(
       screen.getByRole("button", { name: "Enter a sim manually" }),

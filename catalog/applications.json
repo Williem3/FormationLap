@@ -113,8 +113,12 @@
     {
       "id": "go-fast",
       "name": "Go Fast",
-      "executableNames": ["GoFast.exe"],
+      "executableNames": ["GOFast.App.exe", "GoFast.exe"],
       "knownLocations": [
+        {
+          "root": "localAppData",
+          "executableRelativePath": "GOFast/current/GOFast.App.exe"
+        },
         {
           "root": "localAppData",
           "executableRelativePath": "GoFast/GoFast.exe"
@@ -134,8 +138,12 @@
     {
       "id": "apex-trace-vr",
       "name": "Apex Trace VR",
-      "executableNames": ["ApexTraceVR.exe"],
+      "executableNames": ["ApexTrace VR.exe", "ApexTraceVR.exe"],
       "knownLocations": [
+        {
+          "root": "localAppData",
+          "executableRelativePath": "Programs/ApexTrace VR/ApexTrace VR.exe"
+        },
         {
           "root": "localAppData",
           "executableRelativePath": "Apex Trace VR/ApexTraceVR.exe"

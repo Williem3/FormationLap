@@ -646,6 +646,57 @@ fn known_location_discovery_checks_only_signed_catalog_paths() {
 }
 
 #[test]
+fn known_location_discovery_matches_common_user_installed_supporting_applications() {
+    let storage = TempStorage::new();
+    let local_app_data = storage.path().join("LocalAppData");
+    let go_fast = local_app_data
+        .join("GOFast")
+        .join("current")
+        .join("GOFast.App.exe");
+    let apex_trace_vr = local_app_data
+        .join("Programs")
+        .join("ApexTrace VR")
+        .join("ApexTrace VR.exe");
+    for executable in [&go_fast, &apex_trace_vr] {
+        fs::create_dir_all(
+            executable
+                .parent()
+                .expect("fixture executable should have a parent"),
+        )
+        .expect("fixture directory should be created");
+        fs::write(executable, b"fixture").expect("fixture executable should be written");
+    }
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            known_location_roots: vec![WindowsKnownLocationRoot {
+                kind: WindowsKnownLocation::LocalAppData,
+                path: local_app_data,
+            }],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with a LocalAppData fixture");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("known-location discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    assert_eq!(
+        discovery
+            .installed_supporting_applications
+            .iter()
+            .map(|application| application.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["go-fast", "apex-trace-vr"],
+    );
+}
+
+#[test]
 fn start_menu_target_discovery_matches_a_curated_application_on_another_drive() {
     let storage = TempStorage::new();
     let apex_trace_vr = storage

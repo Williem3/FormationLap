@@ -1,7 +1,8 @@
 use formation_lap_lib::{
-    AppCommand, ApplicationRequirement, CloseSessionSettings, CommandOutcome, ConsoleVisibility,
-    FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication, ProfileReviewStatus,
-    ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
+    AppCommand, ApplicationIcon, ApplicationRequirement, CloseSessionSettings, CommandOutcome,
+    ConsoleVisibility, FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication,
+    ProfileReviewStatus, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
+    TargetedDiscoverySources, VrLaunchMode,
 };
 use std::{
     fs,
@@ -36,6 +37,101 @@ impl TempStorage {
     fn path(&self) -> &Path {
         &self.path
     }
+}
+
+#[test]
+fn saved_steam_primary_sim_uses_the_local_steam_library_icon() {
+    let storage = TempStorage::new();
+    let steam_root = storage.path().join("Steam");
+    let library_cache = steam_root.join("appcache").join("librarycache");
+    let steamapps = steam_root.join("steamapps");
+    fs::create_dir_all(&library_cache).expect("Steam library icon cache should be created");
+    fs::create_dir_all(steamapps.join("common").join("Automobilista 2"))
+        .expect("Automobilista 2 installation should be created");
+    fs::write(
+        steamapps.join("appmanifest_1066890.acf"),
+        r#""AppState"
+{
+  "appid" "1066890"
+  "installdir" "Automobilista 2"
+}"#,
+    )
+    .expect("Automobilista 2 manifest should be written");
+    fs::write(
+        library_cache.join("1066890_icon.png"),
+        [0x89_u8, 0x50, 0x4e, 0x47],
+    )
+    .expect("local Automobilista 2 Steam icon should be written");
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            steam_roots: vec![steam_root],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with local Steam metadata");
+    core.execute(AppCommand::CreateProfile {
+        profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+            "AMS2 race".to_owned(),
+            "Automobilista 2".to_owned(),
+        )),
+    })
+    .expect("a Racing Profile should be created");
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected");
+    let primary_sim_application_id = profile.primary_sim.id.clone();
+    profile.primary_sim.launch_recipe.source = LaunchSource::Steam {
+        app_id: 1_066_890,
+        selector: None,
+    };
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the Steam Primary Sim should be saved");
+
+    let icon = core
+        .snapshot()
+        .application_icons
+        .expect("saved Primary Sim icons should be included")
+        .into_iter()
+        .find(|icon| icon.application_id == primary_sim_application_id)
+        .expect("the saved Automobilista 2 Primary Sim should have an icon");
+    assert_eq!(
+        icon.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/png".to_owned(),
+            data_base64: "iVBORw==".to_owned(),
+        }
+    );
+
+    let mut unresolved_direct_profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the saved Racing Profile should stay selected");
+    unresolved_direct_profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: String::new(),
+    };
+    unresolved_direct_profile.primary_sim.path_needs_repair = true;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(unresolved_direct_profile),
+    })
+    .expect("the unresolved direct Primary Sim should be saved");
+    let fallback_icon = core
+        .snapshot()
+        .application_icons
+        .expect("saved Primary Sim icons should be included")
+        .into_iter()
+        .find(|icon| icon.application_id == primary_sim_application_id)
+        .expect("the unresolved Automobilista 2 Primary Sim should have an icon");
+    assert_eq!(
+        fallback_icon.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/png".to_owned(),
+            data_base64: "iVBORw==".to_owned(),
+        }
+    );
 }
 
 impl Drop for TempStorage {

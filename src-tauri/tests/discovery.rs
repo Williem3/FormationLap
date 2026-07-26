@@ -799,6 +799,8 @@ fn steam_icon_resolution_uses_local_metadata_then_generic_fallback() {
         .expect("Le Mans Ultimate installation should be created");
     fs::create_dir_all(steam_root.join("steam").join("games"))
         .expect("Steam icon cache should be created");
+    fs::create_dir_all(steam_root.join("appcache").join("librarycache"))
+        .expect("Steam library icon cache should be created");
     fs::write(
         steamapps.join("appmanifest_244210.acf"),
         r#""AppState"
@@ -826,6 +828,14 @@ fn steam_icon_resolution_uses_local_metadata_then_generic_fallback() {
         [0_u8, 0, 1, 0],
     )
     .expect("local Steam icon should be written");
+    fs::write(
+        steam_root
+            .join("appcache")
+            .join("librarycache")
+            .join("2399420_icon.jpg"),
+        [0xff_u8, 0xd8, 0xff, 0xd9],
+    )
+    .expect("local Steam library icon should be written");
 
     let mut core = FormationLapCore::open_with_discovery_sources(
         storage.path(),
@@ -860,7 +870,13 @@ fn steam_icon_resolution_uses_local_metadata_then_generic_fallback() {
         .iter()
         .find(|sim| sim.id == "le-mans-ultimate")
         .expect("Le Mans Ultimate should be discovered");
-    assert_eq!(le_mans_ultimate.icon, ApplicationIcon::Generic);
+    assert_eq!(
+        le_mans_ultimate.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/jpeg".to_owned(),
+            data_base64: "/9j/2Q==".to_owned(),
+        }
+    );
 }
 
 #[test]

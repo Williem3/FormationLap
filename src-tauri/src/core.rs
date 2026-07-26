@@ -591,7 +591,7 @@ impl FormationLapCore {
             self.profile_library
                 .profiles()
                 .flat_map(|profile| {
-                    Self::profile_application_icons(
+                    self.profile_application_icons(
                         &profile,
                         selected_profile_id == Some(profile.id.as_str()),
                     )
@@ -609,6 +609,7 @@ impl FormationLapCore {
     }
 
     fn profile_application_icons(
+        &self,
         profile: &RacingProfile,
         include_supporting_applications: bool,
     ) -> Vec<ApplicationIconSnapshot> {
@@ -619,17 +620,29 @@ impl FormationLapCore {
             .map(|supporting| &supporting.application)
             .chain(std::iter::once(&profile.primary_sim))
             .map(|application| {
-                let executable_path = match &application.launch_recipe.source {
+                let icon = match &application.launch_recipe.source {
                     crate::LaunchSource::DirectExecutable { executable_path } => {
-                        Some(executable_path)
+                        let icon = executable_icon(std::path::Path::new(executable_path));
+                        if matches!(icon, ApplicationIcon::Generic)
+                            && application.id == profile.primary_sim.id
+                        {
+                            self.discovery_catalog
+                                .installed_primary_sim_icon(&application.name)
+                                .unwrap_or(icon)
+                        } else {
+                            icon
+                        }
                     }
-                    crate::LaunchSource::Steam { .. } => {
-                        application.launch_recipe.monitored_executable_path.as_ref()
-                    }
+                    crate::LaunchSource::Steam { app_id, .. } => application
+                        .launch_recipe
+                        .monitored_executable_path
+                        .as_ref()
+                        .map(|path| executable_icon(std::path::Path::new(path)))
+                        .filter(|icon| matches!(icon, ApplicationIcon::LocalData { .. }))
+                        .unwrap_or_else(|| {
+                            self.discovery_catalog.steam_library_cache_icon(*app_id)
+                        }),
                 };
-                let icon = executable_path
-                    .map(|path| executable_icon(std::path::Path::new(path)))
-                    .unwrap_or(ApplicationIcon::Generic);
                 ApplicationIconSnapshot {
                     application_id: application.id.clone(),
                     icon,

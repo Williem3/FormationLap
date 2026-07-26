@@ -832,6 +832,19 @@ impl DiscoveryCatalog {
         }
     }
 
+    pub(crate) fn steam_library_cache_icon(&self, app_id: u32) -> ApplicationIcon {
+        steam_library_cache_icon(app_id, &self.sources.steam_roots)
+            .unwrap_or(ApplicationIcon::Generic)
+    }
+
+    pub(crate) fn installed_primary_sim_icon(&self, name: &str) -> Option<ApplicationIcon> {
+        self.snapshot()
+            .installed_primary_sims
+            .into_iter()
+            .find(|sim| sim.name == name)
+            .map(|sim| sim.icon)
+    }
+
     pub(crate) fn recommendations(
         &self,
         primary_sim_id: &str,
@@ -1150,34 +1163,65 @@ fn discover_steam_installations(
                         app_id,
                         install_directory: installation_path,
                     },
-                    icon: steam_icon(&manifest, steam_roots),
+                    icon: steam_icon(&manifest, app_id, steam_roots),
                 })
             })
         })
         .collect()
 }
 
-fn steam_icon(manifest: &str, steam_roots: &[PathBuf]) -> ApplicationIcon {
-    let Some(icon_hash) = quoted_values_for_key(manifest, "icon").into_iter().next() else {
-        return ApplicationIcon::Generic;
-    };
-    steam_roots
-        .iter()
-        .find_map(|steam_root| {
-            fs::read(
+fn steam_icon(manifest: &str, app_id: u32, steam_roots: &[PathBuf]) -> ApplicationIcon {
+    let manifest_icon = quoted_values_for_key(manifest, "icon")
+        .into_iter()
+        .next()
+        .and_then(|icon_hash| {
+            steam_roots.iter().find_map(|steam_root| {
+                local_icon(
+                    steam_root
+                        .join("steam")
+                        .join("games")
+                        .join(format!("{icon_hash}.ico")),
+                    "image/x-icon",
+                )
+            })
+        });
+    manifest_icon
+        .or_else(|| steam_library_cache_icon(app_id, steam_roots))
+        .unwrap_or(ApplicationIcon::Generic)
+}
+
+pub(crate) fn steam_library_cache_icon(
+    app_id: u32,
+    steam_roots: &[PathBuf],
+) -> Option<ApplicationIcon> {
+    steam_roots.iter().find_map(|steam_root| {
+        [
+            ("ico", "image/x-icon"),
+            ("png", "image/png"),
+            ("jpg", "image/jpeg"),
+            ("jpeg", "image/jpeg"),
+        ]
+        .into_iter()
+        .find_map(|(extension, media_type)| {
+            local_icon(
                 steam_root
-                    .join("steam")
-                    .join("games")
-                    .join(format!("{icon_hash}.ico")),
+                    .join("appcache")
+                    .join("librarycache")
+                    .join(format!("{app_id}_icon.{extension}")),
+                media_type,
             )
-            .ok()
         })
+    })
+}
+
+fn local_icon(path: PathBuf, media_type: &str) -> Option<ApplicationIcon> {
+    fs::read(path)
+        .ok()
         .filter(|bytes| !bytes.is_empty())
         .map(|bytes| ApplicationIcon::LocalData {
-            media_type: "image/x-icon".to_owned(),
+            media_type: media_type.to_owned(),
             data_base64: encode_base64(&bytes),
         })
-        .unwrap_or(ApplicationIcon::Generic)
 }
 
 fn encode_base64(bytes: &[u8]) -> String {
@@ -1204,6 +1248,9 @@ fn encode_base64(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn executable_icon(executable_path: &Path) -> ApplicationIcon {
+    if !executable_path.is_file() {
+        return ApplicationIcon::Generic;
+    }
     windows_icon::extract(executable_path)
         .filter(|bytes| !bytes.is_empty())
         .map(|bytes| ApplicationIcon::LocalData {
@@ -1805,5 +1852,10 @@ mod tests {
             executable_icon(&extended_path),
             ApplicationIcon::LocalData { .. }
         ));
+    }
+
+    #[test]
+    fn executable_icon_uses_the_generic_fallback_for_a_directory() {
+        assert_eq!(executable_icon(Path::new(".")), ApplicationIcon::Generic);
     }
 }

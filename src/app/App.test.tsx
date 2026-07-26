@@ -1123,7 +1123,9 @@ describe("Formation Lap shell", () => {
     );
     await user.type(screen.getByLabelText("Primary Sim arguments 1"), "-novr");
 
-    await user.click(screen.getAllByText("Advanced startup settings")[0]!);
+    await user.click(
+      screen.getAllByText("Shutdown and advanced launch settings")[0]!,
+    );
     const hiddenConsole = screen.getAllByRole("checkbox", {
       name: "Hide console",
     })[0]!;
@@ -1339,6 +1341,64 @@ describe("Formation Lap shell", () => {
     expect(
       screen.getByText(/monitor this exact executable automatically/),
     ).toBeVisible();
+  });
+
+  it("groups Primary Sim Steam and runtime details behind compact disclosures", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.primarySim.launchRecipe.source = {
+      kind: "steam",
+      appId: 2399420,
+      selector: null,
+    };
+    snapshot.selectedProfile!.primarySim.launchRecipe.monitoredProcess =
+      "Le Mans Ultimate.exe";
+    snapshot.selectedProfile!.primarySim.launchRecipe.monitoredExecutablePath =
+      "B:\\SteamLibrary\\steamapps\\common\\Le Mans Ultimate\\Le Mans Ultimate.exe";
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+    await user.click(screen.getByText("Launch Recipe details"));
+
+    const steamSettings = screen.getByText("Steam launch settings");
+    const steamDetails = steamSettings.closest("details");
+    const processMatching = screen.getByText("Process matching");
+    const processDetails = processMatching.closest("details");
+    const runtimeSettings = screen.getByText(
+      "Shutdown and advanced launch settings",
+    );
+    const runtimeDetails = runtimeSettings.closest("details");
+    if (
+      !(steamDetails instanceof HTMLDetailsElement) ||
+      !(processDetails instanceof HTMLDetailsElement) ||
+      !(runtimeDetails instanceof HTMLDetailsElement)
+    ) {
+      throw new Error("Launch Recipe groups should use native disclosures");
+    }
+    expect(steamDetails).not.toHaveAttribute("open");
+    expect(processDetails).not.toHaveAttribute("open");
+    expect(runtimeDetails).not.toHaveAttribute("open");
+
+    await user.click(steamSettings);
+    expect(
+      screen.getByLabelText("Primary Sim Steam launch option"),
+    ).toBeVisible();
+
+    await user.click(processMatching);
+    expect(screen.getByLabelText("Primary Sim monitored process")).toHaveValue(
+      "Le Mans Ultimate.exe",
+    );
+
+    await user.click(runtimeSettings);
+    expect(screen.getByLabelText("Shutdown strategy")).toHaveValue(
+      "closeWindows",
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Hide console" }),
+    ).toBeChecked();
   });
 
   it("omits the Windows extended-length prefix from displayed executable paths", async () => {

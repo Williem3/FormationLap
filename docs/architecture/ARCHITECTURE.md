@@ -165,6 +165,8 @@ diagnostics.
 - Retain each trusted source path independently from document content.
 - Repair invalid legacy IDs into UUID-named documents while preserving backups.
 - Keep newly imported executable configuration in Needs Review until approved.
+- Persist privileged-recipe approval only as a Windows-protected record bound
+  to the reviewed Launch Recipe configuration, never in editable profile JSON.
 
 Tests use a real temporary directory. Do not add a filesystem port solely for
 mocking.
@@ -328,6 +330,8 @@ Formation Lap/
 ├── settings.json
 ├── catalog-overrides.json
 ├── active-session.json
+├── profile-approvals/
+│   └── <profile-id>.bin
 ├── profiles/
 │   └── <profile-id>.json
 ├── backups/
@@ -349,6 +353,10 @@ Persistence rules:
   conflicting stores are never merged.
 - Profile save/delete paths come from ProfileLibrary's trusted inventory, never
   an untrusted document ID. UUID IDs must match filenames.
+- The protected approval record is valid only for its profile ID and exact
+  launch-configuration fingerprint. A missing, unreadable, or mismatched record
+  leaves privileged recipes in Needs Review; profile import and privileged
+  duplication get new IDs and cannot transfer approval.
 
 ## Windows implementation
 

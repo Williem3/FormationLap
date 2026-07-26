@@ -4,6 +4,7 @@ use crate::{
     atomic_file::replace_with_backup,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
@@ -15,6 +16,7 @@ use uuid::Uuid;
 const PROFILE_SCHEMA_VERSION: u32 = 2;
 const LEGACY_PROFILE_SCHEMA_VERSION: u32 = 1;
 const PORTABLE_PROFILE_SCHEMA_VERSION: u32 = 1;
+const PROFILE_APPROVAL_SCHEMA_VERSION: u32 = 1;
 
 fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
     if name.trim().is_empty() {
@@ -103,6 +105,200 @@ struct PortableRacingProfileDocument {
     close_session: CloseSessionSettings,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalBinding<'a> {
+    profile_id: &'a str,
+    primary_sim: ApprovalApplicationBinding<'a>,
+    supporting_applications: Vec<ApprovalSupportingApplicationBinding<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalApplicationBinding<'a> {
+    id: &'a str,
+    launch_recipe: &'a LaunchRecipe,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalSupportingApplicationBinding<'a> {
+    application: ApprovalApplicationBinding<'a>,
+    requirement: &'a crate::ApplicationRequirement,
+    keep_running: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileApprovalRecord {
+    schema_version: u32,
+    profile_id: String,
+    launch_configuration_fingerprint: String,
+}
+
+struct ProfileApprovalStore {
+    directory: PathBuf,
+}
+
+#[cfg(windows)]
+struct LocalAllocation(*mut std::ffi::c_void);
+
+#[cfg(windows)]
+impl Drop for LocalAllocation {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                windows_sys::Win32::Foundation::LocalFree(self.0);
+            }
+        }
+    }
+}
+
+impl ProfileApprovalStore {
+    fn open(storage_root: &Path) -> Result<Self, CoreError> {
+        let directory = storage_root.join("profile-approvals");
+        fs::create_dir_all(&directory)?;
+        Ok(Self { directory })
+    }
+
+    fn matches(&self, profile: &RacingProfileDocument) -> bool {
+        let Ok(encrypted_record) = fs::read(self.record_path(&profile.id)) else {
+            return false;
+        };
+        let Ok(record) = unprotect_approval_record(&encrypted_record).and_then(|record| {
+            serde_json::from_slice::<ProfileApprovalRecord>(&record).map_err(Into::into)
+        }) else {
+            return false;
+        };
+
+        record.schema_version == PROFILE_APPROVAL_SCHEMA_VERSION
+            && record.profile_id == profile.id
+            && record.launch_configuration_fingerprint
+                == ProfileLibrary::approval_fingerprint(profile).unwrap_or_default()
+    }
+
+    fn persist(&self, profile: &RacingProfileDocument) -> Result<(), CoreError> {
+        let record = ProfileApprovalRecord {
+            schema_version: PROFILE_APPROVAL_SCHEMA_VERSION,
+            profile_id: profile.id.clone(),
+            launch_configuration_fingerprint: ProfileLibrary::approval_fingerprint(profile)?,
+        };
+        let encrypted_record = protect_approval_record(&serde_json::to_vec(&record)?)?;
+        let temporary = self.directory.join(format!(".{}.tmp", profile.id));
+        let destination = self.record_path(&profile.id);
+        if temporary.exists() {
+            fs::remove_file(&temporary)?;
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        if let Err(error) = file
+            .write_all(&encrypted_record)
+            .and_then(|()| file.sync_all())
+        {
+            drop(file);
+            let _ = fs::remove_file(&temporary);
+            return Err(error.into());
+        }
+        drop(file);
+        fs::rename(temporary, destination)?;
+        Ok(())
+    }
+
+    fn remove(&self, profile_id: &str) -> Result<(), CoreError> {
+        match fs::remove_file(self.record_path(profile_id)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn record_path(&self, profile_id: &str) -> PathBuf {
+        self.directory.join(format!("{profile_id}.bin"))
+    }
+}
+
+#[cfg(windows)]
+fn protect_approval_record(record: &[u8]) -> Result<Vec<u8>, CoreError> {
+    use std::ptr::null;
+    use windows_sys::Win32::Security::Cryptography::{
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData,
+    };
+
+    let length = u32::try_from(record.len())
+        .map_err(|_| std::io::Error::other("profile approval record is too large"))?;
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: length,
+        pbData: record.as_ptr().cast_mut(),
+    };
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    if unsafe {
+        CryptProtectData(
+            &input,
+            null(),
+            null(),
+            null(),
+            null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let allocation = LocalAllocation(output.pbData.cast());
+    if allocation.0.is_null() {
+        return Err(std::io::Error::other("Windows protected an empty approval record").into());
+    }
+    Ok(unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() })
+}
+
+#[cfg(windows)]
+fn unprotect_approval_record(record: &[u8]) -> Result<Vec<u8>, CoreError> {
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Security::Cryptography::{
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
+    };
+
+    let length = u32::try_from(record.len())
+        .map_err(|_| std::io::Error::other("profile approval record is too large"))?;
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: length,
+        pbData: record.as_ptr().cast_mut(),
+    };
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    if unsafe {
+        CryptUnprotectData(
+            &input,
+            null_mut(),
+            null(),
+            null(),
+            null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let allocation = LocalAllocation(output.pbData.cast());
+    if allocation.0.is_null() {
+        return Err(std::io::Error::other("Windows unprotected an empty approval record").into());
+    }
+    Ok(unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() })
+}
+
+#[cfg(not(windows))]
+fn protect_approval_record(_record: &[u8]) -> Result<Vec<u8>, CoreError> {
+    Err(std::io::Error::other("protected profile approvals require Windows").into())
+}
+
+#[cfg(not(windows))]
+fn unprotect_approval_record(_record: &[u8]) -> Result<Vec<u8>, CoreError> {
+    Err(std::io::Error::other("protected profile approvals require Windows").into())
+}
+
 impl PortableRacingProfileDocument {
     fn from_stored(profile: &RacingProfileDocument) -> Self {
         Self {
@@ -132,6 +328,7 @@ impl PortableRacingProfileDocument {
 }
 
 pub(crate) struct ProfileLibrary {
+    approval_store: ProfileApprovalStore,
     backups_directory: PathBuf,
     profiles_directory: PathBuf,
     profiles: Vec<StoredProfile>,
@@ -145,8 +342,10 @@ struct StoredProfile {
 
 impl ProfileLibrary {
     pub(crate) fn open(storage_root: impl AsRef<Path>) -> Result<Self, CoreError> {
-        let profiles_directory = storage_root.as_ref().join("profiles");
-        let backups_directory = storage_root.as_ref().join("backups");
+        let storage_root = storage_root.as_ref();
+        let profiles_directory = storage_root.join("profiles");
+        let backups_directory = storage_root.join("backups");
+        let approval_store = ProfileApprovalStore::open(storage_root)?;
         fs::create_dir_all(&profiles_directory)?;
         fs::create_dir_all(&backups_directory)?;
         Self::recover_interrupted_replacements(&profiles_directory, &backups_directory)?;
@@ -177,12 +376,13 @@ impl ProfileLibrary {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
                 Self::persist_migration(&source_path, &backups_directory, &document)?;
             }
-            // Review status is user-writable JSON. A privileged recipe is never
-            // trusted after a disk reload: only this running native process may
-            // hold a freshly reviewed privileged configuration.
-            if Self::applications(&document).any(|application| {
-                Self::recipe_requires_privileged_approval(&application.launch_recipe)
-            }) {
+            // Profile JSON remains user-writable. A privileged recipe is trusted
+            // only when the JSON still says it is approved and the separately
+            // protected approval record matches this exact launch configuration.
+            if Self::has_privileged_recipe(&document)
+                && (document.review_status != ProfileReviewStatus::Approved
+                    || !approval_store.matches(&document))
+            {
                 document.review_status = ProfileReviewStatus::NeedsReview;
             }
             profiles.push(StoredProfile {
@@ -199,6 +399,7 @@ impl ProfileLibrary {
         });
 
         Ok(Self {
+            approval_store,
             backups_directory,
             profiles_directory,
             profiles,
@@ -654,6 +855,7 @@ impl ProfileLibrary {
         let profile_index = self.profile_index(profile_id)?;
         let destination = self.profiles[profile_index].source_path.clone();
         fs::remove_file(destination)?;
+        self.approval_store.remove(profile_id)?;
         self.profiles.remove(profile_index);
         Ok(())
     }
@@ -712,8 +914,11 @@ impl ProfileLibrary {
                 Self::path_needs_repair(&supporting.application.launch_recipe);
         }
 
-        let privileged_recipe_changed = Self::privileged_recipe_changed(&stored_profile, &profile);
         let mut profile = RacingProfileDocument::from(profile);
+        let approval_binding_changed =
+            Self::approval_fingerprint(&stored_profile)? != Self::approval_fingerprint(&profile)?;
+        let privileged_recipe_changed =
+            Self::has_privileged_recipe(&profile) && approval_binding_changed;
         profile.review_status = if stored_profile.review_status == ProfileReviewStatus::NeedsReview
             || privileged_recipe_changed
         {
@@ -723,6 +928,9 @@ impl ProfileLibrary {
         };
         Self::write_temporary_document(&temporary, &profile)?;
         replace_with_backup(&destination, &temporary, &backup)?;
+        if approval_binding_changed {
+            self.approval_store.remove(&profile.id)?;
+        }
 
         self.profiles[profile_index].document = profile;
         self.sort_profiles();
@@ -769,6 +977,11 @@ impl ProfileLibrary {
         let (destination, temporary, backup) = self.persisted_paths(profile_index)?;
         let mut approved_profile = profile.clone();
         approved_profile.review_status = ProfileReviewStatus::Approved;
+        if Self::has_privileged_recipe(&approved_profile) {
+            self.approval_store.persist(&approved_profile)?;
+        } else {
+            self.approval_store.remove(&approved_profile.id)?;
+        }
         Self::write_temporary_document(&temporary, &approved_profile)?;
         replace_with_backup(&destination, &temporary, &backup)?;
         self.profiles[profile_index].document = approved_profile;
@@ -793,55 +1006,36 @@ impl ProfileLibrary {
             )
     }
 
-    fn privileged_recipe_changed(stored: &RacingProfileDocument, updated: &RacingProfile) -> bool {
-        std::iter::once(&updated.primary_sim)
-            .chain(
-                updated
-                    .supporting_applications
-                    .iter()
-                    .map(|supporting| &supporting.application),
-            )
-            .any(|updated_application| {
-                let stored_application = Self::applications(stored)
-                    .find(|stored_application| stored_application.id == updated_application.id);
-                match stored_application {
-                    Some(stored_application) => !Self::privileged_recipe_matches(
-                        &stored_application.launch_recipe,
-                        &updated_application.launch_recipe,
-                    ),
-                    None => Self::recipe_requires_privileged_approval(
-                        &updated_application.launch_recipe,
-                    ),
-                }
-            })
+    fn has_privileged_recipe(profile: &RacingProfileDocument) -> bool {
+        Self::applications(profile).any(|application| {
+            Self::recipe_requires_privileged_approval(&application.launch_recipe)
+        })
     }
 
-    fn privileged_recipe_matches(stored: &LaunchRecipe, updated: &LaunchRecipe) -> bool {
-        let stored_requires = Self::recipe_requires_privileged_approval(stored);
-        let updated_requires = Self::recipe_requires_privileged_approval(updated);
-        if !stored_requires && !updated_requires {
-            return true;
-        }
-        if stored_requires != updated_requires || stored.elevated != updated.elevated {
-            return false;
-        }
-        if updated.elevated
-            && (stored.source != updated.source
-                || stored.arguments != updated.arguments
-                || stored.working_directory != updated.working_directory)
-        {
-            return false;
-        }
-        if matches!(
-            &stored.shutdown_strategy,
-            ShutdownStrategy::CustomStop { .. }
-        ) || matches!(
-            &updated.shutdown_strategy,
-            ShutdownStrategy::CustomStop { .. }
-        ) {
-            return stored.shutdown_strategy == updated.shutdown_strategy;
-        }
-        true
+    fn approval_fingerprint(profile: &RacingProfileDocument) -> Result<String, CoreError> {
+        let binding = ApprovalBinding {
+            profile_id: &profile.id,
+            primary_sim: ApprovalApplicationBinding {
+                id: &profile.primary_sim.id,
+                launch_recipe: &profile.primary_sim.launch_recipe,
+            },
+            supporting_applications: profile
+                .supporting_applications
+                .iter()
+                .map(|supporting| ApprovalSupportingApplicationBinding {
+                    application: ApprovalApplicationBinding {
+                        id: &supporting.application.id,
+                        launch_recipe: &supporting.application.launch_recipe,
+                    },
+                    requirement: &supporting.requirement,
+                    keep_running: supporting.keep_running,
+                })
+                .collect(),
+        };
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&binding)?)
+        ))
     }
 
     pub(crate) fn delete(&mut self, profile_id: &str) -> Result<(), CoreError> {
@@ -852,6 +1046,7 @@ impl ProfileLibrary {
             fs::remove_file(&backup)?;
         }
         fs::rename(destination, backup)?;
+        self.approval_store.remove(profile_id)?;
         self.profiles.remove(profile_index);
 
         Ok(())
@@ -872,6 +1067,9 @@ impl ProfileLibrary {
         duplicate.primary_sim.id = Uuid::new_v4().to_string();
         for supporting_application in &mut duplicate.supporting_applications {
             supporting_application.application.id = Uuid::new_v4().to_string();
+        }
+        if Self::has_privileged_recipe(&duplicate) {
+            duplicate.review_status = ProfileReviewStatus::NeedsReview;
         }
 
         let destination = self.profiles_directory.join(format!("{id}.json"));

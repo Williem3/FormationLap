@@ -1329,7 +1329,219 @@ fn editing_an_approved_privileged_recipe_invalidates_its_approval() {
 }
 
 #[test]
-fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_restart() {
+fn an_approved_privileged_recipe_remains_approved_after_restart_when_unchanged() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Approved local profile".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        };
+        profile.primary_sim.launch_recipe.elevated = true;
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
+    }
+
+    let reopened =
+        FormationLapCore::open(storage.path()).expect("approved local storage should reopen");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::Approved
+    );
+}
+
+#[test]
+fn a_missing_protected_approval_requarantines_an_approved_privileged_recipe() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Approval record fixture".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        };
+        profile.primary_sim.launch_recipe.elevated = true;
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
+    }
+
+    fs::remove_file(
+        storage
+            .path()
+            .join("profile-approvals")
+            .join(format!("{profile_id}.bin")),
+    )
+    .expect("approval record should be removable for the fixture");
+
+    let reopened = FormationLapCore::open(storage.path())
+        .expect("local storage should reopen without a record");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+}
+
+#[test]
+fn duplicating_an_approved_privileged_recipe_does_not_transfer_its_approval() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let source_profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Approved source".to_owned(),
+                "Fixture".to_owned(),
+            )),
+        })
+        .expect("fixture profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should be selected");
+    profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    profile.primary_sim.launch_recipe.elevated = true;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the privileged recipe should enter review quarantine");
+    let primary_id = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should remain selected")
+        .primary_sim
+        .id;
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: source_profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![primary_id],
+    })
+    .expect("the source recipe should be approved");
+
+    let duplicate_profile_id = match core
+        .execute(AppCommand::DuplicateProfile {
+            source_profile_id: source_profile_id.clone(),
+            name: "Unreviewed copy".to_owned(),
+        })
+        .expect("approved source should be duplicable")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected duplicate creation, got {other:?}"),
+    };
+
+    let review_statuses = core
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|profile| (profile.id, profile.review_status))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        review_statuses.get(&source_profile_id),
+        Some(&ProfileReviewStatus::Approved)
+    );
+    assert_eq!(
+        review_statuses.get(&duplicate_profile_id),
+        Some(&ProfileReviewStatus::NeedsReview)
+    );
+
+    drop(core);
+    let reopened = FormationLapCore::open(storage.path()).expect("profile storage should reopen");
+    let reopened_statuses = reopened
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|profile| (profile.id, profile.review_status))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        reopened_statuses.get(&source_profile_id),
+        Some(&ProfileReviewStatus::Approved)
+    );
+    assert_eq!(
+        reopened_statuses.get(&duplicate_profile_id),
+        Some(&ProfileReviewStatus::NeedsReview)
+    );
+}
+
+#[test]
+fn a_disk_modified_privileged_recipe_cannot_reuse_a_persisted_approval_after_restart() {
     let storage = TempStorage::new();
     let executable_path = std::env::current_exe()
         .expect("test executable path should be available")
@@ -1363,6 +1575,18 @@ fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_
             profile: Box::new(profile),
         })
         .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
     }
 
     let profile_path = storage
@@ -1373,10 +1597,7 @@ fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_
         &fs::read(&profile_path).expect("profile document should be readable"),
     )
     .expect("profile document should parse");
-    document
-        .as_object_mut()
-        .expect("profile document is an object")
-        .remove("reviewStatus");
+    document["primarySim"]["launchRecipe"]["arguments"] = serde_json::json!(["--tampered"]);
     fs::write(
         &profile_path,
         serde_json::to_vec_pretty(&document).expect("tampered profile should serialize"),

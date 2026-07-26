@@ -56,9 +56,12 @@ profile preserves all values but enters Needs Review and cannot start a Session
 until the user reviews executable paths, arguments, working directories,
 elevation, monitored executables, and custom-stop recipes. Elevated and
 custom-stop entries require explicit approval; changing an approved privileged
-recipe invalidates that approval. Because profile JSON is user-writable, a
-privileged recipe re-enters Needs Review after Formation Lap reloads it from
-disk. Missing or suspicious paths require file re-selection.
+recipe invalidates that approval. Formation Lap keeps approval separately in
+protected local state bound to the exact reviewed launch configuration, so it
+persists across a normal restart. Imported profiles and duplicated privileged
+profiles, a missing or invalid protected record, and a changed reviewed
+configuration enter Needs Review. Missing or suspicious paths require file
+re-selection.
 
 ## First-run and discovery
 

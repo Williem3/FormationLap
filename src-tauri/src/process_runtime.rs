@@ -886,7 +886,10 @@ mod windows_adapter {
     pub(super) fn same_executable_descendants(
         identity: &ProcessIdentity,
     ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
-        if process_identity(identity.pid).is_ok_and(|current| current != *identity) {
+        // Toolhelp only carries reusable PIDs. Once the launcher has exited we
+        // cannot prove an entry still descends from this exact Process, so never
+        // turn a child of a PID replacement into Session-owned state.
+        if process_identity(identity.pid).ok().as_ref() != Some(identity) {
             return Ok(Vec::new());
         }
         let ancestor_creation_time = identity.creation_time.parse::<u64>().map_err(|_| {

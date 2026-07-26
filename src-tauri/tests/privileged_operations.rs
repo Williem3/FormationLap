@@ -10,6 +10,7 @@ use formation_lap_lib::{
     ProcessStatus, RacingProfile, SessionState, ShutdownStrategy, SupportingApplication,
     WindowsPrivilegeBroker, decode_helper_request,
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -26,6 +27,13 @@ fn canonical_current_executable() -> String {
         .into_owned()
 }
 
+fn executable_sha256(path: &str) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(fs::read(path).expect("fixture should be readable"))
+    )
+}
+
 fn valid_request() -> (ElevatedHelperRequest, HelperValidationContext) {
     let parent_identity = ProcessIdentity {
         pid: 4_242,
@@ -40,6 +48,7 @@ fn valid_request() -> (ElevatedHelperRequest, HelperValidationContext) {
             current_user_id: "S-1-5-21-formation-lap-test".to_owned(),
             operations: vec![ElevatedOperation::Launch {
                 executable_path: canonical_current_executable(),
+                executable_sha256: executable_sha256(&canonical_current_executable()),
                 arguments: vec!["--safe-fixture".to_owned()],
                 working_directory: Some(
                     Path::new(&canonical_current_executable())
@@ -173,6 +182,7 @@ fn helper_rejects_noncanonical_and_shell_targets() {
     );
     request.operations[0] = ElevatedOperation::Launch {
         executable_path: noncanonical.clone(),
+        executable_sha256: executable_sha256(&canonical),
         arguments: Vec::new(),
         working_directory: None,
         monitored_process: None,
@@ -190,6 +200,7 @@ fn helper_rejects_noncanonical_and_shell_targets() {
     let (mut request, context) = valid_request();
     request.operations[0] = ElevatedOperation::Launch {
         executable_path: canonical_system_executable("cmd.exe"),
+        executable_sha256: executable_sha256(&canonical_system_executable("cmd.exe")),
         arguments: vec!["/c".to_owned(), "echo unsafe".to_owned()],
         working_directory: None,
         monitored_process: None,
@@ -243,6 +254,7 @@ fn helper_rejects_oversized_batches_and_line_bearing_arguments() {
     let (mut request, context) = valid_request();
     request.operations[0] = ElevatedOperation::Launch {
         executable_path: canonical_current_executable(),
+        executable_sha256: executable_sha256(&canonical_current_executable()),
         arguments: vec!["safe\r\nwhoami".to_owned()],
         working_directory: None,
         monitored_process: None,
@@ -256,6 +268,25 @@ fn helper_rejects_oversized_batches_and_line_bearing_arguments() {
             .expect_err("arguments cannot smuggle another line of shell text"),
         HelperProtocolError::InvalidArguments(_)
     ));
+}
+
+#[test]
+fn helper_rejects_an_elevated_target_when_its_bytes_do_not_match_the_request() {
+    let (mut request, context) = valid_request();
+    let ElevatedOperation::Launch {
+        executable_sha256, ..
+    } = &mut request.operations[0]
+    else {
+        unreachable!("the fixture request launches an executable");
+    };
+    *executable_sha256 = "0".repeat(64);
+
+    assert_eq!(
+        ElevatedRequestValidator::default()
+            .validate(&request, &context)
+            .expect_err("a replaced elevated executable must not be accepted"),
+        HelperProtocolError::ExecutableIdentityMismatch
+    );
 }
 
 #[test]
@@ -994,6 +1025,7 @@ fn manual_uac_helper_launches_and_closes_an_elevated_window_fixture() {
                 .expect("the fixture should be built")
                 .to_string_lossy()
                 .into_owned(),
+            executable_sha256: executable_sha256(&fixture_path.to_string_lossy()),
             arguments: vec![
                 "--report".to_owned(),
                 report_path.to_string_lossy().into_owned(),
@@ -1072,6 +1104,7 @@ fn one_shot_helper_exits_after_an_accepted_or_rejected_request() {
     let response = broker
         .execute_without_elevation_for_test(&[ElevatedOperation::Launch {
             executable_path: fixture_path.to_string_lossy().into_owned(),
+            executable_sha256: executable_sha256(&fixture_path.to_string_lossy()),
             arguments: vec![
                 "--report".to_owned(),
                 storage
@@ -1128,6 +1161,7 @@ fn one_shot_helper_exits_after_an_accepted_or_rejected_request() {
     let error = broker
         .execute_without_elevation_for_test(&[ElevatedOperation::Launch {
             executable_path: noncanonical,
+            executable_sha256: executable_sha256(&fixture_path.to_string_lossy()),
             arguments: Vec::new(),
             working_directory: None,
             monitored_process: None,
@@ -1160,6 +1194,7 @@ fn missing_ownership_acknowledgement_stops_the_just_launched_process() {
         .execute_launch_batch_without_elevation_for_test(
             &[ElevatedOperation::Launch {
                 executable_path: fixture_path.to_string_lossy().into_owned(),
+                executable_sha256: executable_sha256(&fixture_path.to_string_lossy()),
                 arguments: vec![
                     "--report".to_owned(),
                     storage

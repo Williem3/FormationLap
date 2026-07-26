@@ -1690,6 +1690,11 @@ fn a_verified_journal_offers_recovery_without_resuming_until_accepted() {
         recovery_snapshot.application_processes[0].identity,
         Some(primary_identity.clone())
     );
+    assert_eq!(
+        recovery_snapshot.application_processes[0].ownership,
+        Some(ProcessOwnership::PreExisting),
+        "a user-writable journal cannot restore automatic cleanup ownership"
+    );
 
     let outcome = recovered
         .execute(AppCommand::AcceptRecovery)
@@ -1719,6 +1724,82 @@ fn a_verified_journal_offers_recovery_without_resuming_until_accepted() {
     assert!(
         !storage.path().join("active-session.json").exists(),
         "dismissal should remove the stale Recovery Offer"
+    );
+}
+
+#[test]
+fn recovery_rejects_a_live_journal_process_that_no_longer_matches_its_racing_profile() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let launched_identity = ProcessIdentity {
+        pid: 20_101,
+        creation_time: "133822945201010000".to_owned(),
+        canonical_executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    let profile_id;
+    {
+        let runtime = ScriptedProcessRuntime {
+            matching_processes: VecDeque::from([Vec::new()]),
+            launch_results: VecDeque::from([Ok(launched_identity)]),
+            ..ScriptedProcessRuntime::default()
+        };
+        let mut core = FormationLapCore::open_with_runtime(storage.path(), runtime)
+            .expect("empty Session storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(NewRacingProfile::from_names(
+                    "Recoverable".to_owned(),
+                    "Primary Sim".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim = application(&profile.primary_sim.id, "Primary Sim", &executable_path);
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("fixture profile should be configured");
+        core.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        })
+        .expect("Session should begin");
+        core.execute(AppCommand::RefreshProcesses)
+            .expect("Primary Sim should become Active");
+    }
+
+    let profile_path = storage
+        .path()
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
+    let mut profile_document: serde_json::Value = serde_json::from_slice(
+        &fs::read(&profile_path).expect("profile document should be readable"),
+    )
+    .expect("profile document should parse");
+    profile_document["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(r"C:\\unrelated.exe");
+    fs::write(
+        &profile_path,
+        serde_json::to_vec_pretty(&profile_document).expect("tampered profile should serialize"),
+    )
+    .expect("tampered profile should be written");
+
+    let recovered =
+        FormationLapCore::open_with_runtime(storage.path(), ScriptedProcessRuntime::default())
+            .expect("tampered storage should reopen without controlling a Process");
+    assert_eq!(recovered.snapshot().session.state, SessionState::Idle);
+    assert!(
+        !storage.path().join("active-session.json").exists(),
+        "a journal that no longer matches the Racing Profile must be discarded"
     );
 }
 

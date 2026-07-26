@@ -1,9 +1,12 @@
 use crate::{ConsoleVisibility, ProcessIdentity, ShutdownStrategy};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     error::Error,
-    fmt, fs,
+    fmt,
+    fs::{self, File},
+    io::Read,
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
@@ -29,6 +32,7 @@ pub struct ElevatedHelperRequest {
 pub enum ElevatedOperation {
     Launch {
         executable_path: String,
+        executable_sha256: String,
         arguments: Vec<String>,
         working_directory: Option<String>,
         monitored_process: Option<String>,
@@ -110,6 +114,7 @@ pub enum HelperProtocolError {
     BatchTooLarge { maximum: usize, received: usize },
     NonCanonicalPath(String),
     InvalidExecutable(String),
+    ExecutableIdentityMismatch,
     InvalidArguments(String),
     WrongProcessIdentity(u32),
     ProtectedProcess(u32),
@@ -161,6 +166,9 @@ impl fmt::Display for HelperProtocolError {
             }
             Self::InvalidExecutable(message) => {
                 write!(formatter, "helper executable is not allowed: {message}")
+            }
+            Self::ExecutableIdentityMismatch => {
+                formatter.write_str("helper executable bytes do not match the approved identity")
             }
             Self::InvalidArguments(message) => {
                 write!(formatter, "helper arguments are not allowed: {message}")
@@ -273,6 +281,7 @@ fn validate_operation(
     match operation {
         ElevatedOperation::Launch {
             executable_path,
+            executable_sha256,
             arguments,
             working_directory,
             monitored_process,
@@ -280,7 +289,7 @@ fn validate_operation(
             startup_timeout_seconds,
             ..
         } => {
-            validate_executable(executable_path)?;
+            validate_executable_identity(executable_path, executable_sha256)?;
             validate_arguments(arguments)?;
             if let Some(working_directory) = working_directory {
                 validate_canonical_directory(working_directory)?;
@@ -389,6 +398,40 @@ fn validate_executable(path: &str) -> Result<(), HelperProtocolError> {
         return Err(HelperProtocolError::InvalidExecutable(
             "shell and script hosts are outside the helper protocol".to_owned(),
         ));
+    }
+    Ok(())
+}
+
+pub(crate) fn executable_sha256(path: &str) -> Result<String, HelperProtocolError> {
+    let canonical = validate_canonical_file(path)?;
+    let mut file = File::open(canonical)
+        .map_err(|error| HelperProtocolError::InvalidExecutable(error.to_string()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let bytes = file
+            .read(&mut buffer)
+            .map_err(|error| HelperProtocolError::InvalidExecutable(error.to_string()))?;
+        if bytes == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn validate_executable_identity(
+    path: &str,
+    expected_sha256: &str,
+) -> Result<(), HelperProtocolError> {
+    validate_executable(path)?;
+    if expected_sha256.len() != 64
+        || !expected_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || executable_sha256(path)? != expected_sha256
+    {
+        return Err(HelperProtocolError::ExecutableIdentityMismatch);
     }
     Ok(())
 }

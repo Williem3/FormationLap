@@ -145,6 +145,34 @@ Create or revise an ADR only for a decision that is:
 Do not silently revise the product specification. Raise the conflict and obtain
 user agreement first.
 
+## Branches and pull requests
+
+Create a new focused branch for every bugfix, feature, architectural change, or
+documentation update. Use the `codex/` prefix by default and name the branch
+for its change, for example `codex/bugfix-session-cleanup`,
+`codex/feat-profile-import`, `codex/arch-storage-boundary`, `codex/sec-version-update`, or
+`codex/docs-install-guide`.
+
+Before creating a branch, refresh `master` from `origin/master` and confirm the
+branch starts from that current `master` commit. Before opening a pull request,
+refresh `origin/master` again and rebase or otherwise update the branch so it
+contains the latest `master`; resolve any conflicts and rerun the verification
+appropriate to the change.
+
+Every pull-request title starts with exactly one category prefix followed by a
+short, specific title:
+
+- `(doc)` for documentation updates.
+- `(feat)` for user-visible features.
+- `(arch)` for architectural changes.
+- `(bugfix)` for defect fixes.
+- `(sec)` for security updates/fixes.
+
+Each pull-request description includes a brief `TL;DR` followed by a complete
+explanation of the change, its motivation, affected behavior or interfaces,
+verification performed, and any relevant risks, follow-up work, or explicit
+out-of-scope items.
+
 ## Handoff and completion
 
 Before ending a workspace-changing turn:

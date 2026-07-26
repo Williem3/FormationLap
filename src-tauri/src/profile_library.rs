@@ -177,6 +177,14 @@ impl ProfileLibrary {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
                 Self::persist_migration(&source_path, &backups_directory, &document)?;
             }
+            // Review status is user-writable JSON. A privileged recipe is never
+            // trusted after a disk reload: only this running native process may
+            // hold a freshly reviewed privileged configuration.
+            if Self::applications(&document).any(|application| {
+                Self::recipe_requires_privileged_approval(&application.launch_recipe)
+            }) {
+                document.review_status = ProfileReviewStatus::NeedsReview;
+            }
             profiles.push(StoredProfile {
                 document,
                 source_path,

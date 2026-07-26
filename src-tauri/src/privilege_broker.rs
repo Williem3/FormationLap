@@ -906,6 +906,7 @@ mod platform {
         let result = match operation {
             ElevatedOperation::Launch {
                 executable_path,
+                executable_sha256: _,
                 arguments,
                 working_directory,
                 monitored_process,

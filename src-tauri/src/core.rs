@@ -479,20 +479,55 @@ impl FormationLapCore {
         let mut application_processes = BTreeMap::new();
         let mut application_recipes = BTreeMap::new();
         if let Some(recovered) = session_journal.load()? {
-            for mut process in recovered.application_processes {
-                let Some(identity) = process.identity.as_ref() else {
-                    continue;
-                };
-                if matches!(
-                    process_runtime.observe(identity),
-                    Ok(ProcessObservation::Running { .. })
-                ) {
-                    process.status = if process.ownership == Some(ProcessOwnership::PreExisting) {
-                        ProcessStatus::RunningPreExisting
-                    } else {
-                        ProcessStatus::Running
+            let profile = recovered
+                .session
+                .active_profile_id
+                .as_deref()
+                .and_then(|profile_id| profile_library.profile(profile_id));
+            let mut recovered_recipes = BTreeMap::new();
+            if let Some(profile) = &profile {
+                for application in profile
+                    .supporting_applications
+                    .iter()
+                    .map(|supporting| &supporting.application)
+                    .chain(std::iter::once(&profile.primary_sim))
+                {
+                    recovered_recipes
+                        .insert(application.id.clone(), application.launch_recipe.clone());
+                }
+            }
+            let journal_is_consistent =
+                profile.is_some()
+                    && recovered.application_processes.iter().all(|process| {
+                        let Some(identity) = process.identity.as_ref() else {
+                            return true;
+                        };
+                        recovered
+                            .session
+                            .applications
+                            .iter()
+                            .any(|application| application.application_id == process.application_id)
+                            && recovered_recipes.get(&process.application_id).is_some_and(
+                                |recipe| recovery_identity_matches_recipe(identity, recipe),
+                            )
+                    });
+            if journal_is_consistent {
+                for mut process in recovered.application_processes {
+                    let Some(identity) = process.identity.as_ref() else {
+                        continue;
                     };
-                    application_processes.insert(process.application_id.clone(), process);
+                    if matches!(
+                        process_runtime.observe(identity),
+                        Ok(ProcessObservation::Running { .. })
+                    ) {
+                        // A journal is user-writable. Liveness and recipe matching
+                        // make a Recovery Offer safe to observe, but cannot prove
+                        // that Formation Lap created the Process. Recovery therefore
+                        // never restores automatic-cleanup ownership.
+                        process.ownership = Some(ProcessOwnership::PreExisting);
+                        process.status = ProcessStatus::RunningPreExisting;
+                        application_processes.insert(process.application_id.clone(), process);
+                    }
                 }
             }
             if !application_processes.is_empty() {
@@ -509,21 +544,7 @@ impl FormationLapCore {
                             };
                     }
                 }
-                if let Some(profile) = session
-                    .active_profile_id
-                    .as_deref()
-                    .and_then(|profile_id| profile_library.profile(profile_id))
-                {
-                    for application in profile
-                        .supporting_applications
-                        .iter()
-                        .map(|supporting| &supporting.application)
-                        .chain(std::iter::once(&profile.primary_sim))
-                    {
-                        application_recipes
-                            .insert(application.id.clone(), application.launch_recipe.clone());
-                    }
-                }
+                application_recipes = recovered_recipes;
             } else {
                 session_journal.clear()?;
             }
@@ -2334,6 +2355,25 @@ impl FormationLapCore {
     }
 }
 
+fn recovery_identity_matches_recipe(
+    identity: &ProcessIdentity,
+    recipe: &crate::LaunchRecipe,
+) -> bool {
+    let configured_path = recipe
+        .monitored_executable_path
+        .as_deref()
+        .or(match &recipe.source {
+            crate::LaunchSource::DirectExecutable { executable_path } => Some(executable_path),
+            crate::LaunchSource::Steam { .. } => None,
+        });
+    configured_path
+        .and_then(|path| std::path::Path::new(path).canonicalize().ok())
+        .is_some_and(|path| {
+            path.to_string_lossy()
+                .eq_ignore_ascii_case(&identity.canonical_executable_path)
+        })
+}
+
 fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOperation, CoreError> {
     let crate::LaunchSource::DirectExecutable { executable_path } = &recipe.source else {
         return Err(CoreError::InvalidLaunchRecipe(
@@ -2356,6 +2396,11 @@ fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOpe
         .map(|path| path.to_string_lossy().into_owned());
     Ok(ElevatedOperation::Launch {
         executable_path,
+        executable_sha256: crate::privilege_protocol::executable_sha256(match &recipe.source {
+            crate::LaunchSource::DirectExecutable { executable_path } => executable_path,
+            crate::LaunchSource::Steam { .. } => unreachable!("Steam launch was rejected"),
+        })
+        .map_err(|error| CoreError::InvalidLaunchRecipe(error.to_string()))?,
         arguments: recipe.arguments.clone(),
         working_directory,
         monitored_process: recipe.monitored_process.clone(),

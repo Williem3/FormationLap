@@ -1,7 +1,8 @@
 use formation_lap_lib::{
-    AppCommand, ApplicationRequirement, CloseSessionSettings, CommandOutcome, ConsoleVisibility,
-    FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication, ProfileReviewStatus,
-    ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication, VrLaunchMode,
+    AppCommand, ApplicationIcon, ApplicationRequirement, CloseSessionSettings, CommandOutcome,
+    ConsoleVisibility, FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication,
+    ProfileReviewStatus, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
+    TargetedDiscoverySources, VrLaunchMode,
 };
 use std::{
     fs,
@@ -38,6 +39,101 @@ impl TempStorage {
     }
 }
 
+#[test]
+fn saved_steam_primary_sim_uses_the_local_steam_library_icon() {
+    let storage = TempStorage::new();
+    let steam_root = storage.path().join("Steam");
+    let library_cache = steam_root.join("appcache").join("librarycache");
+    let steamapps = steam_root.join("steamapps");
+    fs::create_dir_all(&library_cache).expect("Steam library icon cache should be created");
+    fs::create_dir_all(steamapps.join("common").join("Automobilista 2"))
+        .expect("Automobilista 2 installation should be created");
+    fs::write(
+        steamapps.join("appmanifest_1066890.acf"),
+        r#""AppState"
+{
+  "appid" "1066890"
+  "installdir" "Automobilista 2"
+}"#,
+    )
+    .expect("Automobilista 2 manifest should be written");
+    fs::write(
+        library_cache.join("1066890_icon.png"),
+        [0x89_u8, 0x50, 0x4e, 0x47],
+    )
+    .expect("local Automobilista 2 Steam icon should be written");
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            steam_roots: vec![steam_root],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should open with local Steam metadata");
+    core.execute(AppCommand::CreateProfile {
+        profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+            "AMS2 race".to_owned(),
+            "Automobilista 2".to_owned(),
+        )),
+    })
+    .expect("a Racing Profile should be created");
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected");
+    let primary_sim_application_id = profile.primary_sim.id.clone();
+    profile.primary_sim.launch_recipe.source = LaunchSource::Steam {
+        app_id: 1_066_890,
+        selector: None,
+    };
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the Steam Primary Sim should be saved");
+
+    let icon = core
+        .snapshot()
+        .application_icons
+        .expect("saved Primary Sim icons should be included")
+        .into_iter()
+        .find(|icon| icon.application_id == primary_sim_application_id)
+        .expect("the saved Automobilista 2 Primary Sim should have an icon");
+    assert_eq!(
+        icon.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/png".to_owned(),
+            data_base64: "iVBORw==".to_owned(),
+        }
+    );
+
+    let mut unresolved_direct_profile = core
+        .snapshot()
+        .selected_profile
+        .expect("the saved Racing Profile should stay selected");
+    unresolved_direct_profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: String::new(),
+    };
+    unresolved_direct_profile.primary_sim.path_needs_repair = true;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(unresolved_direct_profile),
+    })
+    .expect("the unresolved direct Primary Sim should be saved");
+    let fallback_icon = core
+        .snapshot()
+        .application_icons
+        .expect("saved Primary Sim icons should be included")
+        .into_iter()
+        .find(|icon| icon.application_id == primary_sim_application_id)
+        .expect("the unresolved Automobilista 2 Primary Sim should have an icon");
+    assert_eq!(
+        fallback_icon.icon,
+        ApplicationIcon::LocalData {
+            media_type: "image/png".to_owned(),
+            data_base64: "iVBORw==".to_owned(),
+        }
+    );
+}
+
 impl Drop for TempStorage {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
@@ -62,6 +158,12 @@ fn created_racing_profile_survives_core_restart() {
         CommandOutcome::ProfileCreated { profile_id } => profile_id,
         other => panic!("expected profile creation, got {other:?}"),
     };
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected")
+        .primary_sim
+        .id;
 
     drop(core);
 
@@ -74,6 +176,7 @@ fn created_racing_profile_survives_core_restart() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -174,6 +277,12 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             profile_id: profile_id.clone()
         }
     );
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the edited Racing Profile should be selected")
+        .primary_sim
+        .id;
 
     drop(core);
     let reopened =
@@ -184,6 +293,7 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             id: profile_id,
             name: "Sunday endurance".to_owned(),
             primary_sim_name: "rFactor 2".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -265,6 +375,12 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
     };
 
     assert_ne!(duplicate_profile_id, source_profile_id);
+    let primary_sim_application_ids = core
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|summary| (summary.id, summary.primary_sim_application_id))
+        .collect::<std::collections::HashMap<_, _>>();
 
     drop(core);
     let reopened =
@@ -273,18 +389,40 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
         reopened.snapshot().profiles,
         vec![
             ProfileSummary {
+                primary_sim_application_id: primary_sim_application_ids
+                    .get(&source_profile_id)
+                    .expect("source profile icon identity should be present")
+                    .clone(),
                 id: source_profile_id,
                 name: "Endurance".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
                 review_status: ProfileReviewStatus::Approved,
             },
             ProfileSummary {
+                primary_sim_application_id: primary_sim_application_ids
+                    .get(&duplicate_profile_id)
+                    .expect("duplicate profile icon identity should be present")
+                    .clone(),
                 id: duplicate_profile_id,
                 name: "Endurance copy".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
                 review_status: ProfileReviewStatus::Approved,
             },
         ]
+    );
+    let snapshot = reopened.snapshot();
+    let icon_application_ids = snapshot
+        .application_icons
+        .expect("every persisted Racing Profile should contribute its local icon")
+        .into_iter()
+        .map(|icon| icon.application_id)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        icon_application_ids,
+        primary_sim_application_ids
+            .into_values()
+            .flatten()
+            .collect::<std::collections::HashSet<_>>()
     );
 }
 
@@ -608,6 +746,12 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
         CommandOutcome::ProfileCreated { profile_id } => profile_id,
         other => panic!("expected profile creation, got {other:?}"),
     };
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected")
+        .primary_sim
+        .id;
     drop(core);
 
     let live_document = storage
@@ -638,6 +782,7 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -669,6 +814,12 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
         profile: Box::new(edited),
     })
     .expect("editing should retain the last valid document as a backup");
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the saved Racing Profile should be selected")
+        .primary_sim
+        .id;
     drop(core);
 
     let live_document = storage
@@ -687,6 +838,7 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Last valid".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -1177,7 +1329,219 @@ fn editing_an_approved_privileged_recipe_invalidates_its_approval() {
 }
 
 #[test]
-fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_restart() {
+fn an_approved_privileged_recipe_remains_approved_after_restart_when_unchanged() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Approved local profile".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        };
+        profile.primary_sim.launch_recipe.elevated = true;
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
+    }
+
+    let reopened =
+        FormationLapCore::open(storage.path()).expect("approved local storage should reopen");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::Approved
+    );
+}
+
+#[test]
+fn a_missing_protected_approval_requarantines_an_approved_privileged_recipe() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Approval record fixture".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        };
+        profile.primary_sim.launch_recipe.elevated = true;
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
+    }
+
+    fs::remove_file(
+        storage
+            .path()
+            .join("profile-approvals")
+            .join(format!("{profile_id}.bin")),
+    )
+    .expect("approval record should be removable for the fixture");
+
+    let reopened = FormationLapCore::open(storage.path())
+        .expect("local storage should reopen without a record");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+}
+
+#[test]
+fn duplicating_an_approved_privileged_recipe_does_not_transfer_its_approval() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let source_profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Approved source".to_owned(),
+                "Fixture".to_owned(),
+            )),
+        })
+        .expect("fixture profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should be selected");
+    profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: executable_path.to_string_lossy().into_owned(),
+    };
+    profile.primary_sim.launch_recipe.elevated = true;
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("the privileged recipe should enter review quarantine");
+    let primary_id = core
+        .snapshot()
+        .selected_profile
+        .expect("fixture profile should remain selected")
+        .primary_sim
+        .id;
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: source_profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![primary_id],
+    })
+    .expect("the source recipe should be approved");
+
+    let duplicate_profile_id = match core
+        .execute(AppCommand::DuplicateProfile {
+            source_profile_id: source_profile_id.clone(),
+            name: "Unreviewed copy".to_owned(),
+        })
+        .expect("approved source should be duplicable")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected duplicate creation, got {other:?}"),
+    };
+
+    let review_statuses = core
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|profile| (profile.id, profile.review_status))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        review_statuses.get(&source_profile_id),
+        Some(&ProfileReviewStatus::Approved)
+    );
+    assert_eq!(
+        review_statuses.get(&duplicate_profile_id),
+        Some(&ProfileReviewStatus::NeedsReview)
+    );
+
+    drop(core);
+    let reopened = FormationLapCore::open(storage.path()).expect("profile storage should reopen");
+    let reopened_statuses = reopened
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|profile| (profile.id, profile.review_status))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        reopened_statuses.get(&source_profile_id),
+        Some(&ProfileReviewStatus::Approved)
+    );
+    assert_eq!(
+        reopened_statuses.get(&duplicate_profile_id),
+        Some(&ProfileReviewStatus::NeedsReview)
+    );
+}
+
+#[test]
+fn a_disk_modified_privileged_recipe_cannot_reuse_a_persisted_approval_after_restart() {
     let storage = TempStorage::new();
     let executable_path = std::env::current_exe()
         .expect("test executable path should be available")
@@ -1211,6 +1575,18 @@ fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_
             profile: Box::new(profile),
         })
         .expect("the privileged recipe should enter review quarantine");
+        let primary_id = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should remain selected")
+            .primary_sim
+            .id;
+        core.execute(AppCommand::ApproveProfile {
+            profile_id: profile_id.clone(),
+            configuration_reviewed: true,
+            approved_privileged_application_ids: vec![primary_id],
+        })
+        .expect("the privileged recipe should be approved");
     }
 
     let profile_path = storage
@@ -1221,10 +1597,7 @@ fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_
         &fs::read(&profile_path).expect("profile document should be readable"),
     )
     .expect("profile document should parse");
-    document
-        .as_object_mut()
-        .expect("profile document is an object")
-        .remove("reviewStatus");
+    document["primarySim"]["launchRecipe"]["arguments"] = serde_json::json!(["--tampered"]);
     fs::write(
         &profile_path,
         serde_json::to_vec_pretty(&document).expect("tampered profile should serialize"),

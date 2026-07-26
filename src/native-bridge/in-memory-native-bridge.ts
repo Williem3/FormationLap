@@ -478,6 +478,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: profile.id,
       name: profile.name,
       primarySimName: profile.primarySim.name,
+      primarySimApplicationId: profile.primarySim.id,
       reviewStatus: "approved",
     });
     this.#snapshot.profiles.sort((left, right) =>
@@ -505,6 +506,7 @@ export class InMemoryNativeBridge implements NativeBridge {
     }
     summary.name = payload.profile.name;
     summary.primarySimName = payload.profile.primarySim.name;
+    summary.primarySimApplicationId = payload.profile.primarySim.id;
     this.#profilesById.set(
       payload.profile.id,
       structuredClone(payload.profile),
@@ -538,6 +540,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: duplicate.id,
       name: duplicate.name,
       primarySimName: duplicate.primarySim.name,
+      primarySimApplicationId: duplicate.primarySim.id,
       reviewStatus:
         this.#snapshot.profiles.find(
           (profile) => profile.id === payload.sourceProfileId,
@@ -742,7 +745,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       id: summary.id,
       name: summary.name,
       primarySim: {
-        id: `${summary.id}-primary`,
+        id: summary.primarySimApplicationId ?? `${summary.id}-primary`,
         name: summary.primarySimName,
         launchRecipe: {
           source: { kind: "directExecutable", executablePath: "" },

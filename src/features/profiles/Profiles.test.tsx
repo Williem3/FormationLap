@@ -9,7 +9,11 @@ import type {
   SupportingApplicationRecommendation,
 } from "../../generated/bindings";
 import { idleSessionSnapshot } from "../../session/session-snapshot";
-import { createAppSnapshot } from "../../test/app-snapshot-builder";
+import {
+  createAppSnapshot,
+  createProfileApplication,
+  createRacingProfile,
+} from "../../test/app-snapshot-builder";
 
 function lifecycleSnapshot(): AppSnapshot {
   const primarySim = {
@@ -70,6 +74,83 @@ function lifecycleSnapshot(): AppSnapshot {
 }
 
 describe("Racing Profile behavior", () => {
+  it("uses locally resolved icons in the profile sidebar and startup-order editor", async () => {
+    const user = userEvent.setup();
+    const primarySim = createProfileApplication({
+      id: "primary-sim-icon",
+      name: "Le Mans Ultimate",
+    });
+    const supportingApplication = createProfileApplication({
+      id: "supporting-application-icon",
+      name: "LMUFFB",
+    });
+    const profile = createRacingProfile({
+      id: "profile-icons",
+      name: "Le Mans evening",
+      primarySim,
+      supportingApplications: [
+        {
+          application: supportingApplication,
+          requirement: "required",
+          keepRunning: false,
+        },
+      ],
+    });
+    const bridge = new InMemoryNativeBridge(
+      createAppSnapshot({
+        profiles: [
+          {
+            id: profile.id,
+            name: profile.name,
+            primarySimName: primarySim.name,
+            primarySimApplicationId: primarySim.id,
+          },
+        ],
+        selectedProfile: profile,
+        applicationIcons: [
+          {
+            applicationId: primarySim.id,
+            icon: {
+              kind: "localData",
+              media_type: "image/x-icon",
+              data_base64: "AAABAA==",
+            },
+          },
+          {
+            applicationId: supportingApplication.id,
+            icon: {
+              kind: "localData",
+              media_type: "image/x-icon",
+              data_base64: "AAACAA==",
+            },
+          },
+        ],
+      }),
+    );
+    render(<App bridge={bridge} />);
+
+    expect(
+      await screen.findByRole("button", { name: /Le Mans evening/ }),
+    ).toBeVisible();
+    expect(
+      document.querySelector(
+        '.profile-nav-icon img[src="data:image/x-icon;base64,AAABAA=="]',
+      ),
+    ).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Edit profile" }));
+
+    expect(
+      document.querySelector(
+        '.supporting-application-icon img[src="data:image/x-icon;base64,AAACAA=="]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.querySelector(
+        '.locked-game-row img[src="data:image/x-icon;base64,AAABAA=="]',
+      ),
+    ).not.toBeNull();
+  });
   it("does not present unavailable Session actions as enabled", async () => {
     const bridge = new InMemoryNativeBridge({
       applicationName: "Formation Lap",
@@ -197,7 +278,11 @@ describe("Racing Profile behavior", () => {
             appId: 2399420,
             install_directory: String.raw`C:\Steam\Le Mans Ultimate`,
           },
-          icon: { kind: "generic" },
+          icon: {
+            kind: "localData",
+            media_type: "image/x-icon",
+            data_base64: "AAABAA==",
+          },
         },
       ],
       installedSupportingApplications: [
@@ -218,7 +303,11 @@ describe("Racing Profile behavior", () => {
             requirement: "optional",
             keepRunning: false,
           },
-          icon: { kind: "generic" },
+          icon: {
+            kind: "localData",
+            media_type: "image/x-icon",
+            data_base64: "AAACAA==",
+          },
         },
         {
           id: "simhub",
@@ -326,6 +415,17 @@ describe("Racing Profile behavior", () => {
         name: "Use Le Mans Ultimate (Steam)",
       }),
     );
+    await user.click(screen.getByLabelText("Add LMUFFB"));
+    expect(
+      document.querySelector(
+        '.game-order-icon img[src="data:image/x-icon;base64,AAABAA=="]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.querySelector(
+        '.order-application-row img[src="data:image/x-icon;base64,AAACAA=="]',
+      ),
+    ).not.toBeNull();
     const recommendationRegion = await screen.findByRole("region", {
       name: "Recommended for Le Mans Ultimate",
     });

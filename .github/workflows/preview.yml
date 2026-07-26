@@ -115,7 +115,7 @@ jobs:
           FORMATION_LAP_RELEASE_CHANNEL: preview
           FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-        run: pnpm tauri build --no-bundle
+        run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
 
       - name: Bind and sign the preview helper release identity
         shell: pwsh

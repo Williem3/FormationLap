@@ -2793,8 +2793,6 @@ function ProfileEditor({
                     })
                   }
                 >
-                  <option value="">Use ordinary recipe</option>
-                  <option value="openXr">OpenXR</option>
                   <option value="openVr">OpenVR / SteamVR</option>
                   <option value="oculus">Oculus</option>
                 </select>

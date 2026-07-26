@@ -1064,6 +1064,22 @@ describe("Formation Lap shell", () => {
     expect(screen.getByLabelText("VR")).toBeChecked();
   });
 
+  it("limits preferred VR launch modes to OpenVR / SteamVR and Oculus", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    const mode = screen.getByLabelText("Preferred VR Launch Mode");
+    expect(
+      within(mode)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["OpenVR / SteamVR", "Oculus"]);
+  });
+
   it("keeps launch arguments, advanced startup settings, and shutdown policy compact", async () => {
     const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();

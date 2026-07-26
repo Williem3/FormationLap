@@ -126,7 +126,7 @@ jobs:
           FORMATION_LAP_RELEASE_CHANNEL: ${{ steps.release.outputs.prerelease == 'true' && 'beta' || 'stable' }}
           FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-        run: pnpm tauri build --no-bundle
+        run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
 
       - name: Authenticate to Azure with OIDC
         uses: Azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3

@@ -48,7 +48,10 @@ test("release workflow signs every shipped executable before updater metadata", 
   assert.match(release, /attestations: write/);
   assert.match(release, /artifact-metadata: write/);
   assert.match(release, /verify-release-version\.mjs/);
-  assert.match(release, /tauri build --no-bundle/);
+  assert.match(
+    release,
+    /tauri build --no-bundle --config src-tauri\/tauri\.release-bundle\.conf\.json/,
+  );
   assert.match(release, /FORMATION_LAP_RELEASE_CHANNEL:/);
   assert.match(release, /generate-release-identity\.mjs/);
   assert.match(release, /Azure\/artifact-signing-action@[0-9a-f]{40}/);
@@ -107,6 +110,10 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
   assert.match(preview, /environment: preview/);
   assert.match(preview, /\^v0\\\./);
   assert.match(preview, /verify-release-version\.mjs/);
+  assert.match(
+    preview,
+    /tauri build --no-bundle --config src-tauri\/tauri\.release-bundle\.conf\.json/,
+  );
   assert.match(preview, /tauri bundle --bundles nsis/);
   assert.doesNotMatch(preview, /Azure\/artifact-signing-action/);
   assert.doesNotMatch(preview, /Get-AuthenticodeSignature/);

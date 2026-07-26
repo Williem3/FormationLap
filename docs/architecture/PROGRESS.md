@@ -146,8 +146,9 @@ M10 security hardening is in progress, owned by Codex `/root`.
   and structured argument rows visible. There is no active implementation file
   scope for this slice.
 - The disclosed `v0.9.0-preview.1` technical-preview workflow is dispatched
-  for commit `acff8ee` and is waiting on protected `preview` environment
-  approval. No new product behavior is part of the package.
+  from tag `v0.9.0-preview.1` for commit `acff8ee` and is waiting on protected
+  `preview` environment approval. No new product behavior is part of the
+  package.
 
 Known environment facts:
 
@@ -308,4 +309,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Streamlined the Primary Sim Launch Recipe with closed-by-default Steam, process-matching, and shutdown/runtime disclosures while preserving visible source and structured arguments | Red/green React coverage; `pnpm.cmd format`, lint, typecheck, full React tests, production build, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Restricted the Racing Profile preferred VR launch-mode selector to OpenVR / SteamVR and Oculus | Red/green React coverage; `pnpm.cmd format:write`, `pnpm.cmd test -- src/app/App.test.tsx` (44 tests), `pnpm.cmd lint`, `pnpm.cmd typecheck`, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Corrected the catalog for current Go Fast and Apex Trace VR installer paths/names, so bounded discovery finds them and supplies locally extracted executable icons to the profile wizard | Red/green targeted native known-location test; catalog validation; React wizard local-icon rendering coverage; lint, typecheck, and focused UI tests passed | No blocker; rebuild/restart Formation Lap to run discovery again. The pre-existing tool-created `target-codex-discovery/` cache remains deliberately untracked |
-| 2026-07-25 | Codex `/root` | M10 | Pushed the reviewed preview candidate through `acff8ee`, created immutable tag `v0.9.0-preview.1`, and dispatched [preview run 30182288892](https://github.com/Williem3/FormationLap/actions/runs/30182288892) | `pnpm.cmd verify` passed (45 UI tests, 3 accessibility, 27 release tests); Rust formatting and all-target/all-feature Clippy passed; a running local executable blocked the normal Rust target and an isolated full build hit a Windows PDB limit, so GitHub Actions is the clean full-gate authority | Approve the protected `preview` environment and wait for the workflow to publish the unsigned prerelease; then verify assets, checksum, updater signature, SBOM, licenses, and provenance |
+| 2026-07-25 | Codex `/root` | M10 | Pushed the reviewed preview candidate through `acff8ee`, created immutable tag `v0.9.0-preview.1`, and dispatched [preview run 30183059822](https://github.com/Williem3/FormationLap/actions/runs/30183059822) from that tag | `pnpm.cmd verify` passed (45 UI tests, 3 accessibility, 27 release tests); Rust formatting and all-target/all-feature Clippy passed; a running local executable blocked the normal Rust target and an isolated full build hit a Windows PDB limit, so GitHub Actions is the clean full-gate authority | Approve the protected `preview` environment and wait for the workflow to publish the unsigned prerelease; then verify assets, checksum, updater signature, SBOM, licenses, and provenance |

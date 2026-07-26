@@ -38,6 +38,7 @@ export function ProfileEditor({
   onSubmit,
 }: ProfileEditorProps) {
   const nextSupportingApplicationKey = useRef(0);
+  const activeReorderPointerId = useRef<number | null>(null);
   const [configurationReviewed, setConfigurationReviewed] = useState(false);
   const [openSupportingApplicationId, setOpenSupportingApplicationId] =
     useState<string | null>(
@@ -192,6 +193,20 @@ export function ProfileEditor({
   ): "before" | "after" => {
     const bounds = element.getBoundingClientRect();
     return clientY > bounds.top + bounds.height / 2 ? "after" : "before";
+  };
+
+  const dropTargetAt = (clientX: number, clientY: number) => {
+    const row = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLElement>("[data-supporting-application-id]");
+    const applicationId = row?.dataset.supportingApplicationId;
+    if (!row || !applicationId) {
+      return null;
+    }
+    return {
+      applicationId,
+      position: dropPositionFor(row, clientY),
+    };
   };
 
   return (
@@ -472,62 +487,67 @@ export function ProfileEditor({
                       supportingApplication.application.id
                         ? ` is-drop-target-${dropTarget.position}`
                         : ""
+                    }${
+                      draggedSupportingApplicationId ===
+                      supportingApplication.application.id
+                        ? " is-reordering"
+                        : ""
                     }`}
                     key={supportingApplication.application.id}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      if (!draggedSupportingApplicationId) {
-                        return;
-                      }
-                      setDropTarget({
-                        applicationId: supportingApplication.application.id,
-                        position: dropPositionFor(
-                          event.currentTarget,
-                          event.clientY,
-                        ),
-                      });
-                    }}
-                    onDragLeave={(event) => {
-                      if (
-                        !(event.relatedTarget instanceof Node) ||
-                        !event.currentTarget.contains(event.relatedTarget)
-                      ) {
-                        setDropTarget(null);
-                      }
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const sourceApplicationId =
-                        draggedSupportingApplicationId ??
-                        event.dataTransfer.getData("text/plain");
-                      if (sourceApplicationId) {
-                        reorderSupportingApplications(
-                          sourceApplicationId,
-                          supportingApplication.application.id,
-                          dropPositionFor(event.currentTarget, event.clientY),
-                        );
-                      }
-                      setDraggedSupportingApplicationId(null);
-                      setDropTarget(null);
-                    }}
+                    data-supporting-application-id={
+                      supportingApplication.application.id
+                    }
                   >
                     <div className="supporting-row-heading">
                       <button
                         type="button"
                         className="supporting-drag-handle"
-                        draggable
                         aria-label={`Reorder ${supportingApplication.application.name}. Use Up and Down arrow keys to move it.`}
-                        onDragStart={(event) => {
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData(
-                            "text/plain",
-                            supportingApplication.application.id,
+                        onPointerDown={(event) => {
+                          activeReorderPointerId.current = event.pointerId;
+                          event.currentTarget.setPointerCapture?.(
+                            event.pointerId,
                           );
                           setDraggedSupportingApplicationId(
                             supportingApplication.application.id,
                           );
                         }}
-                        onDragEnd={() => {
+                        onPointerMove={(event) => {
+                          if (
+                            activeReorderPointerId.current !== event.pointerId
+                          ) {
+                            return;
+                          }
+                          setDropTarget(
+                            dropTargetAt(event.clientX, event.clientY),
+                          );
+                        }}
+                        onPointerUp={(event) => {
+                          if (
+                            activeReorderPointerId.current !== event.pointerId
+                          ) {
+                            return;
+                          }
+                          const nextDropTarget = dropTargetAt(
+                            event.clientX,
+                            event.clientY,
+                          );
+                          if (nextDropTarget) {
+                            reorderSupportingApplications(
+                              supportingApplication.application.id,
+                              nextDropTarget.applicationId,
+                              nextDropTarget.position,
+                            );
+                          }
+                          event.currentTarget.releasePointerCapture?.(
+                            event.pointerId,
+                          );
+                          activeReorderPointerId.current = null;
+                          setDraggedSupportingApplicationId(null);
+                          setDropTarget(null);
+                        }}
+                        onPointerCancel={() => {
+                          activeReorderPointerId.current = null;
                           setDraggedSupportingApplicationId(null);
                           setDropTarget(null);
                         }}
@@ -557,8 +577,7 @@ export function ProfileEditor({
                       <button
                         type="button"
                         className="supporting-editor-toggle"
-                        aria-expanded={isOpen}
-                        aria-label={`${supportingApplication.application.name} Supporting Application editor`}
+                        aria-label={`Edit ${supportingApplication.application.name}`}
                         onClick={() =>
                           setOpenSupportingApplicationId((current) =>
                             current === supportingApplication.application.id
@@ -587,48 +606,35 @@ export function ProfileEditor({
                               : "Optional application"}
                           </small>
                         </span>
-                        <span
-                          className="supporting-overflow-mark"
-                          aria-hidden="true"
-                        >
-                          …
-                        </span>
                       </button>
                       <span className="requirement-chip">
                         {supportingApplication.requirement === "required"
                           ? "Required"
                           : "Optional"}
                       </span>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="tertiary-button"
-                          aria-label={`Move ${supportingApplication.application.name} up`}
-                          disabled={index === 0}
-                          onClick={() => moveSupportingApplication(index, -1)}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="tertiary-button"
-                          aria-label={`Move ${supportingApplication.application.name} down`}
-                          disabled={
-                            index === profile.supportingApplications.length - 1
-                          }
-                          onClick={() => moveSupportingApplication(index, 1)}
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          className="tertiary-button danger-text"
-                          aria-label={`Remove ${supportingApplication.application.name}`}
-                          onClick={() => removeSupportingApplication(index)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="supporting-overflow-button"
+                        aria-expanded={isOpen}
+                        aria-label={`${supportingApplication.application.name} Supporting Application editor`}
+                        onClick={() =>
+                          setOpenSupportingApplicationId((current) =>
+                            current === supportingApplication.application.id
+                              ? null
+                              : supportingApplication.application.id,
+                          )
+                        }
+                      >
+                        <span aria-hidden="true">…</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="supporting-remove-button"
+                        aria-label={`Remove ${supportingApplication.application.name}`}
+                        onClick={() => removeSupportingApplication(index)}
+                      >
+                        <span aria-hidden="true">×</span>
+                      </button>
                     </div>
 
                     {isOpen && (

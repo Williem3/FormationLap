@@ -864,7 +864,7 @@ describe("Racing Profile behavior", () => {
       "SimHub draft",
     );
   });
-  it("reorders Supporting Applications from the six-dot drag handle", async () => {
+  it("reorders Supporting Applications by dragging the six-dot handle", async () => {
     const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();
     snapshot.selectedProfile!.supportingApplications = [
@@ -895,8 +895,27 @@ describe("Racing Profile behavior", () => {
     const sourceHandle = screen.getByRole("button", {
       name: /Reorder SimHub/,
     });
-    sourceHandle.focus();
-    await user.keyboard("{ArrowDown}");
+    const destinationRow = screen
+      .getByRole("button", { name: "Edit Crew Chief" })
+      .closest(".supporting-editor-row");
+    if (!(destinationRow instanceof HTMLElement)) {
+      throw new Error("Crew Chief should be contained in its editor row");
+    }
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: vi.fn().mockReturnValue(destinationRow),
+    });
+    fireEvent.pointerDown(sourceHandle, { pointerId: 1 });
+    fireEvent.pointerMove(sourceHandle, {
+      pointerId: 1,
+      clientX: 24,
+      clientY: 1,
+    });
+    fireEvent.pointerUp(sourceHandle, {
+      pointerId: 1,
+      clientX: 24,
+      clientY: 1,
+    });
 
     expect(
       Array.from(document.querySelectorAll(".supporting-editor-row strong"))

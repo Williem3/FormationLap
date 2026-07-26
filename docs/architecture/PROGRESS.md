@@ -36,10 +36,11 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- Supporting Application Startup Sequence reordering is complete. The Profile
-  Editor now provides a keyboard-accessible six-dot drag handle, drag-and-drop
-  ordering, compact contiguous rows, an ellipsis disclosure, and a compact
-  remove control. There is no active implementation file scope.
+- Supporting Application Startup Sequence reorder repair is complete. The
+  Profile Editor uses pointer-driven dragging with keyboard reordering
+  retained, and its Requirement/Optional, ellipsis, and remove controls are
+  aligned in compact fixed-width columns. There is no active implementation
+  file scope.
 
 - The installed-preview elevated-launch bugfix is complete: preview and signed
   release workflows now build with the release bundle configuration before
@@ -328,6 +329,8 @@ logs.
 | 2026-07-26 | Codex `/root` | M10       | Restored the Windows version-one gate after the governance handoff left the progress ledger outside the repository’s Prettier contract                                                                                                                                                                                | `pnpm.cmd install --frozen-lockfile`; single-file Prettier write; repository format check; `git diff --check`                                                                                                                          | No blocker; signed Beta and Windows 10/11 qualification remain the M10 next action                                                                       |
 
 | 2026-07-26 | Codex `/root` | M10 | Added compact contiguous Profile Editor Startup Sequence rows with six-dot drag handles, drag-and-drop and keyboard reordering, Required/Optional chips, ellipsis disclosure, and compact removal controls | Focused React test (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed. Repository-wide lint remains blocked by the pre-existing untracked `target-codex-icons/` build cache | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
+
+| 2026-07-26 | Codex `/root` | M10 | Replaced unreliable native Supporting Application drag-and-drop with pointer-driven reordering, retained keyboard arrows, and aligned compact Required/Optional, ellipsis, and remove controls | Focused React pointer-drag regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI repair. External signed Beta and Windows qualification remain the next M10 action |
 
 ## Handoff entry template
 

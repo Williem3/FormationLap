@@ -72,6 +72,41 @@ describe("InMemoryNativeBridge", () => {
     expect(snapshot.selectedProfile?.name).toBe("Le Mans evening");
   });
 
+  it("selects a newly created profile over the existing selection", async () => {
+    const bridge = new InMemoryNativeBridge({
+      applicationName: "Formation Lap",
+      foundationStatus: "ready",
+      settings: {
+        startWithWindows: false,
+        theme: "system",
+        reduceMotion: false,
+        automaticUpdateChecks: true,
+        updateChannel: "stable",
+      },
+      updates: {
+        formationLap: { kind: "unknown", reason: "Not checked yet." },
+        applications: [],
+        lastAutomaticCheckUnixSeconds: null,
+        resultDeferred: false,
+      },
+      session: idleSessionSnapshot(),
+      applicationProcesses: [],
+      profiles: [],
+      selectedProfile: null,
+    });
+    await bridge.createProfile({
+      name: "Le Mans Ultimate",
+      primarySimName: "Le Mans Ultimate",
+    });
+
+    const snapshot = await bridge.createProfile({
+      name: "iRacing",
+      primarySimName: "iRacing",
+    });
+
+    expect(snapshot.selectedProfile?.name).toBe("iRacing");
+  });
+
   it("returns the same discovery and recommendation contracts as the native adapter", async () => {
     const discovery: DiscoverySnapshot = {
       primarySims: [

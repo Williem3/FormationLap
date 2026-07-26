@@ -479,7 +479,7 @@ export class InMemoryNativeBridge implements NativeBridge {
       left.name.localeCompare(right.name),
     );
     this.#profilesById.set(profile.id, structuredClone(profile));
-    this.#snapshot.selectedProfile ??= profile;
+    this.#snapshot.selectedProfile = structuredClone(profile);
     return this.getAppSnapshot();
   }
 

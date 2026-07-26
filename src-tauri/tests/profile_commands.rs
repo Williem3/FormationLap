@@ -68,6 +68,43 @@ fn create_profile_command_returns_the_authoritative_snapshot() {
 }
 
 #[test]
+fn create_profile_command_selects_the_new_profile_over_an_existing_selection() {
+    let storage = TempStorage::new();
+    let commands =
+        NativeCommandHost::open(storage.path()).expect("native command host should open");
+    let existing_profile_id = commands
+        .create_profile(CreateProfilePayload {
+            name: "Le Mans Ultimate".to_owned(),
+            primary_sim_name: "Le Mans Ultimate".to_owned(),
+        })
+        .expect("existing Racing Profile should be created")
+        .selected_profile
+        .expect("existing profile should be selected")
+        .id;
+    commands
+        .select_profile(ProfileIdPayload {
+            profile_id: existing_profile_id,
+        })
+        .expect("existing profile should be selected");
+
+    let snapshot = commands
+        .create_profile(CreateProfilePayload {
+            name: "iRacing".to_owned(),
+            primary_sim_name: "iRacing".to_owned(),
+        })
+        .expect("new Racing Profile should be created");
+
+    assert_eq!(snapshot.profiles.len(), 2);
+    assert_eq!(
+        snapshot
+            .selected_profile
+            .expect("new profile should be selected")
+            .name,
+        "iRacing"
+    );
+}
+
+#[test]
 fn save_profile_command_returns_the_updated_authoritative_snapshot() {
     let storage = TempStorage::new();
     let commands =

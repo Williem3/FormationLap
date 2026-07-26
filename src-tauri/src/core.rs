@@ -643,6 +643,7 @@ impl FormationLapCore {
                 primary_sim_name,
             } => {
                 let profile_id = self.profile_library.create(name, primary_sim_name)?;
+                self.settings_store.select_profile(profile_id.clone())?;
                 Ok(CommandOutcome::ProfileCreated { profile_id })
             }
             AppCommand::EditProfile {

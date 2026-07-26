@@ -16,6 +16,7 @@ import type {
   SupportingApplicationRecommendation,
 } from "../generated/bindings";
 import { idleSessionSnapshot } from "../session/session-snapshot";
+import { createAppSnapshot } from "../test/app-snapshot-builder";
 
 function lifecycleSnapshot(): AppSnapshot {
   const primarySim = {
@@ -632,27 +633,7 @@ describe("Formation Lap shell", () => {
 
   it("creates the first Racing Profile through NativeBridge", async () => {
     const user = userEvent.setup();
-    const bridge = new InMemoryNativeBridge({
-      applicationName: "Formation Lap",
-      foundationStatus: "ready",
-      settings: {
-        startWithWindows: false,
-        theme: "system",
-        reduceMotion: false,
-        automaticUpdateChecks: true,
-        updateChannel: "stable",
-      },
-      updates: {
-        formationLap: { kind: "unknown", reason: "Not checked yet." },
-        applications: [],
-        lastAutomaticCheckUnixSeconds: null,
-        resultDeferred: false,
-      },
-      session: idleSessionSnapshot(),
-      applicationProcesses: [],
-      profiles: [],
-      selectedProfile: null,
-    });
+    const bridge = new InMemoryNativeBridge(createAppSnapshot());
     render(<App bridge={bridge} />);
 
     await user.click(
@@ -676,6 +657,49 @@ describe("Formation Lap shell", () => {
     expect(
       screen.getByRole("button", { name: /Le Mans evening/ }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("creates and configures a new Racing Profile without changing the previous profile", async () => {
+    const user = userEvent.setup();
+    const initialSnapshot = lifecycleSnapshot();
+    const previousProfile = structuredClone(initialSnapshot.selectedProfile);
+    const previousProfileId = previousProfile!.id;
+    const bridge = new InMemoryNativeBridge(initialSnapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "New profile" }),
+    );
+    await user.type(screen.getByLabelText("Profile name"), "iRacing sprint");
+    await user.type(
+      await screen.findByLabelText("Primary Sim name"),
+      "iRacing",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Create Racing Profile" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "iRacing sprint",
+      }),
+    ).toBeVisible();
+    const createdSnapshot = await bridge.getAppSnapshot();
+    expect(createdSnapshot.selectedProfile).toEqual(
+      expect.objectContaining({
+        name: "iRacing sprint",
+        primarySim: expect.objectContaining({
+          name: "iRacing",
+          pathNeedsRepair: true,
+        }),
+      }),
+    );
+
+    const previousSnapshot = await bridge.selectProfile({
+      profileId: previousProfileId,
+    });
+    expect(previousSnapshot.selectedProfile).toEqual(previousProfile);
   });
 
   it("offers discovered curated sims, ranked recommendations, and Manual Entry", async () => {

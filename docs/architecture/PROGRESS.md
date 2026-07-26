@@ -36,6 +36,16 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- A frontend maintainability slice is in progress. It preserves visible
+  behavior while moving the React shell into feature-owned Dashboard, Profiles,
+  Settings, and Diagnostics modules; splitting tests and ordered global styles;
+  and replacing the two-command profile-creation workflow with one complete
+  native intent.
+- The active file scope is `src/app/`, new `src/features/` modules, shared
+  `src/ui/` and `src/test/` support, the generated/native bridge contracts,
+  FormationLapCore/ProfileLibrary profile creation, the accessibility contract,
+  and this progress ledger. No release, publishing, or unrelated native
+  lifecycle work is in scope.
 - The approved program preserves elevated applications, saved Startup Sequence
   order, existing profiles, manual online update checks, and the existing
   FormationLapCore and ProcessRuntime public interfaces.

@@ -51,12 +51,14 @@ Profile structure is read-only during its Active Session. Runtime controls
 remain available.
 
 Profiles are stored locally and can be imported or exported as JSON. Existing
-installed profiles remain approved. A newly imported portable profile preserves
-all values but enters Needs Review and cannot start a Session until the user
-reviews executable paths, arguments, working directories, elevation, monitored
-executables, and custom-stop recipes. Elevated and custom-stop entries require
-explicit approval; changing an approved privileged recipe invalidates that
-approval. Missing or suspicious paths require file re-selection.
+installed non-privileged profiles remain approved. A newly imported portable
+profile preserves all values but enters Needs Review and cannot start a Session
+until the user reviews executable paths, arguments, working directories,
+elevation, monitored executables, and custom-stop recipes. Elevated and
+custom-stop entries require explicit approval; changing an approved privileged
+recipe invalidates that approval. Because profile JSON is user-writable, a
+privileged recipe re-enters Needs Review after Formation Lap reloads it from
+disk. Missing or suspicious paths require file re-selection.
 
 ## First-run and discovery
 

@@ -3,7 +3,7 @@
 This is the only source of truth for milestone status. The milestone definitions
 and exit criteria live in [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 ## Status values
 
@@ -35,6 +35,13 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 ## Current work
 
 M10 security hardening is in progress, owned by Codex `/root`.
+
+- The 2026-07-26 security-review remediation is complete: privileged Racing
+  Profile recipes re-enter Needs Review after a disk reload; elevated launches
+  validate the main-process SHA-256 value in the helper; a dead launcher cannot
+  contribute descendants; and Recovery Offers require a current Racing Profile
+  recipe match while treating recovered Processes as Pre-existing. There is no
+  active implementation file scope.
 
 - The `0.9.0-preview.2` publication slice is complete. The immutable tag points
   to candidate commit `75cfc7e`, the protected preview workflow published the
@@ -288,6 +295,7 @@ logs.
 | 2026-07-24 | Codex `/root` | M10       | Moved new state to LocalAppData with validated atomic copy-only roaming migration, refused conflicting-store merges, and namespaced runtime/uninstall startup cleanup behind exact executable ownership                                                                                                               | [`Security hardening evidence`](evidence/M10_SECURITY_HARDENING.md): 10 command-host tests, 6 startup tests, 138 serial Rust tests, 25 release contracts, all-feature Clippy, `pnpm.cmd verify`, and a real debug NSIS build passed | No blocker; add the native opt-in UpdateCoordinator, Session-start cancellation/join, install lease, and bounded official download policy                |
 | 2026-07-24 | Codex `/root` | M10       | Added opt-in native update coordination, cancellation/join before Session activation, mutually exclusive installation, exact official download constraints, verified staging, and explicit online-provider UI status                                                                                                  | [`Security hardening evidence`](evidence/M10_SECURITY_HARDENING.md): 143 serial Rust tests, 29 React tests, 25 release contracts, all-feature Clippy, `pnpm.cmd verify`, and a real debug NSIS build passed                         | No blocker; enforce signed-build signer equality and complete adversarial release qualification                                                          |
 | 2026-07-24 | Codex `/root` | M10       | Bound signed Beta/Stable main-helper pairs to one release-approved Authenticode signer, retained locked verified binaries across helper launch/execution, and added adversarial signed/preview identity qualification                                                                                                 | [`Security hardening evidence`](evidence/M10_SECURITY_HARDENING.md): 145 serial Rust tests, 29 React tests, 27 release contracts, all-feature Clippy, `pnpm.cmd verify`, and a real debug NSIS build passed                         | Repository hardening is complete; review the local commits and separately authorize/configure paid signing only when a signed Beta is desired            |
+| 2026-07-26 | Codex `/root` | M10 | Rejected reload-time privileged-profile approval, bound elevated launch requests to executable SHA-256 values, stopped dead-launcher descendant adoption, and validated/downgraded recovery ownership | `cargo test --test privileged_operations --test racing_profiles --test session_orchestration` passed (53 tests, 1 ignored UAC smoke); Windows ProcessRuntime fixture tests (13) and `cargo clippy --lib --tests -- -D warnings` passed | No blocker in this slice; signed Beta and Windows 10/11 qualification remain the M10 next action |
 
 ## Handoff entry template
 

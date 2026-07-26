@@ -1175,3 +1175,70 @@ fn editing_an_approved_privileged_recipe_invalidates_its_approval() {
         ProfileReviewStatus::NeedsReview
     );
 }
+
+#[test]
+fn a_disk_modified_privileged_recipe_cannot_reuse_a_missing_review_status_after_restart() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize");
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Privileged local profile".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("fixture profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("fixture profile should be selected");
+        profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+            executable_path: executable_path.to_string_lossy().into_owned(),
+        };
+        profile.primary_sim.launch_recipe.elevated = true;
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("the privileged recipe should enter review quarantine");
+    }
+
+    let profile_path = storage
+        .path()
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
+    let mut document: serde_json::Value = serde_json::from_slice(
+        &fs::read(&profile_path).expect("profile document should be readable"),
+    )
+    .expect("profile document should parse");
+    document
+        .as_object_mut()
+        .expect("profile document is an object")
+        .remove("reviewStatus");
+    fs::write(
+        &profile_path,
+        serde_json::to_vec_pretty(&document).expect("tampered profile should serialize"),
+    )
+    .expect("tampered profile should be written");
+
+    let mut reopened =
+        FormationLapCore::open(storage.path()).expect("tampered local storage should reopen");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert!(matches!(
+        reopened.execute(AppCommand::StartSession { profile_id }),
+        Err(formation_lap_lib::CoreError::ProfileNeedsReview(_))
+    ));
+}

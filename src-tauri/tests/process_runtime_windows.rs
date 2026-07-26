@@ -612,7 +612,7 @@ fn close_windows_follows_a_same_executable_companion_created_by_the_session() {
 }
 
 #[test]
-fn observation_follows_a_same_executable_companion_after_its_launcher_exits() {
+fn observation_does_not_adopt_a_same_executable_companion_after_its_launcher_exits() {
     let temporary = TempDirectory::new();
     let parent_report_path = temporary.path().join("short lived parent.json");
     let companion_report_path = temporary.path().join("long lived companion.json");
@@ -651,22 +651,12 @@ fn observation_follows_a_same_executable_companion_after_its_launcher_exits() {
     wait_for_file(&companion_report_path);
     std::thread::sleep(Duration::from_millis(300));
 
-    assert!(matches!(
-        runtime
-            .observe(&identity)
-            .expect("companion observation should not fail"),
-        ProcessObservation::Running { .. }
-    ));
     assert_eq!(
         runtime
-            .request_graceful_stop(&identity, &ShutdownStrategy::CloseWindows)
-            .expect("the surviving companion window should receive the close request"),
-        formation_lap_lib::GracefulStopResult::Requested
-    );
-    assert!(
-        runtime
-            .wait_for_exit(&identity, Duration::from_secs(2))
-            .expect("the surviving companion should exit")
+            .observe(&identity)
+            .expect("dead launcher observation should not fail"),
+        ProcessObservation::Exited,
+        "a child whose parent PID can be reused must not become Session-owned"
     );
 }
 

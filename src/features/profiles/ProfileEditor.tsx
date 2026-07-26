@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import type {
+  AppSnapshot,
   ProfileApplication,
   RacingProfile,
   SupportingApplication,
@@ -9,11 +10,13 @@ import {
   directoryFromPath,
   displayWindowsPath,
   executableNameFromPath,
+  profileApplicationIcon,
 } from "../../ui/presentation";
 import type { ProfileApproval } from "./profile-types";
 
 export interface ProfileEditorProps {
   profile: RacingProfile;
+  applicationIcons: NonNullable<AppSnapshot["applicationIcons"]>;
   needsReview: boolean;
   isSaving: boolean;
   error: string | null;
@@ -25,6 +28,7 @@ export interface ProfileEditorProps {
 
 export function ProfileEditor({
   profile,
+  applicationIcons,
   needsReview,
   isSaving,
   error,
@@ -433,8 +437,15 @@ export function ProfileEditor({
                           )
                         }
                       >
-                        <span className="drag-order" aria-hidden="true">
-                          {String(index + 1).padStart(2, "0")}
+                        <span
+                          className="supporting-application-icon"
+                          aria-hidden="true"
+                        >
+                          {profileApplicationIcon(
+                            supportingApplication.application.id,
+                            applicationIcons,
+                            <FlagIcon />,
+                          )}
                         </span>
                         <span className="supporting-editor-toggle-copy">
                           <strong>
@@ -628,7 +639,11 @@ export function ProfileEditor({
           </div>
           <div className="application-row game-row locked-game-row">
             <span className="application-icon game-icon">
-              <FlagIcon />
+              {profileApplicationIcon(
+                profile.primarySim.id,
+                applicationIcons,
+                <FlagIcon />,
+              )}
             </span>
             <span className="application-copy">
               <strong>{profile.primarySim.name}</strong>

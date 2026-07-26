@@ -65,6 +65,12 @@ export function ProfileWizard({
           (application) => selectedSupportingIds.includes(application.id),
         )
       : [];
+  const selectedPrimarySim =
+    discoveryState.kind === "ready"
+      ? discoveryState.snapshot.installedPrimarySims.find(
+          (primarySim) => primarySim.id === selectedPrimarySimId,
+        )
+      : undefined;
   const recommendedSupportingIds =
     recommendationState.kind === "ready"
       ? new Set(
@@ -508,7 +514,11 @@ export function ProfileWizard({
             </div>
             <div className="game-order-row">
               <span className="game-order-icon">
-                <FlagIcon />
+                {selectedPrimarySim ? (
+                  applicationIcon(selectedPrimarySim)
+                ) : (
+                  <FlagIcon />
+                )}
               </span>
               <span>
                 <strong>{primarySimName || "Primary Sim"}</strong>

@@ -62,6 +62,12 @@ fn created_racing_profile_survives_core_restart() {
         CommandOutcome::ProfileCreated { profile_id } => profile_id,
         other => panic!("expected profile creation, got {other:?}"),
     };
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected")
+        .primary_sim
+        .id;
 
     drop(core);
 
@@ -74,6 +80,7 @@ fn created_racing_profile_survives_core_restart() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -174,6 +181,12 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             profile_id: profile_id.clone()
         }
     );
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the edited Racing Profile should be selected")
+        .primary_sim
+        .id;
 
     drop(core);
     let reopened =
@@ -184,6 +197,7 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             id: profile_id,
             name: "Sunday endurance".to_owned(),
             primary_sim_name: "rFactor 2".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -265,6 +279,12 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
     };
 
     assert_ne!(duplicate_profile_id, source_profile_id);
+    let primary_sim_application_ids = core
+        .snapshot()
+        .profiles
+        .into_iter()
+        .map(|summary| (summary.id, summary.primary_sim_application_id))
+        .collect::<std::collections::HashMap<_, _>>();
 
     drop(core);
     let reopened =
@@ -273,18 +293,40 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
         reopened.snapshot().profiles,
         vec![
             ProfileSummary {
+                primary_sim_application_id: primary_sim_application_ids
+                    .get(&source_profile_id)
+                    .expect("source profile icon identity should be present")
+                    .clone(),
                 id: source_profile_id,
                 name: "Endurance".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
                 review_status: ProfileReviewStatus::Approved,
             },
             ProfileSummary {
+                primary_sim_application_id: primary_sim_application_ids
+                    .get(&duplicate_profile_id)
+                    .expect("duplicate profile icon identity should be present")
+                    .clone(),
                 id: duplicate_profile_id,
                 name: "Endurance copy".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
                 review_status: ProfileReviewStatus::Approved,
             },
         ]
+    );
+    let snapshot = reopened.snapshot();
+    let icon_application_ids = snapshot
+        .application_icons
+        .expect("every persisted Racing Profile should contribute its local icon")
+        .into_iter()
+        .map(|icon| icon.application_id)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        icon_application_ids,
+        primary_sim_application_ids
+            .into_values()
+            .flatten()
+            .collect::<std::collections::HashSet<_>>()
     );
 }
 
@@ -608,6 +650,12 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
         CommandOutcome::ProfileCreated { profile_id } => profile_id,
         other => panic!("expected profile creation, got {other:?}"),
     };
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the created Racing Profile should be selected")
+        .primary_sim
+        .id;
     drop(core);
 
     let live_document = storage
@@ -638,6 +686,7 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );
@@ -669,6 +718,12 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
         profile: Box::new(edited),
     })
     .expect("editing should retain the last valid document as a backup");
+    let primary_sim_application_id = core
+        .snapshot()
+        .selected_profile
+        .expect("the saved Racing Profile should be selected")
+        .primary_sim
+        .id;
     drop(core);
 
     let live_document = storage
@@ -687,6 +742,7 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
             id: profile_id,
             name: "Last valid".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
+            primary_sim_application_id: Some(primary_sim_application_id),
             review_status: ProfileReviewStatus::Approved,
         }]
     );

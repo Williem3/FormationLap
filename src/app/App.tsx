@@ -21,6 +21,7 @@ import { ProfileWizard } from "../features/profiles/ProfileWizard";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { useSettingsController } from "../features/settings/useSettingsController";
 import { ModalDialog } from "../ui/ModalDialog";
+import { profileApplicationIcon } from "../ui/presentation";
 import { useProfileWorkspace } from "../features/profiles/useProfileWorkspace";
 import "./app.css";
 
@@ -289,7 +290,14 @@ export function App({ bridge }: AppProps) {
                     onClick={() => void selectProfile(profile.id)}
                   >
                     <span className="profile-nav-icon">
-                      <FlagIcon />
+                      {profileApplicationIcon(
+                        profile.primarySimApplicationId ??
+                          (profile.id === selectedProfile?.id
+                            ? selectedProfile.primarySim.id
+                            : ""),
+                        snapshot.applicationIcons ?? [],
+                        <FlagIcon />,
+                      )}
                     </span>
                     <span>
                       <strong>{profile.name}</strong>
@@ -430,6 +438,7 @@ export function App({ bridge }: AppProps) {
           profileDraft ? (
           <ProfileEditor
             profile={profileDraft}
+            applicationIcons={snapshot?.applicationIcons ?? []}
             needsReview={selectedProfileNeedsReview}
             isSaving={profileIsSaving}
             error={profileError}

@@ -409,9 +409,16 @@ impl ProfileLibrary {
                 id: profile.document.id.clone(),
                 name: profile.document.name.clone(),
                 primary_sim_name: profile.document.primary_sim.name.clone(),
+                primary_sim_application_id: Some(profile.document.primary_sim.id.clone()),
                 review_status: profile.document.review_status.clone(),
             })
             .collect()
+    }
+
+    pub(crate) fn profiles(&self) -> impl Iterator<Item = RacingProfile> + '_ {
+        self.profiles
+            .iter()
+            .map(|profile| profile.document.as_profile())
     }
 
     pub(crate) fn configured_application_count(&self) -> usize {

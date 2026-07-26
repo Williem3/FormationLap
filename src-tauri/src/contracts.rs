@@ -271,6 +271,9 @@ pub struct ProfileSummary {
     pub id: String,
     pub name: String,
     pub primary_sim_name: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub primary_sim_application_id: Option<String>,
     #[serde(default, skip_serializing_if = "ProfileReviewStatus::is_approved")]
     pub review_status: ProfileReviewStatus,
 }

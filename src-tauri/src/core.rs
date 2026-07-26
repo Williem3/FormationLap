@@ -583,12 +583,20 @@ impl FormationLapCore {
             .selected_profile_id()
             .and_then(|profile_id| self.profile_library.profile(profile_id))
             .or_else(|| self.profile_library.selected_profile());
+        let selected_profile_id = snapshot
+            .selected_profile
+            .as_ref()
+            .map(|profile| profile.id.as_str());
         snapshot.application_icons = Some(
-            snapshot
-                .selected_profile
-                .as_ref()
-                .map(Self::profile_application_icons)
-                .unwrap_or_default(),
+            self.profile_library
+                .profiles()
+                .flat_map(|profile| {
+                    Self::profile_application_icons(
+                        &profile,
+                        selected_profile_id == Some(profile.id.as_str()),
+                    )
+                })
+                .collect(),
         );
         snapshot.settings = self.settings_store.desktop().clone();
         snapshot.updates = self.update_advisor.snapshot(
@@ -600,10 +608,14 @@ impl FormationLapCore {
         snapshot
     }
 
-    fn profile_application_icons(profile: &RacingProfile) -> Vec<ApplicationIconSnapshot> {
+    fn profile_application_icons(
+        profile: &RacingProfile,
+        include_supporting_applications: bool,
+    ) -> Vec<ApplicationIconSnapshot> {
         profile
             .supporting_applications
             .iter()
+            .filter(move |_| include_supporting_applications)
             .map(|supporting| &supporting.application)
             .chain(std::iter::once(&profile.primary_sim))
             .map(|application| {

@@ -35,7 +35,7 @@ export type RacingProfile = { id: string, name: string, primarySim: ProfileAppli
 
 export type ProfileReviewStatus = "approved" | "needsReview";
 
-export type ProfileSummary = { id: string, name: string, primarySimName: string, reviewStatus?: ProfileReviewStatus, };
+export type ProfileSummary = { id: string, name: string, primarySimName: string, primarySimApplicationId?: string, reviewStatus?: ProfileReviewStatus, };
 
 export type ProcessIdentity = { pid: number, creationTime: string, canonicalExecutablePath: string, };
 

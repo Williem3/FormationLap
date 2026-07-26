@@ -96,8 +96,8 @@ test("rejects a tag that does not identify the synchronized version", () => {
   }
 });
 
-test("repository is prepared as the disclosed 0.9.0-preview.1 candidate", () => {
-  const version = "0.9.0-preview.1";
+test("repository is prepared as the disclosed 0.9.0-preview.2 candidate", () => {
+  const version = "0.9.0-preview.2";
   const result = verify(repositoryRoot, `v${version}`);
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
@@ -108,7 +108,7 @@ test("repository is prepared as the disclosed 0.9.0-preview.1 candidate", () => 
   const [heading, firstParagraph] = notes.trim().split(/\r?\n\r?\n/, 2);
   assert.equal(
     heading,
-    "# Formation Lap 0.9.0-preview.1 — unsigned technical preview",
+    "# Formation Lap 0.9.0-preview.2 — unsigned technical preview",
   );
   for (const disclosure of [
     /unsigned/i,
@@ -121,5 +121,5 @@ test("repository is prepared as the disclosed 0.9.0-preview.1 candidate", () => 
   }
 
   const readme = readFileSync(join(repositoryRoot, "README.md"), "utf8");
-  assert.match(readme, /\$version = "0\.9\.0-preview\.1"/);
+  assert.match(readme, /\$version = "0\.9\.0-preview\.2"/);
 });

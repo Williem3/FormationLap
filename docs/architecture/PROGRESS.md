@@ -36,6 +36,14 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- The `0.9.0-preview.2` publication slice is active. Scope is limited to
+  synchronized version metadata in `package.json`, `src-tauri/Cargo.toml`,
+  `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`, the README installer
+  example, candidate release-contract fixtures, new
+  `docs/releases/0.9.0-preview.2.md`, and this ledger. After local gates pass,
+  the authorized external scope is pushing `master`, creating and pushing the
+  immutable `v0.9.0-preview.2` tag, dispatching the protected unsigned-preview
+  workflow, and verifying its prerelease assets and provenance.
 - The preview-readiness documentation slice is complete. `README.md` now gives
   first-time users a release-tier-aware installation path, checksum command,
   first-launch Racing Profile walkthrough, Session controls, settings,
@@ -344,3 +352,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Completed the frontend maintainability slice: feature-owned Dashboard/Profiles/Settings/Diagnostics state and commands, six focused React suites, ordered feature styles, shared snapshot fixtures, dialog focus restoration, and one atomic complete-profile creation intent with native rollback | Commits `2445fb1`, `0d2414a`, `1bb1073`, and `e758d3b`; frozen install, `pnpm.cmd verify` (47 React, 3 accessibility, 27 release tests), production build, Rust fmt, serial all-target/all-feature Clippy and tests, generated bindings/catalog/capability checks, debug Tauri no-bundle build, and `git diff --check` passed | No blocker in this slice. The tool-created untracked `target-codex-discovery/` cache remains deliberately excluded; external signed Beta authorization and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Made PyInstaller-style startup handoffs race-safe so ApexTraceVR remains observable and closable when its same-executable companion outlives the launched parent | Red/green `observation_follows_a_same_executable_companion_after_its_launcher_exits`; all 13 Windows ProcessRuntime fixtures, optimized regression, Rust format, and targeted Clippy passed | Rebuild and reinstall Formation Lap before retesting the installed Session; the existing `v0.9.0-preview.1` installer does not contain this fix. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Reworked the README into a first-time-user guide for verified preview installation, Racing Profile setup, Session operation, process ownership, settings, recovery, updates, data removal, troubleshooting, and source builds | `pnpm.cmd verify` passed (47 React tests, 3 accessibility checks, 27 release contracts, bindings/catalog/capability gates); README PowerShell syntax, 14 links, formatting, and diff whitespace passed | Choose and synchronize a new preview version because immutable `v0.9.0-preview.1` predates required fixes; publishing remains separately authorized |
+| 2026-07-25 | Codex `/root` | M10 | Prepared synchronized `0.9.0-preview.2` package metadata, installer guidance, candidate contracts, and disclosure-complete release notes that supersede the retracted `.1` build | Frozen install; tagged version contract; `pnpm.cmd verify` (47 React, 3 accessibility, 27 release tests); Rust format, all-target/all-feature Clippy and tests; RustSec audit with 17 allowed warnings; debug native build; diff checks passed | Explicitly approve sending the production dependency list to npm for the required advisory check; then push `master`, tag `v0.9.0-preview.2`, dispatch the protected preview workflow, and verify publication |

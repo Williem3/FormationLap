@@ -36,6 +36,11 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- The preview-readiness documentation slice is complete. `README.md` now gives
+  first-time users a release-tier-aware installation path, checksum command,
+  first-launch Racing Profile walkthrough, Session controls, settings,
+  recovery, data removal, and support links. There is no active implementation
+  file scope, and no release was published.
 - ApexTraceVR's PyInstaller-style handoff is now race-safe: ProcessRuntime can
   discover and retain a same-executable companion even when its launcher exits
   before the first refresh, while creation time, canonical path, and PID
@@ -338,3 +343,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Retracted the published `v0.9.0-preview.1` prerelease and its installer assets after confirming it predates the profile-creation data-loss fix; retained the tag for provenance | GitHub release inventory confirms no published release while `v0.9.0-preview.1` remains at `acff8ee` | Push the local fix only; do not create or dispatch another preview without a separately authorized version |
 | 2026-07-25 | Codex `/root` | M10 | Completed the frontend maintainability slice: feature-owned Dashboard/Profiles/Settings/Diagnostics state and commands, six focused React suites, ordered feature styles, shared snapshot fixtures, dialog focus restoration, and one atomic complete-profile creation intent with native rollback | Commits `2445fb1`, `0d2414a`, `1bb1073`, and `e758d3b`; frozen install, `pnpm.cmd verify` (47 React, 3 accessibility, 27 release tests), production build, Rust fmt, serial all-target/all-feature Clippy and tests, generated bindings/catalog/capability checks, debug Tauri no-bundle build, and `git diff --check` passed | No blocker in this slice. The tool-created untracked `target-codex-discovery/` cache remains deliberately excluded; external signed Beta authorization and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Made PyInstaller-style startup handoffs race-safe so ApexTraceVR remains observable and closable when its same-executable companion outlives the launched parent | Red/green `observation_follows_a_same_executable_companion_after_its_launcher_exits`; all 13 Windows ProcessRuntime fixtures, optimized regression, Rust format, and targeted Clippy passed | Rebuild and reinstall Formation Lap before retesting the installed Session; the existing `v0.9.0-preview.1` installer does not contain this fix. External signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Reworked the README into a first-time-user guide for verified preview installation, Racing Profile setup, Session operation, process ownership, settings, recovery, updates, data removal, troubleshooting, and source builds | `pnpm.cmd verify` passed (47 React tests, 3 accessibility checks, 27 release contracts, bindings/catalog/capability gates); README PowerShell syntax, 14 links, formatting, and diff whitespace passed | Choose and synchronize a new preview version because immutable `v0.9.0-preview.1` predates required fixes; publishing remains separately authorized |

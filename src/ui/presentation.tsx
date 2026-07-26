@@ -5,7 +5,7 @@ import type {
   DiscoveredPrimarySim,
   DiscoveredSupportingApplication,
   LaunchSource,
-  SupportingApplication,
+  NewSupportingApplication,
 } from "../generated/bindings";
 import { FlagIcon } from "./icons";
 
@@ -80,10 +80,9 @@ export function executableNameFromPath(path: string): string | null {
 
 export function discoveredSupportingApplicationToProfile(
   application: DiscoveredSupportingApplication,
-): SupportingApplication {
+): NewSupportingApplication {
   return {
     application: {
-      id: crypto.randomUUID(),
       name: application.name,
       launchRecipe: {
         source: launchSourceFromInstallation(application.installation),
@@ -101,7 +100,6 @@ export function discoveredSupportingApplicationToProfile(
           application.profileDefaults.postStartDelayMilliseconds,
         shutdownStrategy: application.profileDefaults.shutdownStrategy,
       },
-      pathNeedsRepair: false,
     },
     requirement: application.profileDefaults.requirement,
     keepRunning: application.profileDefaults.keepRunning,

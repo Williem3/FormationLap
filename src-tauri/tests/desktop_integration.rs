@@ -219,8 +219,10 @@ fn native_window_close_exits_when_idle_and_hides_while_monitoring_a_session() {
 
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: "Race night".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Race night".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("profile should be created")
     else {
@@ -268,8 +270,10 @@ fn active_core(storage: &TempStorage, stop_requests: Arc<AtomicU64>) -> Formatio
         .expect("desktop test core should open");
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: "Race night".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Race night".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("profile should be created")
     else {

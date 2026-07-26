@@ -149,8 +149,10 @@ fn core_with_launchable_profile(
     .expect("update fixture core should open");
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: "Update fixture".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Update fixture".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("profile should be created")
     else {

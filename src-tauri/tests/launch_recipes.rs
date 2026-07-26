@@ -491,8 +491,10 @@ fn test_game_launch_starts_only_the_primary_sim_and_writes_a_sanitized_report() 
         .expect("core should open with the recipe recorder");
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("profile should be created")
     else {
@@ -630,8 +632,10 @@ fn try_launch_steam_profile(
         .expect("core should open with the recipe recorder");
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: sim_name.to_owned(),
-            primary_sim_name: sim_name.to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                sim_name.to_owned(),
+                sim_name.to_owned(),
+            )),
         })
         .expect("profile should be created")
     else {

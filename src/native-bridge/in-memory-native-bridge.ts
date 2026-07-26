@@ -444,30 +444,35 @@ export class InMemoryNativeBridge implements NativeBridge {
   }
 
   createProfile(payload: CreateProfilePayload): Promise<AppSnapshot> {
+    const newProfile = payload.profile;
     const profile: RacingProfile = {
       id: this.#id("profile"),
-      name: payload.name,
+      name: newProfile.name,
       primarySim: {
         id: this.#id("application"),
-        name: payload.primarySimName,
-        launchRecipe: {
-          source: { kind: "directExecutable", executablePath: "" },
-          arguments: [],
-          workingDirectory: null,
-          monitoredProcess: null,
-          monitoredExecutablePath: null,
-          consoleVisibility: "hidden",
-          elevated: false,
-          startupTimeoutSeconds: 30,
-          postStartDelayMilliseconds: 0,
-          shutdownStrategy: { kind: "closeWindows" },
-        },
-        pathNeedsRepair: true,
+        name: newProfile.primarySim.name,
+        launchRecipe: structuredClone(newProfile.primarySim.launchRecipe),
+        pathNeedsRepair: this.#newApplicationNeedsRepair(
+          newProfile.primarySim.launchRecipe,
+        ),
       },
-      supportingApplications: [],
-      vrEnabled: false,
-      preferredVrLaunchMode: null,
-      closeSession: { stopSteamVr: false },
+      supportingApplications: newProfile.supportingApplications.map(
+        ({ application, requirement, keepRunning }) => ({
+          application: {
+            id: this.#id("application"),
+            name: application.name,
+            launchRecipe: structuredClone(application.launchRecipe),
+            pathNeedsRepair: this.#newApplicationNeedsRepair(
+              application.launchRecipe,
+            ),
+          },
+          requirement,
+          keepRunning,
+        }),
+      ),
+      vrEnabled: newProfile.vrEnabled,
+      preferredVrLaunchMode: newProfile.preferredVrLaunchMode,
+      closeSession: structuredClone(newProfile.closeSession),
     };
     this.#snapshot.profiles.push({
       id: profile.id,
@@ -677,6 +682,13 @@ export class InMemoryNativeBridge implements NativeBridge {
     const id = `${prefix}-${this.#nextId}`;
     this.#nextId += 1;
     return id;
+  }
+
+  #newApplicationNeedsRepair(recipe: LaunchRecipe): boolean {
+    return (
+      recipe.source.kind === "directExecutable" &&
+      recipe.source.executablePath.trim().length === 0
+    );
   }
 
   #privilegedRecipeChanged(

@@ -6,8 +6,8 @@ use crate::game_launch_diagnostics::GameLaunchDiagnostics;
 use crate::update_advisor::UpdateAdvisor;
 use crate::{
     AppSnapshot, ApplicationIcon, ApplicationIconSnapshot, ApplicationProcessSnapshot,
-    DevelopmentPrivilegeBroker, ElevatedOperation, ElevatedOperationResult, PrivilegeBroker,
-    PrivilegeBrokerError, ProcessIdentity, ProcessObservation, ProcessOwnership,
+    DevelopmentPrivilegeBroker, ElevatedOperation, ElevatedOperationResult, NewRacingProfile,
+    PrivilegeBroker, PrivilegeBrokerError, ProcessIdentity, ProcessObservation, ProcessOwnership,
     ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileLibrary,
     RacingProfile, SettingsStore, WindowsPrivilegeBroker, WindowsProcessRuntime,
     session_journal::SessionJournal,
@@ -23,8 +23,7 @@ use std::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AppCommand {
     CreateProfile {
-        name: String,
-        primary_sim_name: String,
+        profile: Box<NewRacingProfile>,
     },
     EditProfile {
         profile_id: String,
@@ -638,12 +637,12 @@ impl FormationLapCore {
 
     fn execute_inner(&mut self, command: AppCommand) -> Result<CommandOutcome, CoreError> {
         match command {
-            AppCommand::CreateProfile {
-                name,
-                primary_sim_name,
-            } => {
-                let profile_id = self.profile_library.create(name, primary_sim_name)?;
-                self.settings_store.select_profile(profile_id.clone())?;
+            AppCommand::CreateProfile { profile } => {
+                let profile_id = self.profile_library.create_complete(*profile)?;
+                if let Err(error) = self.settings_store.select_profile(profile_id.clone()) {
+                    self.profile_library.discard_created(&profile_id)?;
+                    return Err(error);
+                }
                 Ok(CommandOutcome::ProfileCreated { profile_id })
             }
             AppCommand::EditProfile {

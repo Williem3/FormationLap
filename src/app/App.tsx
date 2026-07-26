@@ -1,16 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
-import type {
-  ApplicationProcessSnapshot,
-  DesktopSettings,
-  DiagnosticExport,
-  DiscoveredPrimarySim,
-  GameLaunchDiagnostic,
-  LaunchSource,
-  ProfileApplication,
-  RacingProfile,
-  QuitDisposition,
-} from "../generated/bindings";
+import type { QuitDisposition } from "../generated/bindings";
 import type { NativeBridge } from "../native-bridge/native-bridge";
 import {
   DashboardIcon,
@@ -21,21 +11,17 @@ import {
 } from "../ui/icons";
 import type { SnapshotState } from "./app-types";
 import { Dashboard } from "../features/dashboard/Dashboard";
+import { DashboardDialogs } from "../features/dashboard/DashboardDialogs";
+import { useDashboardController } from "../features/dashboard/useDashboardController";
 import { DiagnosticsScreen } from "../features/diagnostics/DiagnosticsScreen";
+import { useDiagnosticsController } from "../features/diagnostics/useDiagnosticsController";
 import { ProfileEditor } from "../features/profiles/ProfileEditor";
+import { ProfileDialogs } from "../features/profiles/ProfileDialogs";
 import { ProfileWizard } from "../features/profiles/ProfileWizard";
-import type {
-  DiscoveryState,
-  PrimarySimSource,
-  ProfileApproval,
-  RecommendationState,
-} from "../features/profiles/profile-types";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
+import { useSettingsController } from "../features/settings/useSettingsController";
 import { ModalDialog } from "../ui/ModalDialog";
-import {
-  commandErrorMessage,
-  discoveredSupportingApplicationToProfile,
-} from "../ui/presentation";
+import { useProfileWorkspace } from "../features/profiles/useProfileWorkspace";
 import "./app.css";
 
 interface AppProps {
@@ -44,12 +30,6 @@ interface AppProps {
 
 type WorkspaceView =
   "dashboard" | "new-profile" | "edit-profile" | "settings" | "diagnostics";
-type PendingProcessAction = {
-  kind: "exit" | "restart" | "force";
-  application: ProfileApplication;
-  process: ApplicationProcessSnapshot;
-};
-
 export function App({ bridge }: AppProps) {
   const [state, setState] = useState<SnapshotState>({ kind: "loading" });
   const [view, setView] = useState<WorkspaceView>(() =>
@@ -60,47 +40,10 @@ export function App({ bridge }: AppProps) {
       ? "settings"
       : "dashboard",
   );
-  const [profileName, setProfileName] = useState("");
-  const [primarySimName, setPrimarySimName] = useState("");
-  const [primarySimSource, setPrimarySimSource] =
-    useState<PrimarySimSource>("direct");
-  const [sourceValue, setSourceValue] = useState("");
-  const [discoveryState, setDiscoveryState] = useState<DiscoveryState>({
-    kind: "idle",
-  });
-  const [recommendationState, setRecommendationState] =
-    useState<RecommendationState>({ kind: "idle" });
-  const [selectedPrimarySimId, setSelectedPrimarySimId] = useState<
-    string | null
-  >(null);
-  const [selectedSupportingIds, setSelectedSupportingIds] = useState<string[]>(
-    [],
-  );
-  const [isManualEntry, setIsManualEntry] = useState(false);
-  const [profileDraft, setProfileDraft] = useState<RacingProfile | null>(null);
-  const [duplicateName, setDuplicateName] = useState("");
-  const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  const [exportDocument, setExportDocument] = useState("");
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importDocument, setImportDocument] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [pendingProcessAction, setPendingProcessAction] =
-    useState<PendingProcessAction | null>(null);
-  const [outputApplication, setOutputApplication] =
-    useState<ProfileApplication | null>(null);
-  const [gameLaunchDiagnostic, setGameLaunchDiagnostic] =
-    useState<GameLaunchDiagnostic | null>(null);
-  const [diagnosticExport, setDiagnosticExport] =
-    useState<DiagnosticExport | null>(null);
-  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
+  const [quitIsSaving, setQuitIsSaving] = useState(false);
+  const [quitError, setQuitError] = useState<string | null>(null);
   const [isQuitOpen, setIsQuitOpen] = useState(false);
-  const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const newProfileButton = useRef<HTMLButtonElement | null>(null);
-  const wasDialogOpen = useRef(false);
-  const recommendationRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -128,16 +71,108 @@ export function App({ bridge }: AppProps) {
   const selectedProfileNeedsReview =
     snapshot?.profiles.find((profile) => profile.id === selectedProfile?.id)
       ?.reviewStatus === "needsReview";
+  const {
+    dashboardIsBusy,
+    dashboardError,
+    setDashboardError,
+    pendingProcessAction,
+    setPendingProcessAction,
+    outputApplication,
+    setOutputApplication,
+    gameLaunchDiagnostic,
+    clearGameLaunchDiagnostic,
+    startApplication,
+    testGameLaunch,
+    toggleDashboardVr,
+    runSessionAction,
+    requestProcessAction,
+    confirmProcessAction,
+    installFormationLapUpdate,
+  } = useDashboardController({
+    bridge,
+    selectedProfile,
+    snapshot,
+    onSnapshotChanged: (nextSnapshot) =>
+      setState({ kind: "ready", snapshot: nextSnapshot }),
+  });
+  const {
+    profileName,
+    setProfileName,
+    primarySimName,
+    setPrimarySimName,
+    primarySimSource,
+    setPrimarySimSource,
+    sourceValue,
+    setSourceValue,
+    discoveryState,
+    recommendationState,
+    selectedPrimarySimId,
+    selectedSupportingIds,
+    isManualEntry,
+    profileDraft,
+    setProfileDraft,
+    duplicateName,
+    setDuplicateName,
+    isDuplicateOpen,
+    setIsDuplicateOpen,
+    isDeleteOpen,
+    setIsDeleteOpen,
+    isExportOpen,
+    setIsExportOpen,
+    exportDocument,
+    isImportOpen,
+    setIsImportOpen,
+    importDocument,
+    setImportDocument,
+    profileIsSaving,
+    profileError,
+    setProfileError,
+    openNewProfile,
+    selectDiscoveredPrimarySim,
+    enterManualPrimarySim,
+    toggleSupportingApplication,
+    cancelProfileWizard,
+    selectProfile,
+    createProfile,
+    openProfileEditor,
+    pickExecutablePath,
+    saveProfile,
+    openDuplicateProfile,
+    duplicateProfile,
+    deleteProfile,
+    exportProfile,
+    importProfile,
+  } = useProfileWorkspace({
+    bridge,
+    selectedProfile,
+    selectedProfileNeedsReview,
+    onSnapshotChanged: (nextSnapshot) =>
+      setState({ kind: "ready", snapshot: nextSnapshot }),
+    onSnapshotError: () => setState({ kind: "error" }),
+    onNavigate: setView,
+    onProfileSelected: clearGameLaunchDiagnostic,
+  });
   const applicationName = snapshot?.applicationName ?? "Formation Lap";
-  const isDialogOpen =
-    isDuplicateOpen ||
-    isDeleteOpen ||
-    isExportOpen ||
-    isImportOpen ||
-    pendingProcessAction !== null ||
-    outputApplication !== null ||
-    isQuitOpen;
-
+  const {
+    isSaving: settingsIsSaving,
+    error: settingsError,
+    clearError: clearSettingsError,
+    updateDesktopSettings,
+    checkUpdates,
+  } = useSettingsController({
+    bridge,
+    onSnapshotChanged: (nextSnapshot) =>
+      setState({ kind: "ready", snapshot: nextSnapshot }),
+  });
+  const {
+    diagnostics: diagnosticExport,
+    isLoading: isDiagnosticsLoading,
+    error: diagnosticsError,
+    openDiagnostics,
+  } = useDiagnosticsController({
+    bridge,
+    onOpen: () => setView("diagnostics"),
+  });
   useEffect(() => {
     if (!snapshot) {
       return;
@@ -152,9 +187,6 @@ export function App({ bridge }: AppProps) {
     let unlisten: (() => void) | undefined;
     void bridge
       .listenForQuitRequest(() => {
-        if (document.activeElement instanceof HTMLElement) {
-          dialogReturnFocus.current = document.activeElement;
-        }
         setIsQuitOpen(true);
       })
       .then((cleanup) => {
@@ -189,7 +221,7 @@ export function App({ bridge }: AppProps) {
         })
         .catch(() => {
           if (active) {
-            setFormError(
+            setDashboardError(
               "Formation Lap could not refresh local application status.",
             );
           }
@@ -203,635 +235,19 @@ export function App({ bridge }: AppProps) {
       active = false;
       window.clearInterval(timer);
     };
-  }, [activeProcessKey, bridge]);
-
-  useEffect(() => {
-    if (wasDialogOpen.current && !isDialogOpen) {
-      dialogReturnFocus.current?.focus();
-      dialogReturnFocus.current = null;
-    }
-    wasDialogOpen.current = isDialogOpen;
-  }, [isDialogOpen]);
-
-  const rememberDialogTrigger = () => {
-    if (document.activeElement instanceof HTMLElement) {
-      dialogReturnFocus.current = document.activeElement;
-    }
-  };
-
-  const openNewProfile = () => {
-    setFormError(null);
-    setProfileName("");
-    setPrimarySimName("");
-    setPrimarySimSource("direct");
-    setSourceValue("");
-    setSelectedPrimarySimId(null);
-    setSelectedSupportingIds([]);
-    setRecommendationState({ kind: "idle" });
-    setIsManualEntry(false);
-    setDiscoveryState({ kind: "loading" });
-    setView("new-profile");
-    void bridge
-      .discoverApplications()
-      .then((discovery) => {
-        setDiscoveryState({ kind: "ready", snapshot: discovery });
-        if (discovery.installedPrimarySims.length === 0) {
-          setIsManualEntry(true);
-        }
-      })
-      .catch(() => {
-        setDiscoveryState({ kind: "error" });
-        setIsManualEntry(true);
-      });
-  };
-
-  const selectDiscoveredPrimarySim = (primarySim: DiscoveredPrimarySim) => {
-    setSelectedPrimarySimId(primarySim.id);
-    setPrimarySimName(primarySim.name);
-    setIsManualEntry(false);
-    setSelectedSupportingIds([]);
-    if (primarySim.installation.kind === "steam") {
-      setPrimarySimSource("steam");
-      setSourceValue(String(primarySim.installation.appId));
-    } else {
-      setPrimarySimSource("direct");
-      setSourceValue(primarySim.installation.executablePath);
-    }
-
-    const request = ++recommendationRequest.current;
-    setRecommendationState({
-      kind: "loading",
-      primarySimName: primarySim.name,
-    });
-    void bridge
-      .recommendApplications({ primarySimId: primarySim.id })
-      .then((recommendations) => {
-        if (request !== recommendationRequest.current) {
-          return;
-        }
-        const installedIds = new Set(
-          discoveryState.kind === "ready"
-            ? discoveryState.snapshot.installedSupportingApplications.map(
-                (application) => application.id,
-              )
-            : [],
-        );
-        setRecommendationState({
-          kind: "ready",
-          primarySimName: primarySim.name,
-          recommendations: recommendations.filter((recommendation) =>
-            installedIds.has(recommendation.id),
-          ),
-        });
-      })
-      .catch(() => {
-        if (request === recommendationRequest.current) {
-          setRecommendationState({
-            kind: "error",
-            primarySimName: primarySim.name,
-          });
-        }
-      });
-  };
-
-  const enterManualPrimarySim = () => {
-    recommendationRequest.current += 1;
-    setSelectedPrimarySimId(null);
-    setSelectedSupportingIds([]);
-    setRecommendationState({ kind: "idle" });
-    setPrimarySimName("");
-    setPrimarySimSource("direct");
-    setSourceValue("");
-    setIsManualEntry(true);
-  };
-
-  const toggleSupportingApplication = (applicationId: string) => {
-    setSelectedSupportingIds((selected) =>
-      selected.includes(applicationId)
-        ? selected.filter((id) => id !== applicationId)
-        : [...selected, applicationId],
-    );
-  };
-
-  const selectProfile = async (profileId: string) => {
-    try {
-      const nextSnapshot = await bridge.selectProfile({
-        profileId,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setView("dashboard");
-      setProfileDraft(null);
-      setGameLaunchDiagnostic(null);
-    } catch {
-      setState({ kind: "error" });
-    }
-  };
-
-  const createProfile = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSaving(true);
-    setFormError(null);
-
-    try {
-      let nextSnapshot = await bridge.createProfile({
-        name: profileName,
-        primarySimName,
-      });
-      if (nextSnapshot.selectedProfile) {
-        const profile = structuredClone(nextSnapshot.selectedProfile);
-        const source: LaunchSource =
-          primarySimSource === "steam"
-            ? {
-                kind: "steam",
-                appId: Number.parseInt(sourceValue, 10) || 0,
-                selector: null,
-              }
-            : {
-                kind: "directExecutable",
-                executablePath: sourceValue,
-              };
-        profile.primarySim.launchRecipe.source = source;
-        profile.primarySim.pathNeedsRepair =
-          source.kind === "directExecutable" &&
-          source.executablePath.length === 0;
-        if (discoveryState.kind === "ready") {
-          profile.supportingApplications =
-            discoveryState.snapshot.installedSupportingApplications
-              .filter((application) =>
-                selectedSupportingIds.includes(application.id),
-              )
-              .map(discoveredSupportingApplicationToProfile);
-        }
-        nextSnapshot = await bridge.saveProfile({ profile });
-      }
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setView("dashboard");
-      setProfileName("");
-      setPrimarySimName("");
-      setSourceValue("");
-      setDiscoveryState({ kind: "idle" });
-      setRecommendationState({ kind: "idle" });
-      setSelectedPrimarySimId(null);
-      setSelectedSupportingIds([]);
-      setIsManualEntry(false);
-    } catch {
-      setFormError(
-        "The Racing Profile could not be created. Review the profile details and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const openProfileEditor = () => {
-    if (!selectedProfile) {
-      return;
-    }
-    setFormError(null);
-    setProfileDraft(structuredClone(selectedProfile));
-    setView("edit-profile");
-  };
-
-  const pickExecutablePath = async (
-    initialPath?: string | null,
-  ): Promise<string | null> => {
-    try {
-      return await bridge.pickExecutablePath(initialPath);
-    } catch {
-      setFormError(
-        "Formation Lap could not open the executable picker. Type the path or try again.",
-      );
-      return null;
-    }
-  };
-
-  const saveProfile = async (
-    event: FormEvent<HTMLFormElement>,
-    approval?: ProfileApproval,
-  ) => {
-    event.preventDefault();
-    if (!profileDraft) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      let nextSnapshot = await bridge.saveProfile({
-        profile: profileDraft,
-      });
-      if (approval) {
-        nextSnapshot = await bridge.approveProfile({
-          profileId: profileDraft.id,
-          configurationReviewed: approval.configurationReviewed,
-          approvedPrivilegedApplicationIds:
-            approval.approvedPrivilegedApplicationIds,
-        });
-      }
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setProfileDraft(null);
-      setView("dashboard");
-    } catch {
-      setFormError(
-        selectedProfileNeedsReview
-          ? "The Racing Profile is still quarantined. Repair missing paths and approve every elevated or custom-stop entry."
-          : "The Racing Profile could not be saved. Review the profile details and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const openDuplicateProfile = () => {
-    if (!selectedProfile) {
-      return;
-    }
-    rememberDialogTrigger();
-    setFormError(null);
-    setDuplicateName(`${selectedProfile.name} Copy`);
-    setIsDuplicateOpen(true);
-  };
-
-  const duplicateProfile = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.duplicateProfile({
-        sourceProfileId: selectedProfile.id,
-        name: duplicateName,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setIsDuplicateOpen(false);
-      setDuplicateName("");
-    } catch {
-      setFormError(
-        "The Racing Profile could not be duplicated. Choose a different name and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const deleteProfile = async () => {
-    if (!selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.deleteProfile({
-        profileId: selectedProfile.id,
-      });
-      dialogReturnFocus.current = newProfileButton.current;
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setIsDeleteOpen(false);
-    } catch {
-      setFormError(
-        "The Racing Profile could not be deleted. Close this dialog and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const exportProfile = async () => {
-    if (!selectedProfile) {
-      return;
-    }
-    rememberDialogTrigger();
-    setIsSaving(true);
-    setFormError(null);
-    setExportDocument("");
-    setIsExportOpen(true);
-    try {
-      const document = await bridge.exportProfile({
-        profileId: selectedProfile.id,
-      });
-      setExportDocument(document);
-    } catch {
-      setFormError(
-        "The Racing Profile could not be exported. Close this dialog and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const importProfile = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.importProfile({
-        document: importDocument,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setIsImportOpen(false);
-      setImportDocument("");
-    } catch {
-      setFormError(
-        "The Racing Profile could not be imported. Check the portable JSON and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const startApplication = async (application: ProfileApplication) => {
-    if (!selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.startApplication({
-        profileId: selectedProfile.id,
-        applicationId: application.id,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch (error) {
-      setFormError(
-        commandErrorMessage(
-          error,
-          `${application.name} could not start. Check its Launch Recipe and try again.`,
-        ),
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const testGameLaunch = async () => {
-    if (!selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    setGameLaunchDiagnostic(null);
-    try {
-      const diagnostic = await bridge.testGameLaunch({
-        profileId: selectedProfile.id,
-      });
-      setGameLaunchDiagnostic(diagnostic);
-    } catch {
-      setFormError(
-        "Test Game Launch could not start the Primary Sim. Review its Launch Recipe and try again.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const toggleDashboardVr = async (vrEnabled: boolean) => {
-    if (!selectedProfile || snapshot?.session.state !== "idle") {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const profile = structuredClone(selectedProfile);
-      profile.vrEnabled = vrEnabled;
-      const nextSnapshot = await bridge.saveProfile({ profile });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setGameLaunchDiagnostic(null);
-    } catch {
-      setFormError("Formation Lap could not remember the VR choice.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const runSessionAction = async (
-    action: "start" | "cancel" | "close" | "acceptRecovery" | "dismissRecovery",
-  ) => {
-    if (action === "start" && !selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot =
-        action === "start"
-          ? await bridge.startSession({ profileId: selectedProfile!.id })
-          : action === "cancel"
-            ? await bridge.cancelStartup()
-            : action === "close"
-              ? await bridge.closeSession()
-              : action === "acceptRecovery"
-                ? await bridge.acceptRecovery()
-                : await bridge.dismissRecovery();
-      setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch (error) {
-      setFormError(
-        commandErrorMessage(
-          error,
-          "Formation Lap could not complete the Session action.",
-        ),
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const exitApplication = async (
-    application: ProfileApplication,
-    preExistingConfirmed: boolean,
-  ) => {
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.exitApplication({
-        applicationId: application.id,
-        preExistingConfirmed,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      const nextProcess = nextSnapshot.applicationProcesses.find(
-        (process) => process.applicationId === application.id,
-      );
-      if (nextProcess?.status === "stopping") {
-        rememberDialogTrigger();
-        setPendingProcessAction({
-          kind: "force",
-          application,
-          process: nextProcess,
-        });
-      }
-    } catch {
-      setFormError(
-        `${application.name} did not stop. Review its shutdown strategy and try again.`,
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const restartApplication = async (
-    application: ProfileApplication,
-    preExistingConfirmed: boolean,
-  ) => {
-    if (!selectedProfile) {
-      return;
-    }
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.restartApplication({
-        profileId: selectedProfile.id,
-        applicationId: application.id,
-        preExistingConfirmed,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      const nextProcess = nextSnapshot.applicationProcesses.find(
-        (process) => process.applicationId === application.id,
-      );
-      if (nextProcess?.status === "stopping") {
-        rememberDialogTrigger();
-        setPendingProcessAction({
-          kind: "force",
-          application,
-          process: nextProcess,
-        });
-      }
-    } catch {
-      setFormError(
-        `${application.name} could not restart. Check its Launch Recipe and try again.`,
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const forceStopApplication = async (
-    application: ProfileApplication,
-    processSnapshot: ApplicationProcessSnapshot,
-  ) => {
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.forceStopApplication({
-        applicationId: application.id,
-        preExistingConfirmed: processSnapshot.ownership === "preExisting",
-        forceConfirmed: true,
-      });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-      setPendingProcessAction(null);
-    } catch {
-      setFormError(
-        `${application.name} could not be force stopped. Try again or close it directly.`,
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const requestProcessAction = (
-    kind: PendingProcessAction["kind"],
-    application: ProfileApplication,
-    processSnapshot: ApplicationProcessSnapshot,
-  ) => {
-    rememberDialogTrigger();
-    if (kind === "force" || processSnapshot.ownership === "preExisting") {
-      setPendingProcessAction({
-        kind,
-        application,
-        process: processSnapshot,
-      });
-      return;
-    }
-    if (kind === "exit") {
-      void exitApplication(application, false);
-    } else {
-      void restartApplication(application, false);
-    }
-  };
-
-  const confirmProcessAction = () => {
-    if (!pendingProcessAction) {
-      return;
-    }
-    const { kind, application, process } = pendingProcessAction;
-    setPendingProcessAction(null);
-    if (kind === "exit") {
-      void exitApplication(application, true);
-    } else if (kind === "restart") {
-      void restartApplication(application, true);
-    } else {
-      void forceStopApplication(application, process);
-    }
-  };
-
-  const updateDesktopSettings = async (settings: DesktopSettings) => {
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.updateSettings({ settings });
-      setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch {
-      setFormError(
-        "Formation Lap could not save these local desktop settings.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const checkUpdates = async () => {
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.checkUpdates();
-      setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch {
-      setFormError(
-        "Formation Lap could not complete the trusted update checks.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const installFormationLapUpdate = async () => {
-    setIsSaving(true);
-    setFormError(null);
-    try {
-      const nextSnapshot = await bridge.installFormationLapUpdate();
-      setState({ kind: "ready", snapshot: nextSnapshot });
-    } catch {
-      setFormError(
-        "Formation Lap rejected the update or the Session is not idle.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const openDiagnostics = async () => {
-    setView("diagnostics");
-    setIsDiagnosticsLoading(true);
-    setFormError(null);
-    try {
-      setDiagnosticExport(await bridge.exportDiagnostics());
-    } catch {
-      setFormError("Formation Lap could not export local diagnostics.");
-    } finally {
-      setIsDiagnosticsLoading(false);
-    }
-  };
+  }, [activeProcessKey, bridge, setDashboardError]);
 
   const requestQuit = async (disposition: QuitDisposition) => {
-    setIsSaving(true);
-    setFormError(null);
+    setQuitIsSaving(true);
+    setQuitError(null);
     try {
       const nextSnapshot = await bridge.requestQuit({ disposition });
       setState({ kind: "ready", snapshot: nextSnapshot });
       setIsQuitOpen(false);
     } catch {
-      setFormError("Formation Lap could not apply the selected Quit action.");
+      setQuitError("Formation Lap could not apply the selected Quit action.");
     } finally {
-      setIsSaving(false);
+      setQuitIsSaving(false);
     }
   };
 
@@ -915,8 +331,7 @@ export function App({ bridge }: AppProps) {
             className="import-profile-button"
             disabled={state.kind !== "ready"}
             onClick={() => {
-              rememberDialogTrigger();
-              setFormError(null);
+              setProfileError(null);
               setImportDocument("");
               setIsImportOpen(true);
             }}
@@ -932,7 +347,7 @@ export function App({ bridge }: AppProps) {
             aria-current={view === "settings" ? "page" : undefined}
             disabled={state.kind !== "ready"}
             onClick={() => {
-              setFormError(null);
+              clearSettingsError();
               setView("settings");
             }}
           >
@@ -954,8 +369,7 @@ export function App({ bridge }: AppProps) {
             className="nav-item quit-nav-item"
             disabled={state.kind !== "ready"}
             onClick={() => {
-              rememberDialogTrigger();
-              setFormError(null);
+              setQuitError(null);
               setIsQuitOpen(true);
             }}
           >
@@ -971,13 +385,12 @@ export function App({ bridge }: AppProps) {
             settings={state.snapshot.settings}
             updates={state.snapshot.updates}
             sessionState={state.snapshot.session.state}
-            isSaving={isSaving}
-            error={formError}
+            isSaving={settingsIsSaving}
+            error={settingsError}
             onChange={(settings) => void updateDesktopSettings(settings)}
             onCheckUpdates={() => void checkUpdates()}
             onOpenDiagnostics={() => void openDiagnostics()}
             onQuit={() => {
-              rememberDialogTrigger();
               setIsQuitOpen(true);
             }}
           />
@@ -985,7 +398,7 @@ export function App({ bridge }: AppProps) {
           <DiagnosticsScreen
             diagnostics={diagnosticExport}
             isLoading={isDiagnosticsLoading}
-            error={formError}
+            error={diagnosticsError}
             onRefresh={() => void openDiagnostics()}
           />
         ) : view === "new-profile" && state.kind === "ready" ? (
@@ -999,8 +412,8 @@ export function App({ bridge }: AppProps) {
             selectedPrimarySimId={selectedPrimarySimId}
             selectedSupportingIds={selectedSupportingIds}
             isManualEntry={isManualEntry}
-            isSaving={isSaving}
-            error={formError}
+            isSaving={profileIsSaving}
+            error={profileError}
             onProfileNameChange={setProfileName}
             onPrimarySimNameChange={setPrimarySimName}
             onPrimarySimSourceChange={setPrimarySimSource}
@@ -1009,12 +422,7 @@ export function App({ bridge }: AppProps) {
             onSelectPrimarySim={selectDiscoveredPrimarySim}
             onEnterManual={enterManualPrimarySim}
             onToggleSupporting={toggleSupportingApplication}
-            onCancel={() => {
-              recommendationRequest.current += 1;
-              setDiscoveryState({ kind: "idle" });
-              setRecommendationState({ kind: "idle" });
-              setView("dashboard");
-            }}
+            onCancel={cancelProfileWizard}
             onSubmit={createProfile}
           />
         ) : view === "edit-profile" &&
@@ -1023,8 +431,8 @@ export function App({ bridge }: AppProps) {
           <ProfileEditor
             profile={profileDraft}
             needsReview={selectedProfileNeedsReview}
-            isSaving={isSaving}
-            error={formError}
+            isSaving={profileIsSaving}
+            error={profileError}
             onPickExecutablePath={pickExecutablePath}
             onChange={setProfileDraft}
             onCancel={() => {
@@ -1039,7 +447,7 @@ export function App({ bridge }: AppProps) {
             applicationName={applicationName}
             selectedProfile={selectedProfile}
             profileNeedsReview={selectedProfileNeedsReview}
-            error={formError}
+            error={dashboardError}
             applicationIcons={snapshot?.applicationIcons ?? []}
             applicationProcesses={snapshot?.applicationProcesses ?? []}
             session={snapshot?.session ?? null}
@@ -1047,12 +455,11 @@ export function App({ bridge }: AppProps) {
             onlineChecksEnabled={
               snapshot?.settings.automaticUpdateChecks ?? false
             }
-            isBusy={isSaving}
+            isBusy={dashboardIsBusy}
             gameLaunchDiagnostic={gameLaunchDiagnostic}
             onCreateProfile={openNewProfile}
             onDeleteProfile={() => {
-              rememberDialogTrigger();
-              setFormError(null);
+              setProfileError(null);
               setIsDeleteOpen(true);
             }}
             onDuplicateProfile={openDuplicateProfile}
@@ -1099,9 +506,9 @@ export function App({ bridge }: AppProps) {
               ? "No Session is active. Formation Lap can exit now."
               : "Choose whether Formation Lap closes Session-owned applications or leaves every running application untouched."}
           </p>
-          {formError && (
+          {quitError && (
             <p className="form-error" role="alert">
-              {formError}
+              {quitError}
             </p>
           )}
           <div className="dialog-actions quit-dialog-actions">
@@ -1116,7 +523,7 @@ export function App({ bridge }: AppProps) {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={isSaving}
+                disabled={quitIsSaving}
                 onClick={() => void requestQuit("leaveApplicationsRunning")}
               >
                 Leave applications running
@@ -1125,7 +532,7 @@ export function App({ bridge }: AppProps) {
             <button
               type="button"
               className="primary-button"
-              disabled={isSaving}
+              disabled={quitIsSaving}
               onClick={() =>
                 void requestQuit(
                   snapshot?.session.state === "idle"
@@ -1142,268 +549,42 @@ export function App({ bridge }: AppProps) {
         </ModalDialog>
       )}
 
-      {pendingProcessAction && (
-        <ModalDialog
-          labelledBy="process-confirmation-title"
-          onClose={() => setPendingProcessAction(null)}
-        >
-          <p className="eyebrow">
-            {pendingProcessAction.kind === "force"
-              ? "Force termination"
-              : "Ownership confirmation"}
-          </p>
-          <h2 id="process-confirmation-title">
-            {pendingProcessAction.kind === "force"
-              ? `Force stop ${pendingProcessAction.application.name}?`
-              : `${pendingProcessAction.kind === "restart" ? "Restart" : "Control"} a Pre-existing Process?`}
-          </h2>
-          <p>
-            {pendingProcessAction.kind === "force"
-              ? `Graceful shutdown did not complete. Force stopping ${pendingProcessAction.application.name} may lose unsaved work.`
-              : `${pendingProcessAction.application.name} was already running before Formation Lap observed it. This explicit action will control a Process that the current Session does not own.`}
-          </p>
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
-            </p>
-          )}
-          <div className="dialog-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setPendingProcessAction(null)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={
-                pendingProcessAction.kind === "force"
-                  ? "danger-button"
-                  : "primary-button"
-              }
-              disabled={isSaving}
-              onClick={confirmProcessAction}
-            >
-              {pendingProcessAction.kind === "force"
-                ? `Force stop ${pendingProcessAction.application.name}`
-                : `${pendingProcessAction.kind === "restart" ? "Restart" : "Exit"} ${pendingProcessAction.application.name}`}
-            </button>
-          </div>
-        </ModalDialog>
-      )}
-
-      {outputApplication &&
-        (() => {
-          const processOutput = snapshot?.applicationProcesses.find(
-            (process) => process.applicationId === outputApplication.id,
-          )?.output;
-          return (
-            <ModalDialog
-              className="console-dialog"
-              labelledBy="console-output-title"
-              onClose={() => setOutputApplication(null)}
-            >
-              <p className="eyebrow">Bounded local output</p>
-              <h2 id="console-output-title">{outputApplication.name} output</h2>
-              <p>
-                Formation Lap keeps only the most recent local stdout and stderr
-                tail.
-              </p>
-              <pre className="console-output">
-                {processOutput
-                  ? [
-                      processOutput.stdout,
-                      processOutput.stderr,
-                      processOutput.truncated
-                        ? "\n[Earlier output was discarded.]"
-                        : "",
-                    ].join("")
-                  : "No captured output."}
-              </pre>
-              <div className="dialog-actions">
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => setOutputApplication(null)}
-                >
-                  Close output
-                </button>
-              </div>
-            </ModalDialog>
-          );
-        })()}
-
-      {isDuplicateOpen && selectedProfile && (
-        <ModalDialog
-          labelledBy="duplicate-profile-title"
-          onClose={() => setIsDuplicateOpen(false)}
-        >
-          <p className="eyebrow">Profile action</p>
-          <h2 id="duplicate-profile-title">Duplicate {selectedProfile.name}</h2>
-          <p>
-            Create an independent copy with the same startup order and settings.
-          </p>
-          <form onSubmit={duplicateProfile}>
-            <label className="field">
-              <span>Duplicate name</span>
-              <input
-                autoFocus
-                required
-                value={duplicateName}
-                onChange={(event) =>
-                  setDuplicateName(event.currentTarget.value)
-                }
-              />
-            </label>
-            {formError && (
-              <p className="form-error" role="alert">
-                {formError}
-              </p>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setIsDuplicateOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={isSaving}
-              >
-                {isSaving ? "Duplicating…" : "Create duplicate"}
-              </button>
-            </div>
-          </form>
-        </ModalDialog>
-      )}
-
-      {isDeleteOpen && selectedProfile && (
-        <ModalDialog
-          labelledBy="delete-profile-title"
-          onClose={() => setIsDeleteOpen(false)}
-        >
-          <p className="eyebrow">Destructive action</p>
-          <h2 id="delete-profile-title">Delete {selectedProfile.name}?</h2>
-          <p>
-            This removes the Racing Profile from your library. Formation Lap
-            keeps a bounded local backup for recovery.
-          </p>
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
-            </p>
-          )}
-          <div className="dialog-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setIsDeleteOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={isSaving}
-              onClick={() => void deleteProfile()}
-            >
-              {isSaving ? "Deleting…" : `Delete ${selectedProfile.name}`}
-            </button>
-          </div>
-        </ModalDialog>
-      )}
-
-      {isExportOpen && selectedProfile && (
-        <ModalDialog
-          className="transfer-dialog"
-          labelledBy="export-profile-title"
-          onClose={() => setIsExportOpen(false)}
-        >
-          <p className="eyebrow">Portable profile</p>
-          <h2 id="export-profile-title">Export {selectedProfile.name}</h2>
-          <p>
-            Copy this JSON into a local text file. Machine-specific paths are
-            marked for repair when imported elsewhere.
-          </p>
-          <label className="field">
-            <span>Portable profile JSON</span>
-            <textarea
-              readOnly
-              rows={12}
-              value={exportDocument}
-              aria-busy={isSaving}
-            />
-          </label>
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
-            </p>
-          )}
-          <div className="dialog-actions">
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => setIsExportOpen(false)}
-            >
-              Close export
-            </button>
-          </div>
-        </ModalDialog>
-      )}
-
-      {isImportOpen && (
-        <ModalDialog
-          className="transfer-dialog"
-          labelledBy="import-profile-title"
-          onClose={() => setIsImportOpen(false)}
-        >
-          <p className="eyebrow">Portable profile</p>
-          <h2 id="import-profile-title">Import Racing Profile</h2>
-          <p>
-            Paste a Formation Lap profile document. A fresh local identity is
-            assigned and missing paths remain visible for repair.
-          </p>
-          <form onSubmit={importProfile}>
-            <label className="field">
-              <span>Portable profile JSON</span>
-              <textarea
-                autoFocus
-                required
-                rows={12}
-                value={importDocument}
-                onChange={(event) =>
-                  setImportDocument(event.currentTarget.value)
-                }
-              />
-            </label>
-            {formError && (
-              <p className="form-error" role="alert">
-                {formError}
-              </p>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setIsImportOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={isSaving}
-              >
-                {isSaving ? "Importing…" : "Import Racing Profile"}
-              </button>
-            </div>
-          </form>
-        </ModalDialog>
-      )}
+      <DashboardDialogs
+        snapshot={snapshot}
+        controller={{
+          pendingProcessAction,
+          setPendingProcessAction,
+          outputApplication,
+          setOutputApplication,
+          dashboardError,
+          dashboardIsBusy,
+          confirmProcessAction,
+        }}
+      />
+      <ProfileDialogs
+        selectedProfile={selectedProfile}
+        newProfileButton={newProfileButton}
+        workspace={{
+          duplicateName,
+          setDuplicateName,
+          isDuplicateOpen,
+          setIsDuplicateOpen,
+          isDeleteOpen,
+          setIsDeleteOpen,
+          isExportOpen,
+          setIsExportOpen,
+          exportDocument,
+          isImportOpen,
+          setIsImportOpen,
+          importDocument,
+          setImportDocument,
+          profileIsSaving,
+          profileError,
+          duplicateProfile,
+          deleteProfile,
+          importProfile,
+        }}
+      />
     </div>
   );
 }

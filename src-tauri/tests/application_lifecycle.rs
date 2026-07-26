@@ -124,8 +124,10 @@ fn configured_core(
         .expect("empty lifecycle storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Local fixture".to_owned(),
-            primary_sim_name: "Healthy fixture".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Local fixture".to_owned(),
+                "Healthy fixture".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {

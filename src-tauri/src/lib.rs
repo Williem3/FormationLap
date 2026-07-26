@@ -42,14 +42,15 @@ pub use contracts::{
     ConsoleVisibility, DesktopSettings, DiagnosticEntry, DiagnosticExport, DiscoveredInstallation,
     DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot,
     FormationLapInstallDecision, GameLaunchDiagnostic, GameLaunchTarget, LaunchRecipe,
-    LaunchSource, ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus,
-    ProfileApplication, ProfileReviewStatus, ProfileSummary, QuitAction, QuitDisposition,
-    RacingProfile, SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState,
-    SessionEvent, SessionEventKind, SessionSnapshot, SessionState, SessionSummary,
-    ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
-    SupportingApplicationProfileDefaults, SupportingApplicationRecommendation, ThemePreference,
-    UpdateChannel, UpdateCheckDecision, UpdateCheckPlan, UpdateCheckResult, UpdateCheckTrigger,
-    UpdateSnapshot, UpdateStatus, VrLaunchMode, WindowCloseAction,
+    LaunchSource, NewProfileApplication, NewRacingProfile, NewSupportingApplication,
+    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
+    ProfileReviewStatus, ProfileSummary, QuitAction, QuitDisposition, RacingProfile,
+    SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
+    SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
+    SteamLaunchSelector, SupportingApplication, SupportingApplicationProfileDefaults,
+    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateCheckDecision,
+    UpdateCheckPlan, UpdateCheckResult, UpdateCheckTrigger, UpdateSnapshot, UpdateStatus,
+    VrLaunchMode, WindowCloseAction,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{

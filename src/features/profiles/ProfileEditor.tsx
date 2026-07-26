@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type {
   ProfileApplication,
   RacingProfile,
@@ -33,6 +33,7 @@ export function ProfileEditor({
   onCancel,
   onSubmit,
 }: ProfileEditorProps) {
+  const nextSupportingApplicationKey = useRef(0);
   const [configurationReviewed, setConfigurationReviewed] = useState(false);
   const [openSupportingApplicationId, setOpenSupportingApplicationId] =
     useState<string | null>(
@@ -84,8 +85,9 @@ export function ProfileEditor({
   };
 
   const addSupportingApplication = () => {
+    nextSupportingApplicationKey.current += 1;
     const application: ProfileApplication = {
-      id: crypto.randomUUID(),
+      id: `new-supporting-application-${nextSupportingApplicationKey.current}`,
       name: "New Supporting Application",
       launchRecipe: {
         source: { kind: "directExecutable", executablePath: "" },

@@ -92,6 +92,56 @@ pub struct LaunchRecipe {
     pub shutdown_strategy: ShutdownStrategy,
 }
 
+/// One application accepted while creating a complete Racing Profile.
+///
+/// Stable identity and repair state are derived by the native profile library.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct NewProfileApplication {
+    pub name: String,
+    pub launch_recipe: LaunchRecipe,
+}
+
+/// One Supporting Application accepted while creating a complete Racing Profile.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct NewSupportingApplication {
+    pub application: NewProfileApplication,
+    pub requirement: ApplicationRequirement,
+    pub keep_running: bool,
+}
+
+/// Complete user intent for creating one Racing Profile.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct NewRacingProfile {
+    pub name: String,
+    pub primary_sim: NewProfileApplication,
+    pub supporting_applications: Vec<NewSupportingApplication>,
+    pub vr_enabled: bool,
+    pub preferred_vr_launch_mode: Option<VrLaunchMode>,
+    pub close_session: CloseSessionSettings,
+}
+
+impl NewRacingProfile {
+    pub fn from_names(name: String, primary_sim_name: String) -> Self {
+        Self {
+            name,
+            primary_sim: NewProfileApplication {
+                name: primary_sim_name,
+                launch_recipe: LaunchRecipe::default(),
+            },
+            supporting_applications: Vec::new(),
+            vr_enabled: false,
+            preferred_vr_launch_mode: None,
+            close_session: CloseSessionSettings::default(),
+        }
+    }
+}
+
 /// Sanitized launch target included in a local Test Game Launch report.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]

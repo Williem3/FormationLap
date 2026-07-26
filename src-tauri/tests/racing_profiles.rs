@@ -52,8 +52,10 @@ fn created_racing_profile_survives_core_restart() {
 
     let outcome = core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created");
     let profile_id = match outcome {
@@ -85,8 +87,10 @@ fn blank_racing_profile_names_are_rejected_without_changing_storage() {
             FormationLapCore::open(storage.path()).expect("empty profile storage should open");
 
         let result = core.execute(AppCommand::CreateProfile {
-            name: name.to_owned(),
-            primary_sim_name: primary_sim_name.to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                name.to_owned(),
+                primary_sim_name.to_owned(),
+            )),
         });
 
         assert!(
@@ -145,8 +149,10 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -190,8 +196,10 @@ fn deleted_racing_profile_stays_deleted_and_keeps_a_backup() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Sunday endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Sunday endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -234,8 +242,10 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let source_profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -285,8 +295,10 @@ fn complete_racing_profile_configuration_survives_restart() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans evening".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans evening".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -403,8 +415,10 @@ fn save_profile_retains_native_identity_and_recomputes_path_diagnostics() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -479,8 +493,10 @@ fn selected_racing_profile_survives_core_restart() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let first_profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Assetto Corsa".to_owned(),
-            primary_sim_name: "Assetto Corsa".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Assetto Corsa".to_owned(),
+                "Assetto Corsa".to_owned(),
+            )),
         })
         .expect("the first Racing Profile should be created")
     {
@@ -489,8 +505,10 @@ fn selected_racing_profile_survives_core_restart() {
     };
     let selected_profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("the second Racing Profile should be created")
     {
@@ -529,14 +547,18 @@ fn interrupted_settings_replacement_recovers_the_last_profile_selection() {
     let mut core =
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     core.execute(AppCommand::CreateProfile {
-        name: "First".to_owned(),
-        primary_sim_name: "Assetto Corsa".to_owned(),
+        profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+            "First".to_owned(),
+            "Assetto Corsa".to_owned(),
+        )),
     })
     .expect("the first Racing Profile should be created");
     let selected_profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Selected".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Selected".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("the selected Racing Profile should be created")
     {
@@ -576,8 +598,10 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -626,8 +650,10 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Last valid".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Last valid".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -800,8 +826,10 @@ fn exported_racing_profile_is_portable_and_contains_no_runtime_identity() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Le Mans evening".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Le Mans evening".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {
@@ -1068,8 +1096,10 @@ fn editing_an_approved_privileged_recipe_invalidates_its_approval() {
         FormationLapCore::open(storage.path()).expect("empty profile storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Privileged local profile".to_owned(),
-            primary_sim_name: "Fixture".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Privileged local profile".to_owned(),
+                "Fixture".to_owned(),
+            )),
         })
         .expect("a valid Racing Profile should be created")
     {

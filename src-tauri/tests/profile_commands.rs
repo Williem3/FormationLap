@@ -1,6 +1,8 @@
 use formation_lap_lib::{
-    ApproveProfilePayload, CreateProfilePayload, DuplicateProfilePayload, ImportProfilePayload,
-    NativeCommandHost, ProfileIdPayload, ProfileReviewStatus, SaveProfilePayload,
+    ApplicationRequirement, ApproveProfilePayload, CloseSessionSettings, CreateProfilePayload,
+    DuplicateProfilePayload, ImportProfilePayload, LaunchRecipe, LaunchSource, NativeCommandHost,
+    NewProfileApplication, NewRacingProfile, NewSupportingApplication, ProfileIdPayload,
+    ProfileReviewStatus, SaveProfilePayload,
 };
 use std::{
     fs,
@@ -50,8 +52,10 @@ fn create_profile_command_returns_the_authoritative_snapshot() {
 
     let snapshot = commands
         .create_profile(CreateProfilePayload {
-            name: "Le Mans evening".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Le Mans evening".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("valid command payload should create a Racing Profile");
 
@@ -74,8 +78,10 @@ fn create_profile_command_selects_the_new_profile_over_an_existing_selection() {
         NativeCommandHost::open(storage.path()).expect("native command host should open");
     let existing_profile_id = commands
         .create_profile(CreateProfilePayload {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("existing Racing Profile should be created")
         .selected_profile
@@ -89,8 +95,7 @@ fn create_profile_command_selects_the_new_profile_over_an_existing_selection() {
 
     let snapshot = commands
         .create_profile(CreateProfilePayload {
-            name: "iRacing".to_owned(),
-            primary_sim_name: "iRacing".to_owned(),
+            profile: NewRacingProfile::from_names("iRacing".to_owned(), "iRacing".to_owned()),
         })
         .expect("new Racing Profile should be created");
 
@@ -105,14 +110,163 @@ fn create_profile_command_selects_the_new_profile_over_an_existing_selection() {
 }
 
 #[test]
+fn create_profile_command_persists_one_complete_profile_without_mutating_the_prior_profile() {
+    let storage = TempStorage::new();
+    let supporting_executable = std::env::current_exe()
+        .expect("test executable should have a path")
+        .to_string_lossy()
+        .into_owned();
+    let commands =
+        NativeCommandHost::open(storage.path()).expect("native command host should open");
+    let profile_a = commands
+        .create_profile(CreateProfilePayload {
+            profile: NewRacingProfile::from_names(
+                "Existing profile".to_owned(),
+                "Existing sim".to_owned(),
+            ),
+        })
+        .expect("existing Racing Profile should be created")
+        .selected_profile
+        .expect("existing profile should be selected");
+
+    let snapshot = commands
+        .create_profile(CreateProfilePayload {
+            profile: NewRacingProfile {
+                name: "Configured profile".to_owned(),
+                primary_sim: NewProfileApplication {
+                    name: "Le Mans Ultimate".to_owned(),
+                    launch_recipe: LaunchRecipe {
+                        source: LaunchSource::Steam {
+                            app_id: 2399420,
+                            selector: None,
+                        },
+                        ..LaunchRecipe::default()
+                    },
+                },
+                supporting_applications: vec![NewSupportingApplication {
+                    application: NewProfileApplication {
+                        name: "LMUFFB".to_owned(),
+                        launch_recipe: LaunchRecipe {
+                            source: LaunchSource::DirectExecutable {
+                                executable_path: supporting_executable,
+                            },
+                            arguments: vec!["--profile=LMU".to_owned()],
+                            ..LaunchRecipe::default()
+                        },
+                    },
+                    requirement: ApplicationRequirement::Required,
+                    keep_running: true,
+                }],
+                vr_enabled: true,
+                preferred_vr_launch_mode: None,
+                close_session: CloseSessionSettings {
+                    stop_steam_vr: true,
+                },
+            },
+        })
+        .expect("complete Racing Profile should be created");
+
+    let created = snapshot
+        .selected_profile
+        .expect("new Racing Profile should be selected");
+    assert_eq!(created.name, "Configured profile");
+    assert_eq!(
+        created.primary_sim.launch_recipe.source,
+        LaunchSource::Steam {
+            app_id: 2399420,
+            selector: None,
+        }
+    );
+    assert_eq!(created.supporting_applications.len(), 1);
+    assert_eq!(
+        created.supporting_applications[0].application.name,
+        "LMUFFB"
+    );
+    assert!(
+        !created.supporting_applications[0]
+            .application
+            .path_needs_repair
+    );
+
+    commands
+        .select_profile(ProfileIdPayload {
+            profile_id: profile_a.id.clone(),
+        })
+        .expect("prior Racing Profile should remain selectable");
+    assert_eq!(
+        commands
+            .get_app_snapshot()
+            .expect("authoritative snapshot should load")
+            .selected_profile,
+        Some(profile_a)
+    );
+}
+
+#[test]
+fn create_profile_command_rolls_back_when_selection_cannot_be_persisted() {
+    let storage = TempStorage::new();
+    let commands =
+        NativeCommandHost::open(storage.path()).expect("native command host should open");
+    let prior_snapshot = commands
+        .create_profile(CreateProfilePayload {
+            profile: NewRacingProfile::from_names(
+                "Existing profile".to_owned(),
+                "Existing sim".to_owned(),
+            ),
+        })
+        .expect("existing Racing Profile should be created");
+    let prior_profile = prior_snapshot
+        .selected_profile
+        .expect("existing profile should be selected");
+    let settings_temporary = storage.path().join("settings.json.tmp");
+    fs::create_dir(&settings_temporary).expect("settings temporary collision should be created");
+
+    commands
+        .create_profile(CreateProfilePayload {
+            profile: NewRacingProfile::from_names(
+                "Must roll back".to_owned(),
+                "Another sim".to_owned(),
+            ),
+        })
+        .expect_err("selection persistence failure must fail profile creation");
+
+    let snapshot = commands
+        .get_app_snapshot()
+        .expect("authoritative snapshot should remain available");
+    assert_eq!(snapshot.profiles.len(), 1);
+    assert_eq!(snapshot.selected_profile, Some(prior_profile.clone()));
+    assert_eq!(
+        fs::read_dir(storage.path().join("profiles"))
+            .expect("profiles directory should remain readable")
+            .count(),
+        1,
+        "the just-created live profile must be removed"
+    );
+
+    fs::remove_dir(&settings_temporary).expect("settings temporary collision should be removable");
+    drop(commands);
+    let reopened =
+        NativeCommandHost::open(storage.path()).expect("native command host should reopen");
+    assert_eq!(
+        reopened
+            .get_app_snapshot()
+            .expect("reopened snapshot should load")
+            .selected_profile,
+        Some(prior_profile)
+    );
+}
+
+#[test]
 fn save_profile_command_returns_the_updated_authoritative_snapshot() {
     let storage = TempStorage::new();
     let commands =
         NativeCommandHost::open(storage.path()).expect("native command host should open");
     let mut profile = commands
         .create_profile(CreateProfilePayload {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("valid command payload should create a Racing Profile")
         .selected_profile
@@ -140,14 +294,18 @@ fn select_profile_command_changes_the_authoritative_snapshot() {
         NativeCommandHost::open(storage.path()).expect("native command host should open");
     commands
         .create_profile(CreateProfilePayload {
-            name: "Assetto Corsa".to_owned(),
-            primary_sim_name: "Assetto Corsa".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Assetto Corsa".to_owned(),
+                "Assetto Corsa".to_owned(),
+            ),
         })
         .expect("the first Racing Profile should be created");
     let second_profile_id = commands
         .create_profile(CreateProfilePayload {
-            name: "Le Mans Ultimate".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Le Mans Ultimate".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("the second Racing Profile should be created")
         .profiles
@@ -178,8 +336,10 @@ fn duplicate_profile_command_returns_both_racing_profiles() {
         NativeCommandHost::open(storage.path()).expect("native command host should open");
     let source_profile_id = commands
         .create_profile(CreateProfilePayload {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("source Racing Profile should be created")
         .profiles[0]
@@ -210,8 +370,10 @@ fn delete_profile_command_returns_the_remaining_authoritative_snapshot() {
         NativeCommandHost::open(storage.path()).expect("native command host should open");
     let profile_id = commands
         .create_profile(CreateProfilePayload {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("Racing Profile should be created")
         .profiles[0]
@@ -233,8 +395,10 @@ fn export_and_import_commands_round_trip_a_portable_racing_profile() {
         NativeCommandHost::open(source_storage.path()).expect("source command host should open");
     let profile_id = source_commands
         .create_profile(CreateProfilePayload {
-            name: "Le Mans evening".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Le Mans evening".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("Racing Profile should be created")
         .profiles[0]
@@ -314,8 +478,10 @@ fn first_local_open_atomically_copies_and_validates_the_roaming_store() {
         NativeCommandHost::open(&roaming).expect("roaming command host should open");
     roaming_commands
         .create_profile(CreateProfilePayload {
-            name: "Migrated endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Migrated endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            ),
         })
         .expect("roaming profile should be created");
     drop(roaming_commands);
@@ -385,16 +551,17 @@ fn populated_local_and_roaming_stores_are_never_merged() {
         NativeCommandHost::open(&roaming).expect("roaming command host should open");
     roaming_commands
         .create_profile(CreateProfilePayload {
-            name: "Roaming profile".to_owned(),
-            primary_sim_name: "Assetto Corsa Competizione".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Roaming profile".to_owned(),
+                "Assetto Corsa Competizione".to_owned(),
+            ),
         })
         .expect("roaming profile should be created");
     drop(roaming_commands);
     let local_commands = NativeCommandHost::open(&local).expect("local command host should open");
     local_commands
         .create_profile(CreateProfilePayload {
-            name: "Local profile".to_owned(),
-            primary_sim_name: "iRacing".to_owned(),
+            profile: NewRacingProfile::from_names("Local profile".to_owned(), "iRacing".to_owned()),
         })
         .expect("local profile should be created");
     drop(local_commands);

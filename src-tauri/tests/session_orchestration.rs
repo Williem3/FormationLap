@@ -1,9 +1,9 @@
 use formation_lap_lib::{
     AppCommand, ApplicationRequirement, CommandOutcome, ConsoleVisibility, CoreError,
     CreateProfilePayload, FormationLapCore, GracefulStopResult, LaunchRecipe, LaunchSource,
-    NativeCommandHost, ProcessIdentity, ProcessObservation, ProcessOutput, ProcessOwnership,
-    ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileApplication, ProfileIdPayload,
-    SaveProfilePayload, SessionApplicationRole, SessionApplicationSnapshot,
+    NativeCommandHost, NewRacingProfile, ProcessIdentity, ProcessObservation, ProcessOutput,
+    ProcessOwnership, ProcessRuntime, ProcessRuntimeError, ProcessStatus, ProfileApplication,
+    ProfileIdPayload, SaveProfilePayload, SessionApplicationRole, SessionApplicationSnapshot,
     SessionApplicationState, SessionEvent, SessionEventKind, SessionState, SessionSummary,
     ShutdownStrategy, SupportingApplication,
 };
@@ -182,8 +182,10 @@ fn start_session_enters_starting_and_launches_only_the_first_supporting_applicat
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Endurance".to_owned(),
-            primary_sim_name: "Le Mans Ultimate".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Endurance".to_owned(),
+                "Le Mans Ultimate".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -303,8 +305,10 @@ fn refresh_advances_the_saved_sequence_and_confirms_the_primary_sim_last() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Sprint".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Sprint".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -427,8 +431,10 @@ fn refresh_ignores_a_stale_stopped_process_for_a_newly_pending_session_step() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Stale stopped process".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Stale stopped process".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -514,8 +520,10 @@ fn required_launch_failure_blocks_the_primary_sim_and_returns_to_idle() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Required failure".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Required failure".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -606,8 +614,10 @@ fn optional_launch_failure_is_recorded_and_the_primary_sim_still_starts() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Optional failure".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Optional failure".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -707,8 +717,10 @@ fn cancel_startup_stops_only_attempt_owned_processes_and_never_launches_the_prim
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Cancelled startup".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Cancelled startup".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -856,8 +868,10 @@ fn close_session_stops_primary_then_owned_supports_in_reverse_and_detaches_prese
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Orderly close".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Orderly close".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1064,8 +1078,10 @@ fn steam_vr_close_trace(stop_steam_vr: bool, steam_vr_pre_existing: bool) -> Vec
         .expect("empty Session storage should open");
     let CommandOutcome::ProfileCreated { profile_id } = core
         .execute(AppCommand::CreateProfile {
-            name: "SteamVR ownership".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "SteamVR ownership".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     else {
@@ -1156,8 +1172,10 @@ fn unexpected_primary_sim_exit_begins_cleanup_exactly_once() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Unexpected exit".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Unexpected exit".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1236,8 +1254,10 @@ fn post_start_delay_holds_the_sequence_until_the_entry_is_ready() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Post-start delay".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Post-start delay".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1331,8 +1351,10 @@ fn optional_startup_timeout_is_recorded_and_the_sequence_continues() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Optional timeout".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Optional timeout".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1413,8 +1435,10 @@ fn a_starting_session_rejects_a_competing_start_and_locks_its_profile() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Locked profile".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Locked profile".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1516,8 +1540,10 @@ fn active_session_events_stay_quiet_until_the_post_session_summary() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Quiet race".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Quiet race".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1616,8 +1642,10 @@ fn a_verified_journal_offers_recovery_without_resuming_until_accepted() {
             .expect("empty Session storage should open");
         profile_id = match core
             .execute(AppCommand::CreateProfile {
-                name: "Recoverable".to_owned(),
-                primary_sim_name: "Primary Sim".to_owned(),
+                profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                    "Recoverable".to_owned(),
+                    "Primary Sim".to_owned(),
+                )),
             })
             .expect("fixture profile should be created")
         {
@@ -1722,8 +1750,10 @@ fn a_late_required_failure_cleans_the_processes_started_by_that_attempt() {
         .expect("empty Session storage should open");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Late failure".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Late failure".to_owned(),
+                "Primary Sim".to_owned(),
+            )),
         })
         .expect("fixture profile should be created")
     {
@@ -1804,8 +1834,10 @@ fn the_native_command_loop_serializes_competing_start_requests() {
         .expect("native command host should open");
     let snapshot = commands
         .create_profile(CreateProfilePayload {
-            name: "Serialized".to_owned(),
-            primary_sim_name: "Primary Sim".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Serialized".to_owned(),
+                "Primary Sim".to_owned(),
+            ),
         })
         .expect("fixture profile should be created");
     let mut profile = snapshot

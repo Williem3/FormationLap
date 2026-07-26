@@ -13,6 +13,12 @@ export type ShutdownStrategy = { "kind": "closeWindows" } | { "kind": "consoleIn
 
 export type LaunchRecipe = { source: LaunchSource, arguments: Array<string>, workingDirectory: string | null, monitoredProcess: string | null, monitoredExecutablePath?: string | null, consoleVisibility: ConsoleVisibility, elevated: boolean, startupTimeoutSeconds: number, postStartDelayMilliseconds: number, shutdownStrategy: ShutdownStrategy, };
 
+export type NewProfileApplication = { name: string, launchRecipe: LaunchRecipe, };
+
+export type NewSupportingApplication = { application: NewProfileApplication, requirement: ApplicationRequirement, keepRunning: boolean, };
+
+export type NewRacingProfile = { name: string, primarySim: NewProfileApplication, supportingApplications: Array<NewSupportingApplication>, vrEnabled: boolean, preferredVrLaunchMode: VrLaunchMode | null, closeSession: CloseSessionSettings, };
+
 export type GameLaunchTarget = { "kind": "steam", uri: string, } | { "kind": "directExecutable", executableName: string, };
 
 export type GameLaunchDiagnostic = { schemaVersion: number, profileName: string, vrEnabled: boolean, vrLaunchMode: VrLaunchMode | null, target: GameLaunchTarget, arguments: Array<string>, monitoredProcess: string | null, observedProcess: string, };
@@ -101,7 +107,7 @@ export type SupportingApplicationRecommendation = { id: string, name: string, ra
 
 export type CommandError = { code: string, message: string, recovery: string | null, diagnosticId: string | null, };
 
-export type CreateProfilePayload = { name: string, primarySimName: string, };
+export type CreateProfilePayload = { profile: NewRacingProfile, };
 
 export type SaveProfilePayload = { profile: RacingProfile, };
 

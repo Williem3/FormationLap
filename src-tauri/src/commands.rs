@@ -1,10 +1,10 @@
 use crate::{
     AppCommand, AppSnapshot, CommandOutcome, CoreError, DesktopSettings, DiagnosticExport,
     DirectUpdateProviderRuntime, DiscoverySnapshot, FormationLapCore, FormationLapInstallDecision,
-    FormationLapUpdater, GameLaunchDiagnostic, QuitAction, QuitDisposition, RacingProfile,
-    SupportingApplicationRecommendation, TargetedDiscoverySources, UpdateCheckDecision,
-    UpdateCheckResult, UpdateCheckTrigger, UpdateProviderRunner, UpdateStatus, WindowCloseAction,
-    update_coordinator::UpdateCoordinator,
+    FormationLapUpdater, GameLaunchDiagnostic, NewRacingProfile, QuitAction, QuitDisposition,
+    RacingProfile, SupportingApplicationRecommendation, TargetedDiscoverySources,
+    UpdateCheckDecision, UpdateCheckResult, UpdateCheckTrigger, UpdateProviderRunner, UpdateStatus,
+    WindowCloseAction, update_coordinator::UpdateCoordinator,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::mpsc, thread};
@@ -15,8 +15,7 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct CreateProfilePayload {
-    pub name: String,
-    pub primary_sim_name: String,
+    pub profile: NewRacingProfile,
 }
 
 /// Complete editable Racing Profile accepted by the save command.
@@ -337,8 +336,7 @@ impl NativeCommandHost {
         payload: CreateProfilePayload,
     ) -> Result<AppSnapshot, CommandError> {
         self.execute_command(AppCommand::CreateProfile {
-            name: payload.name,
-            primary_sim_name: payload.primary_sim_name,
+            profile: Box::new(payload.profile),
         })
         .map(|(_, snapshot)| snapshot)
     }

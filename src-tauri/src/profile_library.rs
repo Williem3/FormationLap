@@ -1,6 +1,7 @@
 use crate::{
-    CloseSessionSettings, CoreError, LaunchRecipe, ProfileApplication, ProfileReviewStatus,
-    ProfileSummary, RacingProfile, ShutdownStrategy, atomic_file::replace_with_backup,
+    CloseSessionSettings, CoreError, LaunchRecipe, NewRacingProfile, ProfileApplication,
+    ProfileReviewStatus, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
+    atomic_file::replace_with_backup,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -577,28 +578,47 @@ impl ProfileLibrary {
             })
     }
 
-    pub(crate) fn create(
+    pub(crate) fn create_complete(
         &mut self,
-        name: String,
-        primary_sim_name: String,
+        profile: NewRacingProfile,
     ) -> Result<String, CoreError> {
-        validate_profile_names(&name, &primary_sim_name)?;
+        validate_profile_names(&profile.name, &profile.primary_sim.name)?;
+        for supporting_application in &profile.supporting_applications {
+            if supporting_application.application.name.trim().is_empty() {
+                return Err(CoreError::InvalidProfileName("Supporting Application name"));
+            }
+        }
 
         let id = Uuid::new_v4().to_string();
         let profile = RacingProfileDocument {
             schema_version: PROFILE_SCHEMA_VERSION,
             id: id.clone(),
-            name,
+            name: profile.name,
             primary_sim: ProfileApplication {
                 id: Uuid::new_v4().to_string(),
-                name: primary_sim_name,
-                launch_recipe: LaunchRecipe::default(),
-                path_needs_repair: true,
+                name: profile.primary_sim.name,
+                path_needs_repair: Self::path_needs_repair(&profile.primary_sim.launch_recipe),
+                launch_recipe: profile.primary_sim.launch_recipe,
             },
-            supporting_applications: Vec::new(),
-            vr_enabled: false,
-            preferred_vr_launch_mode: None,
-            close_session: CloseSessionSettings::default(),
+            supporting_applications: profile
+                .supporting_applications
+                .into_iter()
+                .map(|supporting| SupportingApplication {
+                    application: ProfileApplication {
+                        id: Uuid::new_v4().to_string(),
+                        name: supporting.application.name,
+                        path_needs_repair: Self::path_needs_repair(
+                            &supporting.application.launch_recipe,
+                        ),
+                        launch_recipe: supporting.application.launch_recipe,
+                    },
+                    requirement: supporting.requirement,
+                    keep_running: supporting.keep_running,
+                })
+                .collect(),
+            vr_enabled: profile.vr_enabled,
+            preferred_vr_launch_mode: profile.preferred_vr_launch_mode,
+            close_session: profile.close_session,
             review_status: ProfileReviewStatus::Approved,
         };
         let destination = self.profiles_directory.join(format!("{id}.json"));
@@ -613,6 +633,14 @@ impl ProfileLibrary {
         self.sort_profiles();
 
         Ok(id)
+    }
+
+    pub(crate) fn discard_created(&mut self, profile_id: &str) -> Result<(), CoreError> {
+        let profile_index = self.profile_index(profile_id)?;
+        let destination = self.profiles[profile_index].source_path.clone();
+        fs::remove_file(destination)?;
+        self.profiles.remove(profile_index);
+        Ok(())
     }
 
     pub(crate) fn edit(

@@ -1,10 +1,17 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 export interface ModalDialogProps {
   children: ReactNode;
   className?: string;
   labelledBy: string;
   onClose(): void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 export function ModalDialog({
@@ -12,14 +19,21 @@ export function ModalDialog({
   className,
   labelledBy,
   onClose,
+  returnFocusRef,
 }: ModalDialogProps) {
   const dialog = useRef<HTMLDialogElement | null>(null);
+  const [trigger] = useState<HTMLElement | null>(() =>
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
 
   useEffect(() => {
     const element = dialog.current;
     if (!element) {
       return;
     }
+    const returnFocus = returnFocusRef?.current ?? trigger;
 
     try {
       element.showModal();
@@ -31,8 +45,9 @@ export function ModalDialog({
       if (element.open && typeof element.close === "function") {
         element.close();
       }
+      returnFocus?.focus();
     };
-  }, []);
+  }, [returnFocusRef, trigger]);
 
   return (
     <dialog

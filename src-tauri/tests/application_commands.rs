@@ -1,8 +1,8 @@
 use formation_lap_lib::{
     ApplicationTargetPayload, ConsoleVisibility, CreateProfilePayload, GracefulStopResult,
-    LaunchRecipe, LaunchSource, NativeCommandHost, ProcessIdentity, ProcessObservation,
-    ProcessOutput, ProcessOwnership, ProcessResponsiveness, ProcessRuntime, ProcessRuntimeError,
-    ProcessStatus, SaveProfilePayload, ShutdownStrategy,
+    LaunchRecipe, LaunchSource, NativeCommandHost, NewRacingProfile, ProcessIdentity,
+    ProcessObservation, ProcessOutput, ProcessOwnership, ProcessResponsiveness, ProcessRuntime,
+    ProcessRuntimeError, ProcessStatus, SaveProfilePayload, ShutdownStrategy,
 };
 use std::{
     fs,
@@ -118,8 +118,10 @@ fn start_application_command_returns_authoritative_native_process_state() {
     .expect("native command host should open");
     let mut profile = commands
         .create_profile(CreateProfilePayload {
-            name: "Command fixture".to_owned(),
-            primary_sim_name: "Healthy fixture".to_owned(),
+            profile: NewRacingProfile::from_names(
+                "Command fixture".to_owned(),
+                "Healthy fixture".to_owned(),
+            ),
         })
         .expect("fixture profile should be created")
         .selected_profile

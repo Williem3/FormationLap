@@ -528,8 +528,10 @@ fn elevated_ownership_is_journaled_before_the_helper_is_acknowledged() {
     .expect("the core should open with the journal-inspecting broker");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Journaled Elevation".to_owned(),
-            primary_sim_name: "Primary".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Journaled Elevation".to_owned(),
+                "Primary".to_owned(),
+            )),
         })
         .expect("the profile should be created")
     {
@@ -599,8 +601,10 @@ fn startup_preserves_saved_order_and_batches_only_adjacent_elevated_entries() {
             .expect("the core should open with the approved test adapters");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Elevated Rig".to_owned(),
-            primary_sim_name: "Primary".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Elevated Rig".to_owned(),
+                "Primary".to_owned(),
+            )),
         })
         .expect("the profile should be created")
     {
@@ -716,8 +720,10 @@ fn cancelling_startup_closes_every_process_from_the_elevated_launch_batch() {
     .expect("the core should open with the approved test adapters");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Elevated Cancel".to_owned(),
-            primary_sim_name: "Primary".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Elevated Cancel".to_owned(),
+                "Primary".to_owned(),
+            )),
         })
         .expect("the profile should be created")
     {
@@ -820,8 +826,10 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
     .expect("the core should open with the approved test adapters");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Elevated close".to_owned(),
-            primary_sim_name: "Primary".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Elevated close".to_owned(),
+                "Primary".to_owned(),
+            )),
         })
         .expect("the profile should be created")
     {
@@ -1257,8 +1265,10 @@ fn elevated_manual_restart_routes_close_and_relaunch_through_the_broker() {
     .expect("the core should open with the approved test adapters");
     let profile_id = match core
         .execute(AppCommand::CreateProfile {
-            name: "Elevated Restart".to_owned(),
-            primary_sim_name: "Primary".to_owned(),
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Elevated Restart".to_owned(),
+                "Primary".to_owned(),
+            )),
         })
         .expect("the profile should be created")
     {

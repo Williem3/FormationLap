@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light dark;
+  --ui-font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-family: var(--ui-font);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --canvas: #f4f5f7;
+  --panel: #e8ebef;
+  --ink: #15171b;
+  --muted: #68717d;
+  --accent: #3478f6;
+  --accent-strong: #2467da;
+  --accent-ink: #2467da;
+  --accent-action: #2467da;
+  --warm: #e89b3c;
+  --warm-ink: #9a5a0c;
+  --running: #1ca34a;
+  --running-ink: #137a37;
+  --danger: #d94747;
+  --danger-ink: #b52d2d;
+  --danger-action: #b52d2d;
+  --action-ink: #ffffff;
+  --surface: #ffffff;
+  --border: #d5dae1;
+  --focus-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
+}

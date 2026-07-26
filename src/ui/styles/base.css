@@ -1,0 +1,30 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-shadow);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}

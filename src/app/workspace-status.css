@@ -1,0 +1,47 @@
+.workspace-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1280px;
+  width: calc(100% - var(--workspace-gutter) - var(--workspace-gutter));
+  margin: auto auto 0;
+  padding: 20px 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.status-message > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--running-ink);
+}
+
+.status-message strong,
+.status-message small {
+  display: block;
+}
+
+.status-message strong {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.status-message small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.utility-data {
+  color: var(--muted);
+  font-family: var(--ui-font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}

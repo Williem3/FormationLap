@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import markUrl from "../assets/formation-lap-mark.svg";
 import type {
   ApplicationProcessSnapshot,

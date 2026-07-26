@@ -3,10 +3,21 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
-const css = readFileSync(
-  resolve(import.meta.dirname, "..", "..", "src", "app", "app.css"),
-  "utf8",
-);
+const root = resolve(import.meta.dirname, "..", "..");
+const css = [
+  ["src", "ui", "styles", "tokens.css"],
+  ["src", "ui", "styles", "base.css"],
+  ["src", "app", "app-shell.css"],
+  ["src", "features", "profiles", "profile-wizard.css"],
+  ["src", "features", "dashboard", "dashboard.css"],
+  ["src", "ui", "styles", "dialog.css"],
+  ["src", "features", "profiles", "profile-editor.css"],
+  ["src", "app", "workspace-status.css"],
+  ["src", "features", "settings", "settings.css"],
+  ["src", "app", "responsive.css"],
+]
+  .map((segments) => readFileSync(resolve(root, ...segments), "utf8"))
+  .join("\n");
 
 function luminance(hex) {
   const channels = [1, 3, 5]

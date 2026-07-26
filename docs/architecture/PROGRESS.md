@@ -36,16 +36,21 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- A frontend maintainability slice is in progress. It preserves visible
-  behavior while moving the React shell into feature-owned Dashboard, Profiles,
-  Settings, and Diagnostics modules; splitting tests and ordered global styles;
-  and replacing the two-command profile-creation workflow with one complete
-  native intent.
-- The active file scope is `src/app/`, new `src/features/` modules, shared
-  `src/ui/` and `src/test/` support, the generated/native bridge contracts,
-  FormationLapCore/ProfileLibrary profile creation, the accessibility contract,
-  and this progress ledger. No release, publishing, or unrelated native
-  lifecycle work is in scope.
+- The frontend maintainability slice is complete in commits `2445fb1`,
+  `0d2414a`, `1bb1073`, and `e758d3b`. `App.tsx` is reduced from 4,453 to
+  590 lines and retains authoritative snapshot/navigation/theme/polling/quit
+  concerns; Dashboard, Profiles, Settings, and Diagnostics own their commands,
+  transient state, dialogs, styles, and behavior suites under `src/features/`.
+  Shared snapshot builders, dialog focus restoration, and ordered token/base
+  styles live under `src/test/` and `src/ui/`.
+- Profile creation now accepts one complete Rust-authoritative
+  `NewRacingProfile` intent. ProfileLibrary generates every profile/application
+  identity, derives repair state, persists one live document, and compensates a
+  failed selection write by removing that document while preserving the prior
+  selection. React and the in-memory adapter no longer perform create-then-save
+  or generate Supporting Application UUIDs. There is no active implementation
+  file scope for this slice; no release, publishing, or unrelated native
+  lifecycle action was performed.
 - The approved program preserves elevated applications, saved Startup Sequence
   order, existing profiles, manual online update checks, and the existing
   FormationLapCore and ProcessRuntime public interfaces.
@@ -326,3 +331,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Pushed the reviewed preview candidate through `acff8ee`, created immutable tag `v0.9.0-preview.1`, and dispatched [preview run 30183059822](https://github.com/Williem3/FormationLap/actions/runs/30183059822) from that tag | `pnpm.cmd verify` passed (45 UI tests, 3 accessibility, 27 release tests); Rust formatting and all-target/all-feature Clippy passed; a running local executable blocked the normal Rust target and an isolated full build hit a Windows PDB limit, so GitHub Actions is the clean full-gate authority | Approve the protected `preview` environment and wait for the workflow to publish the unsigned prerelease; then verify assets, checksum, updater signature, SBOM, licenses, and provenance |
 | 2026-07-25 | Codex `/root` | M10 | Restored the locally retained Le Mans Ultimate profile backup after profile creation saved setup into the prior selected profile; creation now persists the new profile as selected and the in-memory NativeBridge mirrors that contract | Red/green native command regression; `pnpm.cmd format`, lint, typecheck, bridge tests (46), Rust format, profile-command tests (11), and `git diff --check` passed | The existing `v0.9.0-preview.1` tag does not include this data-loss fix. Choose and explicitly authorize a new preview version before publishing an installer |
 | 2026-07-25 | Codex `/root` | M10 | Retracted the published `v0.9.0-preview.1` prerelease and its installer assets after confirming it predates the profile-creation data-loss fix; retained the tag for provenance | GitHub release inventory confirms no published release while `v0.9.0-preview.1` remains at `acff8ee` | Push the local fix only; do not create or dispatch another preview without a separately authorized version |
+| 2026-07-25 | Codex `/root` | M10 | Completed the frontend maintainability slice: feature-owned Dashboard/Profiles/Settings/Diagnostics state and commands, six focused React suites, ordered feature styles, shared snapshot fixtures, dialog focus restoration, and one atomic complete-profile creation intent with native rollback | Commits `2445fb1`, `0d2414a`, `1bb1073`, and `e758d3b`; frozen install, `pnpm.cmd verify` (47 React, 3 accessibility, 27 release tests), production build, Rust fmt, serial all-target/all-feature Clippy and tests, generated bindings/catalog/capability checks, debug Tauri no-bundle build, and `git diff --check` passed | No blocker in this slice. The tool-created untracked `target-codex-discovery/` cache remains deliberately excluded; external signed Beta authorization and Windows qualification remain the next M10 action |

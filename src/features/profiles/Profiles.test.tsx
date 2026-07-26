@@ -864,6 +864,55 @@ describe("Racing Profile behavior", () => {
       "SimHub draft",
     );
   });
+  it("reorders Supporting Applications from the six-dot drag handle", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: createProfileApplication({
+          id: "simhub-drag",
+          name: "SimHub",
+        }),
+        requirement: "required",
+        keepRunning: false,
+      },
+      {
+        application: createProfileApplication({
+          id: "crew-chief-drag",
+          name: "Crew Chief",
+        }),
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    const sourceHandle = screen.getByRole("button", {
+      name: /Reorder SimHub/,
+    });
+    sourceHandle.focus();
+    await user.keyboard("{ArrowDown}");
+
+    expect(
+      Array.from(document.querySelectorAll(".supporting-editor-row strong"))
+        .map((element) => element.textContent)
+        .slice(0, 2),
+    ).toEqual(["Crew Chief", "SimHub"]);
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(
+      (
+        await bridge.getAppSnapshot()
+      ).selectedProfile?.supportingApplications.map(
+        (supporting) => supporting.application.name,
+      ),
+    ).toEqual(["Crew Chief", "SimHub"]);
+  });
+
   it("shows profile save failures beside the editor save action", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());

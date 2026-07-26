@@ -43,6 +43,12 @@ export function ProfileEditor({
     useState<string | null>(
       profile.supportingApplications[0]?.application.id ?? null,
     );
+  const [draggedSupportingApplicationId, setDraggedSupportingApplicationId] =
+    useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    applicationId: string;
+    position: "before" | "after";
+  } | null>(null);
   const [
     approvedPrivilegedApplicationIds,
     setApprovedPrivilegedApplicationIds,
@@ -145,6 +151,47 @@ export function ProfileEditor({
         next.supportingApplications.splice(destination, 0, application);
       }
     });
+  };
+
+  const reorderSupportingApplications = (
+    sourceApplicationId: string,
+    destinationApplicationId: string,
+    position: "before" | "after",
+  ) => {
+    if (sourceApplicationId === destinationApplicationId) {
+      return;
+    }
+    update((next) => {
+      const sourceIndex = next.supportingApplications.findIndex(
+        (supporting) => supporting.application.id === sourceApplicationId,
+      );
+      const destinationIndex = next.supportingApplications.findIndex(
+        (supporting) => supporting.application.id === destinationApplicationId,
+      );
+      if (sourceIndex < 0 || destinationIndex < 0) {
+        return;
+      }
+      const [application] = next.supportingApplications.splice(sourceIndex, 1);
+      if (!application) {
+        return;
+      }
+      const destinationAfterRemoval = next.supportingApplications.findIndex(
+        (supporting) => supporting.application.id === destinationApplicationId,
+      );
+      next.supportingApplications.splice(
+        destinationAfterRemoval + (position === "after" ? 1 : 0),
+        0,
+        application,
+      );
+    });
+  };
+
+  const dropPositionFor = (
+    element: HTMLElement,
+    clientY: number,
+  ): "before" | "after" => {
+    const bounds = element.getBoundingClientRect();
+    return clientY > bounds.top + bounds.height / 2 ? "after" : "before";
   };
 
   return (
@@ -420,10 +467,93 @@ export function ProfileEditor({
                   openSupportingApplicationId;
                 return (
                   <article
-                    className={`supporting-editor-row${isOpen ? " is-open" : ""}`}
+                    className={`supporting-editor-row${isOpen ? " is-open" : ""}${
+                      dropTarget?.applicationId ===
+                      supportingApplication.application.id
+                        ? ` is-drop-target-${dropTarget.position}`
+                        : ""
+                    }`}
                     key={supportingApplication.application.id}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!draggedSupportingApplicationId) {
+                        return;
+                      }
+                      setDropTarget({
+                        applicationId: supportingApplication.application.id,
+                        position: dropPositionFor(
+                          event.currentTarget,
+                          event.clientY,
+                        ),
+                      });
+                    }}
+                    onDragLeave={(event) => {
+                      if (
+                        !(event.relatedTarget instanceof Node) ||
+                        !event.currentTarget.contains(event.relatedTarget)
+                      ) {
+                        setDropTarget(null);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const sourceApplicationId =
+                        draggedSupportingApplicationId ??
+                        event.dataTransfer.getData("text/plain");
+                      if (sourceApplicationId) {
+                        reorderSupportingApplications(
+                          sourceApplicationId,
+                          supportingApplication.application.id,
+                          dropPositionFor(event.currentTarget, event.clientY),
+                        );
+                      }
+                      setDraggedSupportingApplicationId(null);
+                      setDropTarget(null);
+                    }}
                   >
                     <div className="supporting-row-heading">
+                      <button
+                        type="button"
+                        className="supporting-drag-handle"
+                        draggable
+                        aria-label={`Reorder ${supportingApplication.application.name}. Use Up and Down arrow keys to move it.`}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            supportingApplication.application.id,
+                          );
+                          setDraggedSupportingApplicationId(
+                            supportingApplication.application.id,
+                          );
+                        }}
+                        onDragEnd={() => {
+                          setDraggedSupportingApplicationId(null);
+                          setDropTarget(null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowUp" && index > 0) {
+                            event.preventDefault();
+                            moveSupportingApplication(index, -1);
+                          }
+                          if (
+                            event.key === "ArrowDown" &&
+                            index < profile.supportingApplications.length - 1
+                          ) {
+                            event.preventDefault();
+                            moveSupportingApplication(index, 1);
+                          }
+                        }}
+                      >
+                        <span aria-hidden="true" className="drag-dots">
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      </button>
                       <button
                         type="button"
                         className="supporting-editor-toggle"
@@ -458,10 +588,17 @@ export function ProfileEditor({
                           </small>
                         </span>
                         <span
-                          className="accordion-chevron"
+                          className="supporting-overflow-mark"
                           aria-hidden="true"
-                        />
+                        >
+                          …
+                        </span>
                       </button>
+                      <span className="requirement-chip">
+                        {supportingApplication.requirement === "required"
+                          ? "Required"
+                          : "Optional"}
+                      </span>
                       <div className="row-actions">
                         <button
                           type="button"

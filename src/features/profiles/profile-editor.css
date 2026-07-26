@@ -153,24 +153,73 @@
 
 .supporting-editor-list {
   display: grid;
-  gap: 12px;
   margin-top: 20px;
-}
-
-.supporting-editor-row {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--canvas);
 }
 
+.supporting-editor-row {
+  overflow: hidden;
+  position: relative;
+}
+
+.supporting-editor-row + .supporting-editor-row {
+  border-top: 1px solid var(--border);
+}
+
+.supporting-editor-row.is-drop-target-before {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.supporting-editor-row.is-drop-target-after {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
 .supporting-row-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   min-height: 58px;
   padding: 8px 10px;
+}
+
+.supporting-drag-handle {
+  display: grid;
+  width: 32px;
+  height: 36px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  place-items: center;
+}
+
+.supporting-drag-handle:active {
+  cursor: grabbing;
+}
+
+.supporting-drag-handle:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.drag-dots {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  gap: 3px;
+}
+
+.drag-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .supporting-editor-toggle {
@@ -214,19 +263,24 @@
   font-size: 11px;
 }
 
-.accordion-chevron {
-  width: 8px;
-  height: 8px;
-  margin-right: 4px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
+.supporting-overflow-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  margin-right: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
   color: var(--muted);
-  transform: rotate(45deg);
-  transition: transform 150ms ease;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  place-items: center;
 }
 
-.supporting-editor-row.is-open .accordion-chevron {
-  transform: rotate(225deg);
+.supporting-editor-toggle:hover .supporting-overflow-mark {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  color: var(--ink);
 }
 
 .supporting-editor-content {
@@ -264,9 +318,12 @@
 
 .row-actions {
   display: flex;
-  gap: 4px;
   align-items: center;
   min-height: 32px;
+}
+
+.row-actions .tertiary-button:nth-child(-n + 2) {
+  display: none;
 }
 
 .tertiary-button {
@@ -292,7 +349,28 @@
 }
 
 .danger-text {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: var(--border);
+  background: var(--surface);
+  color: transparent;
+  font-size: 0;
+  position: relative;
+}
+
+.danger-text::before {
   color: var(--danger-ink);
+  content: "×";
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.danger-text:hover {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--border));
 }
 
 .supporting-policy {

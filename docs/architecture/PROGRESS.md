@@ -145,10 +145,10 @@ M10 security hardening is in progress, owned by Codex `/root`.
   shutdown/runtime controls behind compact disclosures while keeping the source
   and structured argument rows visible. There is no active implementation file
   scope for this slice.
-- The disclosed `v0.9.0-preview.1` technical-preview workflow is dispatched
-  from tag `v0.9.0-preview.1` for commit `acff8ee` and is waiting on protected
-  `preview` environment approval. No new product behavior is part of the
-  package.
+- The published `v0.9.0-preview.1` technical preview was retracted after a
+  profile-creation data-loss defect was found. Its immutable tag remains for
+  provenance, but it has no GitHub release or installer assets and must not be
+  republished.
 - Profile-creation recovery and selection correctness are complete locally:
   a newly created Racing Profile is selected before its configuration can be
   saved. The `v0.9.0-preview.1` tag predates this safety fix and must not be
@@ -315,3 +315,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Corrected the catalog for current Go Fast and Apex Trace VR installer paths/names, so bounded discovery finds them and supplies locally extracted executable icons to the profile wizard | Red/green targeted native known-location test; catalog validation; React wizard local-icon rendering coverage; lint, typecheck, and focused UI tests passed | No blocker; rebuild/restart Formation Lap to run discovery again. The pre-existing tool-created `target-codex-discovery/` cache remains deliberately untracked |
 | 2026-07-25 | Codex `/root` | M10 | Pushed the reviewed preview candidate through `acff8ee`, created immutable tag `v0.9.0-preview.1`, and dispatched [preview run 30183059822](https://github.com/Williem3/FormationLap/actions/runs/30183059822) from that tag | `pnpm.cmd verify` passed (45 UI tests, 3 accessibility, 27 release tests); Rust formatting and all-target/all-feature Clippy passed; a running local executable blocked the normal Rust target and an isolated full build hit a Windows PDB limit, so GitHub Actions is the clean full-gate authority | Approve the protected `preview` environment and wait for the workflow to publish the unsigned prerelease; then verify assets, checksum, updater signature, SBOM, licenses, and provenance |
 | 2026-07-25 | Codex `/root` | M10 | Restored the locally retained Le Mans Ultimate profile backup after profile creation saved setup into the prior selected profile; creation now persists the new profile as selected and the in-memory NativeBridge mirrors that contract | Red/green native command regression; `pnpm.cmd format`, lint, typecheck, bridge tests (46), Rust format, profile-command tests (11), and `git diff --check` passed | The existing `v0.9.0-preview.1` tag does not include this data-loss fix. Choose and explicitly authorize a new preview version before publishing an installer |
+| 2026-07-25 | Codex `/root` | M10 | Retracted the published `v0.9.0-preview.1` prerelease and its installer assets after confirming it predates the profile-creation data-loss fix; retained the tag for provenance | GitHub release inventory confirms no published release while `v0.9.0-preview.1` remains at `acff8ee` | Push the local fix only; do not create or dispatch another preview without a separately authorized version |

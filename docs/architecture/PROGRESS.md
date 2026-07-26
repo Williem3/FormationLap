@@ -36,6 +36,11 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- ApexTraceVR's PyInstaller-style handoff is now race-safe: ProcessRuntime can
+  discover and retain a same-executable companion even when its launcher exits
+  before the first refresh, while creation time, canonical path, and PID
+  replacement checks preserve stable Process identity. There is no active
+  implementation file scope for this slice.
 - The frontend maintainability slice is complete in commits `2445fb1`,
   `0d2414a`, `1bb1073`, and `e758d3b`. `App.tsx` is reduced from 4,453 to
   590 lines and retains authoritative snapshot/navigation/theme/polling/quit
@@ -332,3 +337,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Restored the locally retained Le Mans Ultimate profile backup after profile creation saved setup into the prior selected profile; creation now persists the new profile as selected and the in-memory NativeBridge mirrors that contract | Red/green native command regression; `pnpm.cmd format`, lint, typecheck, bridge tests (46), Rust format, profile-command tests (11), and `git diff --check` passed | The existing `v0.9.0-preview.1` tag does not include this data-loss fix. Choose and explicitly authorize a new preview version before publishing an installer |
 | 2026-07-25 | Codex `/root` | M10 | Retracted the published `v0.9.0-preview.1` prerelease and its installer assets after confirming it predates the profile-creation data-loss fix; retained the tag for provenance | GitHub release inventory confirms no published release while `v0.9.0-preview.1` remains at `acff8ee` | Push the local fix only; do not create or dispatch another preview without a separately authorized version |
 | 2026-07-25 | Codex `/root` | M10 | Completed the frontend maintainability slice: feature-owned Dashboard/Profiles/Settings/Diagnostics state and commands, six focused React suites, ordered feature styles, shared snapshot fixtures, dialog focus restoration, and one atomic complete-profile creation intent with native rollback | Commits `2445fb1`, `0d2414a`, `1bb1073`, and `e758d3b`; frozen install, `pnpm.cmd verify` (47 React, 3 accessibility, 27 release tests), production build, Rust fmt, serial all-target/all-feature Clippy and tests, generated bindings/catalog/capability checks, debug Tauri no-bundle build, and `git diff --check` passed | No blocker in this slice. The tool-created untracked `target-codex-discovery/` cache remains deliberately excluded; external signed Beta authorization and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Made PyInstaller-style startup handoffs race-safe so ApexTraceVR remains observable and closable when its same-executable companion outlives the launched parent | Red/green `observation_follows_a_same_executable_companion_after_its_launcher_exits`; all 13 Windows ProcessRuntime fixtures, optimized regression, Rust format, and targeted Clippy passed | Rebuild and reinstall Formation Lap before retesting the installed Session; the existing `v0.9.0-preview.1` installer does not contain this fix. External signed Beta and Windows qualification remain the next M10 action |

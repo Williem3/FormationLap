@@ -218,10 +218,8 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<ProcessObservation, ProcessRuntimeError> {
         #[cfg(windows)]
         {
+            self.discover_companions(identity)?;
             let primary_observation = windows_adapter::observe(identity)?;
-            if matches!(primary_observation, ProcessObservation::Running { .. }) {
-                self.discover_companions(identity)?;
-            }
             if let ProcessObservation::Replaced { current_identity } = primary_observation {
                 self.forget_companions(identity);
                 return Ok(ProcessObservation::Replaced { current_identity });
@@ -289,12 +287,7 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<GracefulStopResult, ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            if matches!(
-                windows_adapter::observe(identity)?,
-                ProcessObservation::Running { .. }
-            ) {
-                self.discover_companions(identity)?;
-            }
+            self.discover_companions(identity)?;
             let targets = if matches!(strategy, ShutdownStrategy::CloseWindows) {
                 self.tracked_identities(identity)
             } else {
@@ -330,12 +323,7 @@ impl ProcessRuntime for WindowsProcessRuntime {
     ) -> Result<bool, ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            if matches!(
-                windows_adapter::observe(identity)?,
-                ProcessObservation::Running { .. }
-            ) {
-                self.discover_companions(identity)?;
-            }
+            self.discover_companions(identity)?;
             let deadline = std::time::Instant::now() + timeout;
             for tracked in self.tracked_identities(identity) {
                 if !windows_adapter::wait_for_exit(
@@ -360,12 +348,7 @@ impl ProcessRuntime for WindowsProcessRuntime {
     fn force_stop(&mut self, identity: &ProcessIdentity) -> Result<(), ProcessRuntimeError> {
         #[cfg(windows)]
         {
-            if matches!(
-                windows_adapter::observe(identity)?,
-                ProcessObservation::Running { .. }
-            ) {
-                self.discover_companions(identity)?;
-            }
+            self.discover_companions(identity)?;
             for tracked in self.tracked_identities(identity) {
                 windows_adapter::force_stop(&tracked)?;
             }
@@ -903,6 +886,12 @@ mod windows_adapter {
     pub(super) fn same_executable_descendants(
         identity: &ProcessIdentity,
     ) -> Result<Vec<ProcessIdentity>, ProcessRuntimeError> {
+        if process_identity(identity.pid).is_ok_and(|current| current != *identity) {
+            return Ok(Vec::new());
+        }
+        let ancestor_creation_time = identity.creation_time.parse::<u64>().map_err(|_| {
+            ProcessRuntimeError::new("process creation time is not a Windows timestamp")
+        })?;
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(runtime_error(
@@ -934,6 +923,12 @@ mod windows_adapter {
                 let Ok(candidate) = process_identity(*pid) else {
                     continue;
                 };
+                let Ok(candidate_creation_time) = candidate.creation_time.parse::<u64>() else {
+                    continue;
+                };
+                if candidate_creation_time < ancestor_creation_time {
+                    continue;
+                }
                 if !candidate
                     .canonical_executable_path
                     .eq_ignore_ascii_case(&identity.canonical_executable_path)

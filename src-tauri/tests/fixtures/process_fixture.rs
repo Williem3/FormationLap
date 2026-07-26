@@ -131,6 +131,7 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
     let mut startup_delay = Duration::ZERO;
     let mut exit_code = 0_u8;
     let mut companion_report_path = None;
+    let mut companion_lifetime = None;
     while let Some(argument) = arguments.next() {
         if argument == "--window-state" {
             window_state = Some(arguments.next().ok_or("missing window state")?);
@@ -152,6 +153,13 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
             companion_report_path = Some(PathBuf::from(
                 arguments.next().ok_or("missing companion report path")?,
             ));
+        } else if argument == "--companion-lifetime-ms" {
+            companion_lifetime = Some(
+                arguments
+                    .next()
+                    .ok_or("missing companion lifetime")?
+                    .parse::<u64>()?,
+            );
         } else {
             received_arguments.push(argument);
         }
@@ -205,7 +213,7 @@ fn execute() -> Result<u8, Box<dyn std::error::Error>> {
                     "--report",
                     companion_report_path.to_string_lossy().as_ref(),
                     "--lifetime-ms",
-                    lifetime.to_string().as_str(),
+                    companion_lifetime.unwrap_or(lifetime).to_string().as_str(),
                     "--window-state",
                     "healthy",
                 ])

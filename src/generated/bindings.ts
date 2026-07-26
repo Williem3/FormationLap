@@ -85,9 +85,11 @@ export type CatalogPrimarySim = { id: string, name: string, steamAppId: number |
 
 export type CatalogSupportingApplication = { id: string, name: string, };
 
+export type SupportingApplicationProfileDefaults = { arguments: Array<string>, consoleVisibility: ConsoleVisibility, elevated: boolean, startupTimeoutSeconds: number, postStartDelayMilliseconds: number, shutdownStrategy: ShutdownStrategy, requirement: ApplicationRequirement, keepRunning: boolean, };
+
 export type DiscoveredPrimarySim = { id: string, name: string, installation: DiscoveredInstallation, icon: ApplicationIcon, };
 
-export type DiscoveredSupportingApplication = { id: string, name: string, installation: DiscoveredInstallation, icon: ApplicationIcon, };
+export type DiscoveredSupportingApplication = { id: string, name: string, installation: DiscoveredInstallation, profileDefaults: SupportingApplicationProfileDefaults, icon: ApplicationIcon, };
 
 export type DiscoverySnapshot = { primarySims: Array<CatalogPrimarySim>, supportingApplications: Array<CatalogSupportingApplication>, installedPrimarySims: Array<DiscoveredPrimarySim>, installedSupportingApplications: Array<DiscoveredSupportingApplication>, };
 

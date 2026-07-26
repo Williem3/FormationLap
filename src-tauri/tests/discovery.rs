@@ -1,8 +1,9 @@
 use formation_lap_lib::{
-    AppCommand, ApplicationIcon, CatalogUpdateProvider, CommandOutcome, CompatibilityRank,
-    DiscoveredInstallation, FormationLapCore, NativeCommandHost, PrimarySimIdPayload,
-    TargetedDiscoverySources, WindowsInstalledApplication, WindowsKnownLocation,
-    WindowsKnownLocationRoot, WindowsRunningProcess, validate_catalog_documents,
+    AppCommand, ApplicationIcon, ApplicationRequirement, CatalogUpdateProvider, CommandOutcome,
+    CompatibilityRank, DiscoveredInstallation, FormationLapCore, NativeCommandHost,
+    PrimarySimIdPayload, TargetedDiscoverySources, WindowsInstalledApplication,
+    WindowsKnownLocation, WindowsKnownLocationRoot, WindowsRunningProcess,
+    validate_catalog_documents,
 };
 use std::{
     fs,
@@ -107,6 +108,7 @@ fn bundled_catalog_returns_exactly_the_reviewed_supporting_applications() {
             ("racelab", "RaceLab"),
             ("ioverlay", "iOverlay"),
             ("go-fast", "Go Fast"),
+            ("apex-trace-vr", "Apex Trace VR"),
             ("steamvr", "SteamVR"),
             ("lmuffb", "LMUFFB"),
         ]
@@ -640,6 +642,61 @@ fn known_location_discovery_checks_only_signed_catalog_paths() {
                 .to_string_lossy()
                 .into_owned(),
         }
+    );
+}
+
+#[test]
+fn start_menu_target_discovery_matches_a_curated_application_on_another_drive() {
+    let storage = TempStorage::new();
+    let apex_trace_vr = storage
+        .path()
+        .join("Other drive")
+        .join("Apex Trace VR")
+        .join("ApexTraceVR.exe");
+    fs::create_dir_all(
+        apex_trace_vr
+            .parent()
+            .expect("fixture executable should have a parent"),
+    )
+    .expect("fixture directory should be created");
+    fs::write(&apex_trace_vr, b"fixture").expect("fixture executable should be written");
+
+    let mut core = FormationLapCore::open_with_discovery_sources(
+        storage.path(),
+        TargetedDiscoverySources {
+            start_menu_shortcut_targets: vec![apex_trace_vr.clone()],
+            ..TargetedDiscoverySources::default()
+        },
+    )
+    .expect("FormationLapCore should accept a resolved Start Menu target");
+    let discovery = match core
+        .execute(AppCommand::DiscoverApplications)
+        .expect("Start Menu target discovery should complete")
+    {
+        CommandOutcome::ApplicationsDiscovered { discovery } => discovery,
+        other => panic!("expected local discovery, got {other:?}"),
+    };
+
+    let application = discovery
+        .installed_supporting_applications
+        .iter()
+        .find(|application| application.id == "apex-trace-vr")
+        .expect("Apex Trace VR should be discovered from its shortcut target");
+    assert_eq!(application.name, "Apex Trace VR");
+    assert_eq!(
+        application.installation,
+        DiscoveredInstallation::DirectExecutable {
+            executable_path: apex_trace_vr
+                .canonicalize()
+                .expect("fixture executable should canonicalize")
+                .to_string_lossy()
+                .into_owned(),
+        }
+    );
+    assert_eq!(application.profile_defaults.arguments, Vec::<String>::new());
+    assert_eq!(
+        application.profile_defaults.requirement,
+        ApplicationRequirement::Optional
     );
 }
 

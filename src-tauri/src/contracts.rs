@@ -302,6 +302,38 @@ pub struct CatalogSupportingApplication {
     pub name: String,
 }
 
+/// Catalog-owned defaults used when a detected Supporting Application is added
+/// to a Racing Profile. The discovered executable supplies the direct source,
+/// working directory, and monitored identity.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct SupportingApplicationProfileDefaults {
+    pub arguments: Vec<String>,
+    pub console_visibility: ConsoleVisibility,
+    pub elevated: bool,
+    pub startup_timeout_seconds: u32,
+    pub post_start_delay_milliseconds: u32,
+    pub shutdown_strategy: ShutdownStrategy,
+    pub requirement: ApplicationRequirement,
+    pub keep_running: bool,
+}
+
+impl Default for SupportingApplicationProfileDefaults {
+    fn default() -> Self {
+        Self {
+            arguments: Vec::new(),
+            console_visibility: ConsoleVisibility::Hidden,
+            elevated: false,
+            startup_timeout_seconds: 30,
+            post_start_delay_milliseconds: 0,
+            shutdown_strategy: ShutdownStrategy::CloseWindows,
+            requirement: ApplicationRequirement::Optional,
+            keep_running: false,
+        }
+    }
+}
+
 /// A locally verified way to launch one discovered application.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -362,6 +394,8 @@ pub struct DiscoveredSupportingApplication {
     pub id: String,
     pub name: String,
     pub installation: DiscoveredInstallation,
+    #[serde(default)]
+    pub profile_defaults: SupportingApplicationProfileDefaults,
     #[serde(default)]
     pub icon: ApplicationIcon,
 }

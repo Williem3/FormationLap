@@ -12,11 +12,18 @@
         }
       ],
       "compatibility": [
-        {
-          "primarySimId": "le-mans-ultimate",
-          "rank": "compatible"
-        }
+        { "primarySimId": "le-mans-ultimate", "rank": "compatible" }
       ],
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      },
       "updateProvider": {
         "kind": "officialPage",
         "url": "https://www.simhubdash.com/download-2/"
@@ -24,11 +31,38 @@
     },
     {
       "id": "crew-chief",
-      "name": "Crew Chief"
+      "name": "Crew Chief",
+      "executableNames": ["CrewChiefV4.exe"],
+      "knownLocations": [
+        {
+          "root": "programFilesX86",
+          "executableRelativePath": "Britton IT Ltd/CrewChiefV4/CrewChiefV4.exe"
+        }
+      ],
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "trading-paints",
       "name": "Trading Paints",
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      },
       "updateProvider": {
         "kind": "winget",
         "packageId": "Rhinode.TradingPaints"
@@ -36,37 +70,129 @@
     },
     {
       "id": "garage-61",
-      "name": "Garage 61"
+      "name": "Garage 61",
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "racelab",
-      "name": "RaceLab"
+      "name": "RaceLab",
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "ioverlay",
-      "name": "iOverlay"
+      "name": "iOverlay",
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "go-fast",
-      "name": "Go Fast"
+      "name": "Go Fast",
+      "executableNames": ["GoFast.exe"],
+      "knownLocations": [
+        {
+          "root": "localAppData",
+          "executableRelativePath": "GoFast/GoFast.exe"
+        }
+      ],
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
+    },
+    {
+      "id": "apex-trace-vr",
+      "name": "Apex Trace VR",
+      "executableNames": ["ApexTraceVR.exe"],
+      "knownLocations": [
+        {
+          "root": "localAppData",
+          "executableRelativePath": "Apex Trace VR/ApexTraceVR.exe"
+        }
+      ],
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "steamvr",
-      "name": "SteamVR"
+      "name": "SteamVR",
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      }
     },
     {
       "id": "lmuffb",
       "name": "LMUFFB",
-      "compatibility": [
+      "executableNames": ["LMUFFB.exe"],
+      "knownLocations": [
         {
-          "primarySimId": "le-mans-ultimate",
-          "rank": "recommended"
+          "root": "programFiles",
+          "executableRelativePath": "LMUFFB/LMUFFB.exe"
         }
       ],
+      "compatibility": [
+        { "primarySimId": "le-mans-ultimate", "rank": "recommended" }
+      ],
+      "profileDefaults": {
+        "arguments": [],
+        "consoleVisibility": "hidden",
+        "elevated": false,
+        "startupTimeoutSeconds": 30,
+        "postStartDelayMilliseconds": 0,
+        "shutdownStrategy": { "kind": "closeWindows" },
+        "requirement": "optional",
+        "keepRunning": false
+      },
       "updateProvider": {
         "kind": "githubReleases",
         "repository": "coasting-nc/LMUFFB"
       }
     }
-      ]
+  ]
 }

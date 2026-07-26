@@ -75,6 +75,16 @@ const discovery: DiscoverySnapshot = {
         kind: "directExecutable",
         executablePath: "C:\\Racing\\Tools\\LMUFFB\\LMUFFB.exe",
       },
+      profileDefaults: {
+        arguments: [],
+        consoleVisibility: "hidden",
+        elevated: false,
+        startupTimeoutSeconds: 30,
+        postStartDelayMilliseconds: 0,
+        shutdownStrategy: { kind: "closeWindows" },
+        requirement: "optional",
+        keepRunning: false,
+      },
       icon: { kind: "generic" },
     },
     {
@@ -83,6 +93,16 @@ const discovery: DiscoverySnapshot = {
       installation: {
         kind: "directExecutable",
         executablePath: "C:\\Program Files (x86)\\SimHub\\SimHubWPF.exe",
+      },
+      profileDefaults: {
+        arguments: [],
+        consoleVisibility: "hidden",
+        elevated: false,
+        startupTimeoutSeconds: 30,
+        postStartDelayMilliseconds: 0,
+        shutdownStrategy: { kind: "closeWindows" },
+        requirement: "optional",
+        keepRunning: false,
       },
       icon: { kind: "generic" },
     },

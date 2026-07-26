@@ -132,6 +132,12 @@ M10 security hardening is in progress, owned by Codex `/root`.
   application contains a closed-by-default nested Launch Recipe disclosure;
   changes continue to accumulate in the shared profile draft for the existing
   page-level Save Changes action. There is no active implementation file scope.
+- The Curated Catalog now supplies profile defaults for recognized Supporting
+  Applications, while targeted native discovery resolves supported executable
+  targets from bounded current-user/shared Start Menu scans. The profile wizard
+  uses detected paths and catalog defaults without moving discovery policy into
+  React, and retains manual addition and editable launch-recipe controls. There
+  is no active implementation file scope.
 
 Known environment facts:
 
@@ -288,3 +294,4 @@ When blocked:
 | 2026-07-25 | Codex `/root` | M10 | Fixed Dashboard lifecycle-row geometry: centered Requirement pills and fixed Requirement, Status, and action tracks prevent long labels from offsetting a row | `pnpm.cmd format`, ESLint, TypeScript typecheck, `pnpm.cmd test -- src/app/App.test.tsx` (41 tests), production build, and `git diff --check` passed | Restart the dev renderer to load the UI change; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Streamlined Racing Profile launch controls with compact keep-running/elevation checks, row-based launch and stop arguments, advanced timing/console settings, and shutdown strategy beside Requirement | `pnpm.cmd format`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test` (42 tests), production build, and `git diff --check` passed; regression coverage saves each new control through NativeBridge | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-25 | Codex `/root` | M10 | Replaced the always-expanded Supporting Applications editor with a compact single-open accordion and a closed-by-default nested Launch Recipe disclosure, retaining the shared profile draft and one page-level Save Changes flow | Red/green React interaction coverage; `pnpm.cmd format:write`, `pnpm.cmd lint`, `pnpm.cmd typecheck`, `pnpm.cmd test -- src/app/App.test.tsx` (43 tests), production build, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |
+| 2026-07-25 | Codex `/root` | M10 | Added catalog-owned Supporting Application defaults and bounded discovery of SimHub, Crew Chief, Go Fast, Apex Trace VR, and LMUFFB from known locations, running Processes, and resolved Start Menu targets; the wizard prefills detected entries and also offers non-recommended detected tools | Red/green catalog test; targeted native shortcut/catalog tests, `cargo clippy --lib -- -D warnings`, generated-contract check, catalog validation (10 Supporting Applications), `pnpm.cmd format:write`, lint, typecheck, targeted React tests (43), production build, and `git diff --check` passed | No blocker. A tool-created untracked `target-codex-discovery/` directory remains access-denied on the exFAT workspace drive and is deliberately excluded; restart the dev renderer to load the UI change. External signed Beta and Windows qualification remain the next M10 action |

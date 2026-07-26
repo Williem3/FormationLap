@@ -696,6 +696,7 @@ describe("Formation Lap shell", () => {
       supportingApplications: [
         { id: "lmuffb", name: "LMUFFB" },
         { id: "simhub", name: "SimHub" },
+        { id: "go-fast", name: "Go Fast" },
       ],
       installedPrimarySims: [
         {
@@ -717,6 +718,16 @@ describe("Formation Lap shell", () => {
             kind: "directExecutable",
             executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
           },
+          profileDefaults: {
+            arguments: [],
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+            requirement: "optional",
+            keepRunning: false,
+          },
           icon: { kind: "generic" },
         },
         {
@@ -725,6 +736,35 @@ describe("Formation Lap shell", () => {
           installation: {
             kind: "directExecutable",
             executablePath: String.raw`C:\Program Files (x86)\SimHub\SimHubWPF.exe`,
+          },
+          profileDefaults: {
+            arguments: [],
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+            requirement: "optional",
+            keepRunning: false,
+          },
+          icon: { kind: "generic" },
+        },
+        {
+          id: "go-fast",
+          name: "Go Fast",
+          installation: {
+            kind: "directExecutable",
+            executablePath: String.raw`D:\Racing\GoFast\GoFast.exe`,
+          },
+          profileDefaults: {
+            arguments: [],
+            consoleVisibility: "hidden",
+            elevated: false,
+            startupTimeoutSeconds: 30,
+            postStartDelayMilliseconds: 0,
+            shutdownStrategy: { kind: "closeWindows" },
+            requirement: "optional",
+            keepRunning: false,
           },
           icon: { kind: "generic" },
         },
@@ -799,9 +839,13 @@ describe("Formation Lap shell", () => {
       within(recommendationRegion)
         .getAllByRole("checkbox")
         .map((checkbox) => checkbox.getAttribute("aria-label")),
-    ).toEqual(["Add LMUFFB", "Add SimHub"]);
+    ).toEqual(["Add LMUFFB", "Add SimHub", "Add Go Fast"]);
     expect(within(recommendationRegion).getByText("Recommended")).toBeVisible();
     expect(within(recommendationRegion).getByText("Compatible")).toBeVisible();
+    expect(
+      within(recommendationRegion).getByText("Other detected applications"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Add Go Fast")).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: "Enter a sim manually" }),
@@ -864,6 +908,16 @@ describe("Formation Lap shell", () => {
               kind: "directExecutable",
               executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
             },
+            profileDefaults: {
+              arguments: ["--profile=LMU"],
+              consoleVisibility: "visible",
+              elevated: false,
+              startupTimeoutSeconds: 45,
+              postStartDelayMilliseconds: 500,
+              shutdownStrategy: { kind: "closeWindows" },
+              requirement: "required",
+              keepRunning: true,
+            },
             icon: { kind: "generic" },
           },
         ],
@@ -916,12 +970,16 @@ describe("Formation Lap shell", () => {
               kind: "directExecutable",
               executablePath: String.raw`C:\Tools\LMUFFB\LMUFFB.exe`,
             },
+            arguments: ["--profile=LMU"],
+            consoleVisibility: "visible",
+            startupTimeoutSeconds: 45,
+            postStartDelayMilliseconds: 500,
             workingDirectory: String.raw`C:\Tools\LMUFFB`,
           },
           pathNeedsRepair: false,
         },
-        requirement: "optional",
-        keepRunning: false,
+        requirement: "required",
+        keepRunning: true,
       },
     ]);
   });

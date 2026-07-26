@@ -47,9 +47,9 @@ pub use contracts::{
     RacingProfile, SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState,
     SessionEvent, SessionEventKind, SessionSnapshot, SessionState, SessionSummary,
     ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
-    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateCheckDecision,
-    UpdateCheckPlan, UpdateCheckResult, UpdateCheckTrigger, UpdateSnapshot, UpdateStatus,
-    VrLaunchMode, WindowCloseAction,
+    SupportingApplicationProfileDefaults, SupportingApplicationRecommendation, ThemePreference,
+    UpdateChannel, UpdateCheckDecision, UpdateCheckPlan, UpdateCheckResult, UpdateCheckTrigger,
+    UpdateSnapshot, UpdateStatus, VrLaunchMode, WindowCloseAction,
 };
 pub use core::{AppCommand, CommandOutcome, CoreError, FormationLapCore};
 pub use discovery_catalog::{

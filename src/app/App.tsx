@@ -1908,22 +1908,24 @@ function discoveredSupportingApplicationToProfile(
       name: application.name,
       launchRecipe: {
         source: launchSourceFromInstallation(application.installation),
-        arguments: [],
+        arguments: application.profileDefaults.arguments,
         workingDirectory: installationWorkingDirectory(
           application.installation,
         ),
         monitoredProcess: null,
         monitoredExecutablePath: null,
-        consoleVisibility: "hidden",
-        elevated: false,
-        startupTimeoutSeconds: 30,
-        postStartDelayMilliseconds: 0,
-        shutdownStrategy: { kind: "closeWindows" },
+        consoleVisibility: application.profileDefaults.consoleVisibility,
+        elevated: application.profileDefaults.elevated,
+        startupTimeoutSeconds:
+          application.profileDefaults.startupTimeoutSeconds,
+        postStartDelayMilliseconds:
+          application.profileDefaults.postStartDelayMilliseconds,
+        shutdownStrategy: application.profileDefaults.shutdownStrategy,
       },
       pathNeedsRepair: false,
     },
-    requirement: "optional",
-    keepRunning: false,
+    requirement: application.profileDefaults.requirement,
+    keepRunning: application.profileDefaults.keepRunning,
   };
 }
 
@@ -2010,6 +2012,20 @@ function ProfileWizard({
     discoveryState.kind === "ready"
       ? discoveryState.snapshot.installedSupportingApplications.filter(
           (application) => selectedSupportingIds.includes(application.id),
+        )
+      : [];
+  const recommendedSupportingIds =
+    recommendationState.kind === "ready"
+      ? new Set(
+          recommendationState.recommendations.map(
+            (recommendation) => recommendation.id,
+          ),
+        )
+      : new Set<string>();
+  const otherInstalledSupportingApplications =
+    discoveryState.kind === "ready"
+      ? discoveryState.snapshot.installedSupportingApplications.filter(
+          (application) => !recommendedSupportingIds.has(application.id),
         )
       : [];
 
@@ -2260,7 +2276,7 @@ function ProfileWizard({
                   Add Supporting Applications
                 </h2>
                 <p>
-                  Installed recommendations are optional and launch before the
+                  Detected applications are optional and launch before the
                   Primary Sim.
                 </p>
                 <div
@@ -2345,6 +2361,44 @@ function ProfileWizard({
                         )}
                       </div>
                     )}
+                  {otherInstalledSupportingApplications.length > 0 && (
+                    <div className="additional-discovered-applications">
+                      <p className="additional-discovered-heading">
+                        Other detected applications
+                      </p>
+                      <div className="recommendation-list">
+                        {otherInstalledSupportingApplications.map(
+                          (application) => (
+                            <label
+                              className="recommendation-row"
+                              key={application.id}
+                            >
+                              <input
+                                type="checkbox"
+                                aria-label={`Add ${application.name}`}
+                                checked={selectedSupportingIds.includes(
+                                  application.id,
+                                )}
+                                onChange={() =>
+                                  onToggleSupporting(application.id)
+                                }
+                              />
+                              <span className="recommendation-icon">
+                                {applicationIcon(application)}
+                              </span>
+                              <span className="recommendation-copy">
+                                <strong>{application.name}</strong>
+                                <small>Detected on this PC</small>
+                              </span>
+                              <span className="recommendation-rank">
+                                Available
+                              </span>
+                            </label>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

@@ -12,9 +12,9 @@ use formation_lap_lib::{
     QuitPayload, RacingProfile, RestartApplicationPayload, SaveProfilePayload,
     SessionApplicationRole, SessionApplicationSnapshot, SessionApplicationState, SessionEvent,
     SessionEventKind, SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy,
-    SteamLaunchSelector, SupportingApplication, SupportingApplicationRecommendation,
-    ThemePreference, UpdateChannel, UpdateSettingsPayload, UpdateSnapshot, UpdateStatus,
-    VrLaunchMode,
+    SteamLaunchSelector, SupportingApplication, SupportingApplicationProfileDefaults,
+    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateSettingsPayload,
+    UpdateSnapshot, UpdateStatus, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -68,6 +68,7 @@ fn render_bindings() -> String {
         DiscoveredInstallation::decl(&config),
         CatalogPrimarySim::decl(&config),
         CatalogSupportingApplication::decl(&config),
+        SupportingApplicationProfileDefaults::decl(&config),
         DiscoveredPrimarySim::decl(&config),
         DiscoveredSupportingApplication::decl(&config),
         DiscoverySnapshot::decl(&config),

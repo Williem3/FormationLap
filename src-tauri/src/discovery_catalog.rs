@@ -2,7 +2,8 @@ use crate::{
     ApplicationIcon, CatalogPrimarySim, CatalogSupportingApplication, CatalogUpdateProvider,
     CompatibilityRank, DiscoveredInstallation, DiscoveredPrimarySim,
     DiscoveredSupportingApplication, DiscoverySnapshot, LaunchRecipe, LaunchSource,
-    SteamLaunchSelector, SupportingApplicationRecommendation, VrLaunchMode,
+    SteamLaunchSelector, SupportingApplicationProfileDefaults, SupportingApplicationRecommendation,
+    VrLaunchMode,
 };
 use serde::Deserialize;
 use std::{
@@ -23,6 +24,7 @@ pub struct TargetedDiscoverySources {
     pub installed_applications: Vec<WindowsInstalledApplication>,
     pub running_processes: Vec<WindowsRunningProcess>,
     pub known_location_roots: Vec<WindowsKnownLocationRoot>,
+    pub start_menu_shortcut_targets: Vec<PathBuf>,
 }
 
 /// One application record observed from a targeted Windows installed-app key.
@@ -115,6 +117,7 @@ mod windows_sources {
                 .map(|executable_path| WindowsRunningProcess { executable_path })
                 .collect(),
             known_location_roots: known_location_roots(),
+            start_menu_shortcut_targets: start_menu_shortcut_targets(),
         }
     }
 
@@ -280,6 +283,231 @@ mod windows_sources {
         })
         .collect()
     }
+
+    const MAX_START_MENU_SHORTCUTS: usize = 1_024;
+
+    fn start_menu_shortcut_targets() -> Vec<PathBuf> {
+        let roots = [
+            std::env::var_os("APPDATA").map(|path| {
+                PathBuf::from(path)
+                    .join("Microsoft")
+                    .join("Windows")
+                    .join("Start Menu")
+                    .join("Programs")
+            }),
+            std::env::var_os("ProgramData").map(|path| {
+                PathBuf::from(path)
+                    .join("Microsoft")
+                    .join("Windows")
+                    .join("Start Menu")
+                    .join("Programs")
+            }),
+        ];
+        let mut targets = BTreeSet::new();
+        for root in roots.into_iter().flatten() {
+            for shortcut in shortcut_files_under(&root, MAX_START_MENU_SHORTCUTS) {
+                let Some(target) = super::shortcut_target_from_link_file(&shortcut) else {
+                    continue;
+                };
+                if target.is_file()
+                    && target
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+                {
+                    targets.insert(target.canonicalize().unwrap_or(target));
+                }
+            }
+        }
+        targets.into_iter().collect()
+    }
+
+    fn shortcut_files_under(root: &std::path::Path, limit: usize) -> Vec<PathBuf> {
+        let mut shortcuts = Vec::new();
+        let mut directories = vec![root.to_path_buf()];
+        while let Some(directory) = directories.pop() {
+            let Ok(entries) = std::fs::read_dir(directory) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if shortcuts.len() >= limit {
+                    return shortcuts;
+                }
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if file_type.is_dir() && !file_type.is_symlink() {
+                    directories.push(entry.path());
+                } else if file_type.is_file()
+                    && entry
+                        .path()
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("lnk"))
+                {
+                    shortcuts.push(entry.path());
+                }
+            }
+        }
+        shortcuts
+    }
+}
+
+#[cfg(any(windows, test))]
+fn shortcut_target_from_link_file(shortcut_path: &Path) -> Option<PathBuf> {
+    let bytes = fs::read(shortcut_path).ok()?;
+    shortcut_target_from_link_bytes(&bytes, shortcut_path.parent()?)
+}
+
+#[cfg(any(windows, test))]
+fn shortcut_target_from_link_bytes(bytes: &[u8], shortcut_parent: &Path) -> Option<PathBuf> {
+    const SHELL_LINK_HEADER_SIZE: usize = 0x4c;
+    const HAS_LINK_TARGET_ID_LIST: u32 = 0x1;
+    const HAS_LINK_INFO: u32 = 0x2;
+    const HAS_NAME: u32 = 0x4;
+    const HAS_RELATIVE_PATH: u32 = 0x8;
+    const HAS_WORKING_DIRECTORY: u32 = 0x10;
+    const HAS_ARGUMENTS: u32 = 0x20;
+    const HAS_ICON_LOCATION: u32 = 0x40;
+    const IS_UNICODE: u32 = 0x80;
+
+    if read_u32(bytes, 0)? as usize != SHELL_LINK_HEADER_SIZE {
+        return None;
+    }
+    let flags = read_u32(bytes, 0x14)?;
+    let is_unicode = flags & IS_UNICODE != 0;
+    let mut offset = SHELL_LINK_HEADER_SIZE;
+
+    if flags & HAS_LINK_TARGET_ID_LIST != 0 {
+        let target_id_list_size = read_u16(bytes, offset)? as usize;
+        offset = offset.checked_add(2 + target_id_list_size)?;
+        bytes.get(offset..)?;
+    }
+
+    let link_info_target = if flags & HAS_LINK_INFO != 0 {
+        let info_size = read_u32(bytes, offset)? as usize;
+        let info_end = offset.checked_add(info_size)?;
+        let info = bytes.get(offset..info_end)?;
+        let target = shortcut_target_from_link_info(info);
+        offset = info_end;
+        target
+    } else {
+        None
+    };
+
+    let mut relative_path = None;
+    for (flag, is_relative_path) in [
+        (HAS_NAME, false),
+        (HAS_RELATIVE_PATH, true),
+        (HAS_WORKING_DIRECTORY, false),
+        (HAS_ARGUMENTS, false),
+        (HAS_ICON_LOCATION, false),
+    ] {
+        if flags & flag == 0 {
+            continue;
+        }
+        let (value, next_offset) = shortcut_string(bytes, offset, is_unicode)?;
+        offset = next_offset;
+        if is_relative_path {
+            relative_path = Some(value);
+        }
+    }
+
+    link_info_target.or_else(|| relative_path.map(|path| shortcut_parent.join(path)))
+}
+
+#[cfg(any(windows, test))]
+fn shortcut_target_from_link_info(info: &[u8]) -> Option<PathBuf> {
+    let header_size = read_u32(info, 4)? as usize;
+    if !(0x1c..=info.len()).contains(&header_size) {
+        return None;
+    }
+    const VOLUME_ID_AND_LOCAL_BASE_PATH: u32 = 0x1;
+    if read_u32(info, 8)? & VOLUME_ID_AND_LOCAL_BASE_PATH == 0 {
+        return None;
+    }
+    let local_base_path = if header_size >= 0x24 {
+        read_u32(info, 0x1c)
+            .and_then(|offset| read_utf16_null_terminated(info, offset as usize))
+            .or_else(|| {
+                read_u32(info, 0x10)
+                    .and_then(|offset| read_ansi_null_terminated(info, offset as usize))
+            })
+    } else {
+        read_u32(info, 0x10).and_then(|offset| read_ansi_null_terminated(info, offset as usize))
+    }?;
+    let common_path_suffix = if header_size >= 0x24 {
+        read_u32(info, 0x20)
+            .and_then(|offset| read_utf16_null_terminated(info, offset as usize))
+            .or_else(|| {
+                read_u32(info, 0x18)
+                    .and_then(|offset| read_ansi_null_terminated(info, offset as usize))
+            })
+    } else {
+        read_u32(info, 0x18).and_then(|offset| read_ansi_null_terminated(info, offset as usize))
+    }?;
+    let path = if common_path_suffix.is_empty() {
+        local_base_path
+    } else if local_base_path.ends_with(['\\', '/']) || common_path_suffix.starts_with(['\\', '/'])
+    {
+        format!("{local_base_path}{common_path_suffix}")
+    } else {
+        format!("{local_base_path}\\{common_path_suffix}")
+    };
+    (!path.trim().is_empty()).then(|| PathBuf::from(path))
+}
+
+#[cfg(any(windows, test))]
+fn shortcut_string(bytes: &[u8], offset: usize, is_unicode: bool) -> Option<(String, usize)> {
+    let length = read_u16(bytes, offset)? as usize;
+    let start = offset.checked_add(2)?;
+    let byte_length = if is_unicode {
+        length.checked_mul(2)?
+    } else {
+        length
+    };
+    let end = start.checked_add(byte_length)?;
+    let value = bytes.get(start..end)?;
+    let value = if is_unicode {
+        let values = value
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        String::from_utf16_lossy(&values)
+    } else {
+        String::from_utf8_lossy(value).into_owned()
+    };
+    Some((value, end))
+}
+
+#[cfg(any(windows, test))]
+fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
+    let bytes = bytes.get(offset..offset.checked_add(2)?)?;
+    Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
+#[cfg(any(windows, test))]
+fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    let bytes = bytes.get(offset..offset.checked_add(4)?)?;
+    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+#[cfg(any(windows, test))]
+fn read_ansi_null_terminated(bytes: &[u8], offset: usize) -> Option<String> {
+    let value = bytes.get(offset..)?;
+    let length = value.iter().position(|byte| *byte == 0)?;
+    Some(String::from_utf8_lossy(&value[..length]).into_owned())
+}
+
+#[cfg(any(windows, test))]
+fn read_utf16_null_terminated(bytes: &[u8], offset: usize) -> Option<String> {
+    let value = bytes.get(offset..)?;
+    let values = value
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .take_while(|value| *value != 0)
+        .collect::<Vec<_>>();
+    (!values.is_empty()).then(|| String::from_utf16_lossy(&values))
 }
 
 #[derive(Debug)]
@@ -482,6 +710,8 @@ struct SupportingApplicationCatalogEntry {
     compatibility: Vec<CompatibilityMatcher>,
     #[serde(default)]
     update_provider: Option<CatalogUpdateProvider>,
+    #[serde(default)]
+    profile_defaults: SupportingApplicationProfileDefaults,
 }
 
 #[derive(Clone, Deserialize)]
@@ -505,6 +735,7 @@ pub(crate) struct DiscoveryCatalog {
     installed_app_matchers: BTreeMap<String, Vec<InstalledApplicationMatcher>>,
     supporting_executable_names: BTreeMap<String, Vec<String>>,
     supporting_known_locations: BTreeMap<String, Vec<KnownLocationMatcher>>,
+    supporting_profile_defaults: BTreeMap<String, SupportingApplicationProfileDefaults>,
     compatibility_matchers: BTreeMap<String, Vec<CompatibilityMatcher>>,
     update_providers: BTreeMap<String, CatalogUpdateProvider>,
     sources: TargetedDiscoverySources,
@@ -533,12 +764,15 @@ impl DiscoveryCatalog {
             Vec::with_capacity(documents.supporting_applications.len());
         let mut supporting_executable_names = BTreeMap::new();
         let mut supporting_known_locations = BTreeMap::new();
+        let mut supporting_profile_defaults = BTreeMap::new();
         let mut compatibility_matchers = BTreeMap::new();
         let mut update_providers = BTreeMap::new();
         for application in documents.supporting_applications {
             supporting_executable_names
                 .insert(application.id.clone(), application.executable_names);
             supporting_known_locations.insert(application.id.clone(), application.known_locations);
+            supporting_profile_defaults
+                .insert(application.id.clone(), application.profile_defaults);
             compatibility_matchers.insert(application.id.clone(), application.compatibility);
             if let Some(update_provider) = application.update_provider {
                 update_providers.insert(application.id.clone(), update_provider);
@@ -555,6 +789,7 @@ impl DiscoveryCatalog {
             installed_app_matchers,
             supporting_executable_names,
             supporting_known_locations,
+            supporting_profile_defaults,
             compatibility_matchers,
             update_providers,
             sources,
@@ -572,12 +807,20 @@ impl DiscoveryCatalog {
         let mut installed_supporting_applications = discover_running_supporting_applications(
             &self.supporting_applications,
             &self.supporting_executable_names,
+            &self.supporting_profile_defaults,
             &self.sources.running_processes,
         );
         installed_supporting_applications.extend(discover_known_location_supporting_applications(
             &self.supporting_applications,
             &self.supporting_known_locations,
+            &self.supporting_profile_defaults,
             &self.sources.known_location_roots,
+        ));
+        installed_supporting_applications.extend(discover_start_menu_supporting_applications(
+            &self.supporting_applications,
+            &self.supporting_executable_names,
+            &self.supporting_profile_defaults,
+            &self.sources.start_menu_shortcut_targets,
         ));
         installed_supporting_applications =
             unique_supporting_applications(installed_supporting_applications);
@@ -685,6 +928,7 @@ impl DiscoveryCatalog {
 fn discover_known_location_supporting_applications(
     supporting_applications: &[CatalogSupportingApplication],
     matchers_by_application: &BTreeMap<String, Vec<KnownLocationMatcher>>,
+    profile_defaults_by_application: &BTreeMap<String, SupportingApplicationProfileDefaults>,
     known_location_roots: &[WindowsKnownLocationRoot],
 ) -> Vec<DiscoveredSupportingApplication> {
     let mut discovered = Vec::new();
@@ -712,6 +956,10 @@ fn discover_known_location_supporting_applications(
                     id: application.id.clone(),
                     name: application.name.clone(),
                     installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                    profile_defaults: profile_defaults_by_application
+                        .get(&application.id)
+                        .cloned()
+                        .unwrap_or_default(),
                     icon,
                 });
             }
@@ -741,6 +989,7 @@ fn unique_supporting_applications(
 fn discover_running_supporting_applications(
     supporting_applications: &[CatalogSupportingApplication],
     executable_names_by_application: &BTreeMap<String, Vec<String>>,
+    profile_defaults_by_application: &BTreeMap<String, SupportingApplicationProfileDefaults>,
     running_processes: &[WindowsRunningProcess],
 ) -> Vec<DiscoveredSupportingApplication> {
     let mut executable_paths = BTreeSet::new();
@@ -777,11 +1026,34 @@ fn discover_running_supporting_applications(
                 id: application.id.clone(),
                 name: application.name.clone(),
                 installation: DiscoveredInstallation::DirectExecutable { executable_path },
+                profile_defaults: profile_defaults_by_application
+                    .get(&application.id)
+                    .cloned()
+                    .unwrap_or_default(),
                 icon,
             });
         }
     }
     discovered
+}
+
+fn discover_start_menu_supporting_applications(
+    supporting_applications: &[CatalogSupportingApplication],
+    executable_names_by_application: &BTreeMap<String, Vec<String>>,
+    profile_defaults_by_application: &BTreeMap<String, SupportingApplicationProfileDefaults>,
+    shortcut_targets: &[PathBuf],
+) -> Vec<DiscoveredSupportingApplication> {
+    let running_processes = shortcut_targets
+        .iter()
+        .cloned()
+        .map(|executable_path| WindowsRunningProcess { executable_path })
+        .collect::<Vec<_>>();
+    discover_running_supporting_applications(
+        supporting_applications,
+        executable_names_by_application,
+        profile_defaults_by_application,
+        &running_processes,
+    )
 }
 
 fn discover_installed_applications(
@@ -1477,8 +1749,44 @@ pub fn validate_catalog_documents(
 
 #[cfg(test)]
 mod tests {
-    use super::{ApplicationIcon, executable_icon};
-    use std::path::PathBuf;
+    use super::{ApplicationIcon, executable_icon, shortcut_target_from_link_bytes};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn shortcut_target_uses_the_unicode_link_info_target() {
+        let base_path = r"D:\Racing\Apex";
+        let suffix = "ApexTraceVR.exe";
+        let base_path_bytes = base_path
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let suffix_bytes = suffix
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let link_info_header_size = 0x24;
+        let base_offset = link_info_header_size;
+        let suffix_offset = base_offset + base_path_bytes.len();
+        let link_info_size = suffix_offset + suffix_bytes.len();
+        let mut bytes = vec![0_u8; 0x4c + link_info_size];
+        bytes[0..4].copy_from_slice(&(0x4c_u32).to_le_bytes());
+        bytes[0x14..0x18].copy_from_slice(&(0x2_u32 | 0x80).to_le_bytes());
+        let link_info = &mut bytes[0x4c..];
+        link_info[0..4].copy_from_slice(&(link_info_size as u32).to_le_bytes());
+        link_info[4..8].copy_from_slice(&(link_info_header_size as u32).to_le_bytes());
+        link_info[8..12].copy_from_slice(&1_u32.to_le_bytes());
+        link_info[0x1c..0x20].copy_from_slice(&(base_offset as u32).to_le_bytes());
+        link_info[0x20..0x24].copy_from_slice(&(suffix_offset as u32).to_le_bytes());
+        link_info[base_offset..suffix_offset].copy_from_slice(&base_path_bytes);
+        link_info[suffix_offset..].copy_from_slice(&suffix_bytes);
+
+        assert_eq!(
+            shortcut_target_from_link_bytes(&bytes, Path::new(r"C:\Users\Driver\Start Menu")),
+            Some(PathBuf::from(r"D:\Racing\Apex\ApexTraceVR.exe")),
+        );
+    }
 
     #[cfg(windows)]
     #[test]

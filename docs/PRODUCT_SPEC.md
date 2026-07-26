@@ -75,6 +75,8 @@ Discovery may inspect:
 - Windows installed-application records.
 - Currently running processes.
 - Known default locations in the Curated Catalog.
+- Current-user and shared Start Menu Programs shortcuts, resolved only to their
+  executable targets.
 
 Discovery must never crawl an entire drive.
 

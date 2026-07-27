@@ -194,6 +194,8 @@ where it prevents ambiguity. Controls align to a consistent right edge.
   official site as possible provider contacts.
 - A manual check that finds a Formation Lap update exposes its verified install
   action in Settings beside Check now.
+- An Unknown Formation Lap update state shows its native reason as supporting
+  text so development configuration and provider failures remain actionable.
 - The Dashboard update banner is reserved for automatic checks and remains
   non-blocking and race-safe.
 - The quiet footer reads `Local data · Online checks on/off` from persisted

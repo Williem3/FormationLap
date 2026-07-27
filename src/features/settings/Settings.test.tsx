@@ -87,6 +87,22 @@ describe("Settings behavior", () => {
     await user.click(screen.getByRole("button", { name: "Dashboard" }));
     expect(screen.getByText("Local data · Online checks off")).toBeVisible();
   });
+  it("explains why the Formation Lap update state is Unknown", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.updates.formationLap = {
+      kind: "unknown",
+      reason: "The official updater public key is not configured.",
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Unknown")).toBeVisible();
+    expect(
+      screen.getByText("The official updater public key is not configured."),
+    ).toBeVisible();
+  });
   it("renders Formation Lap and Supporting Application update advice without a third-party install action", async () => {
     const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();

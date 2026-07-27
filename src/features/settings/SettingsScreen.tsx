@@ -35,6 +35,14 @@ export function SettingsScreen({
     updates.formationLap.kind === "updateAvailable"
       ? updates.formationLap
       : null;
+  const updateDetail =
+    sessionState !== "idle"
+      ? "Checks and installation resume when the Session is idle."
+      : updateAvailable
+        ? `Current ${updateAvailable.currentVersion} · verified first-party installer`
+        : updates.formationLap.kind === "unknown"
+          ? updates.formationLap.reason
+          : "Check now consents to one direct check of the named providers.";
   const update = (change: Partial<DesktopSettings>) =>
     onChange({ ...settings, ...change });
 
@@ -198,13 +206,7 @@ export function SettingsScreen({
           <div className="settings-row settings-row-stacked">
             <span>
               <strong>{updateStatusLabel(updates.formationLap)}</strong>
-              <small>
-                {sessionState !== "idle"
-                  ? "Checks and installation resume when the Session is idle."
-                  : updateAvailable
-                    ? `Current ${updateAvailable.currentVersion} · verified first-party installer`
-                    : "Check now consents to one direct check of the named providers."}
-              </small>
+              <small>{updateDetail}</small>
             </span>
             <div className="settings-update-actions">
               <button

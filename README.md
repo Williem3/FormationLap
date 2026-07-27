@@ -50,7 +50,7 @@ that folder, confirm the version below matches the release you selected, and
 run:
 
 ```powershell
-$version = "0.9.0-preview.2"
+$version = "0.9.0-preview.3"
 $installer = Get-Item ".\Formation-Lap_${version}_x64-setup.exe" `
   -ErrorAction SilentlyContinue
 

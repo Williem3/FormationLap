@@ -192,6 +192,10 @@ where it prevents ambiguity. Controls align to a consistent right edge.
   explicitly requested online checks are local-only.
 - First-run and Settings copy names GitHub Releases, Winget, and SimHub's
   official site as possible provider contacts.
+- A manual check that finds a Formation Lap update exposes its verified install
+  action in Settings beside Check now.
+- The Dashboard update banner is reserved for automatic checks and remains
+  non-blocking and race-safe.
 - The quiet footer reads `Local data · Online checks on/off` from persisted
   settings.
 - Reset actions are visually separated from routine settings.

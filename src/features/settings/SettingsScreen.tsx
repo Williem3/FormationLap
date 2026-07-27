@@ -9,10 +9,11 @@ export interface SettingsScreenProps {
   settings: DesktopSettings;
   updates: UpdateSnapshot;
   sessionState: AppSnapshot["session"]["state"];
-  isSaving: boolean;
+  activity: "idle" | "saving" | "checking" | "installing";
   error: string | null;
   onChange(settings: DesktopSettings): void;
   onCheckUpdates(): void;
+  onInstallFormationLapUpdate(): void;
   onOpenDiagnostics(): void;
   onQuit(): void;
 }
@@ -21,13 +22,19 @@ export function SettingsScreen({
   settings,
   updates,
   sessionState,
-  isSaving,
+  activity,
   error,
   onChange,
   onCheckUpdates,
+  onInstallFormationLapUpdate,
   onOpenDiagnostics,
   onQuit,
 }: SettingsScreenProps) {
+  const isBusy = activity !== "idle";
+  const updateAvailable =
+    updates.formationLap.kind === "updateAvailable"
+      ? updates.formationLap
+      : null;
   const update = (change: Partial<DesktopSettings>) =>
     onChange({ ...settings, ...change });
 
@@ -43,7 +50,13 @@ export function SettingsScreen({
           </p>
         </div>
         <span className="settings-save-state" role="status">
-          {isSaving ? "Saving…" : "Saved locally"}
+          {activity === "saving"
+            ? "Saving…"
+            : activity === "checking"
+              ? "Checking…"
+              : activity === "installing"
+                ? "Preparing update…"
+                : "Saved locally"}
         </span>
       </header>
 
@@ -69,7 +82,7 @@ export function SettingsScreen({
             <input
               type="checkbox"
               checked={settings.startWithWindows}
-              disabled={isSaving}
+              disabled={isBusy}
               onChange={(event) =>
                 update({ startWithWindows: event.currentTarget.checked })
               }
@@ -99,7 +112,7 @@ export function SettingsScreen({
                     settings.theme === theme ? "theme-option-active" : ""
                   }
                   aria-pressed={settings.theme === theme}
-                  disabled={isSaving}
+                  disabled={isBusy}
                   onClick={() => update({ theme })}
                 >
                   {theme[0]?.toUpperCase()}
@@ -116,7 +129,7 @@ export function SettingsScreen({
             <input
               type="checkbox"
               checked={settings.reduceMotion}
-              disabled={isSaving}
+              disabled={isBusy}
               onChange={(event) =>
                 update({ reduceMotion: event.currentTarget.checked })
               }
@@ -142,7 +155,7 @@ export function SettingsScreen({
               type="checkbox"
               aria-label="Automatic daily checks"
               checked={settings.automaticUpdateChecks}
-              disabled={isSaving}
+              disabled={isBusy}
               onChange={(event) =>
                 update({
                   automaticUpdateChecks: event.currentTarget.checked,
@@ -173,7 +186,7 @@ export function SettingsScreen({
                       : ""
                   }
                   aria-pressed={settings.updateChannel === channel}
-                  disabled={isSaving}
+                  disabled={isBusy}
                   onClick={() => update({ updateChannel: channel })}
                 >
                   {channel.charAt(0).toUpperCase()}
@@ -182,23 +195,39 @@ export function SettingsScreen({
               ))}
             </div>
           </div>
-          <div className="settings-row">
+          <div className="settings-row settings-row-stacked">
             <span>
               <strong>{updateStatusLabel(updates.formationLap)}</strong>
               <small>
-                {sessionState === "idle"
-                  ? "Check now consents to one direct check of the named providers."
-                  : "Checks resume when the Session is idle."}
+                {sessionState !== "idle"
+                  ? "Checks and installation resume when the Session is idle."
+                  : updateAvailable
+                    ? `Current ${updateAvailable.currentVersion} · verified first-party installer`
+                    : "Check now consents to one direct check of the named providers."}
               </small>
             </span>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={isSaving || sessionState !== "idle"}
-              onClick={onCheckUpdates}
-            >
-              Check now
-            </button>
+            <div className="settings-update-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isBusy || sessionState !== "idle"}
+                onClick={onCheckUpdates}
+              >
+                {activity === "checking" ? "Checking…" : "Check now"}
+              </button>
+              {updateAvailable && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isBusy || sessionState !== "idle"}
+                  onClick={onInstallFormationLapUpdate}
+                >
+                  {activity === "installing"
+                    ? "Downloading and verifying…"
+                    : `Install update ${updateAvailable.latestVersion}`}
+                </button>
+              )}
+            </div>
           </div>
         </section>
 

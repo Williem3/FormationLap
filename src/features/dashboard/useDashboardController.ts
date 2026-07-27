@@ -263,9 +263,12 @@ export function useDashboardController({
     try {
       const nextSnapshot = await bridge.installFormationLapUpdate();
       onSnapshotChanged(nextSnapshot);
-    } catch {
+    } catch (error) {
       setDashboardError(
-        "Formation Lap rejected the update or the Session is not idle.",
+        commandErrorMessage(
+          error,
+          "Formation Lap could not download and start the verified update.",
+        ),
       );
     } finally {
       setDashboardIsBusy(false);

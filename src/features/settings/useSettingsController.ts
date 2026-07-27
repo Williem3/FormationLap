@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppSnapshot, DesktopSettings } from "../../generated/bindings";
 import type { NativeBridge } from "../../native-bridge/native-bridge";
+import { commandErrorMessage } from "../../ui/presentation";
 
 interface SettingsControllerOptions {
   bridge: NativeBridge;
@@ -11,38 +12,58 @@ export function useSettingsController({
   bridge,
   onSnapshotChanged,
 }: SettingsControllerOptions) {
-  const [isSaving, setIsSaving] = useState(false);
+  const [activity, setActivity] = useState<
+    "idle" | "saving" | "checking" | "installing"
+  >("idle");
   const [error, setError] = useState<string | null>(null);
 
   const updateDesktopSettings = async (settings: DesktopSettings) => {
-    setIsSaving(true);
+    setActivity("saving");
     setError(null);
     try {
       onSnapshotChanged(await bridge.updateSettings({ settings }));
     } catch {
       setError("Formation Lap could not save these local desktop settings.");
     } finally {
-      setIsSaving(false);
+      setActivity("idle");
     }
   };
 
   const checkUpdates = async () => {
-    setIsSaving(true);
+    setActivity("checking");
     setError(null);
     try {
       onSnapshotChanged(await bridge.checkUpdates());
     } catch {
       setError("Formation Lap could not complete the trusted update checks.");
     } finally {
-      setIsSaving(false);
+      setActivity("idle");
+    }
+  };
+
+  const installFormationLapUpdate = async () => {
+    setActivity("installing");
+    setError(null);
+    try {
+      onSnapshotChanged(await bridge.installFormationLapUpdate());
+    } catch (error) {
+      setError(
+        commandErrorMessage(
+          error,
+          "Formation Lap could not download and start the verified update.",
+        ),
+      );
+    } finally {
+      setActivity("idle");
     }
   };
 
   return {
-    isSaving,
+    activity,
     error,
     clearError: () => setError(null),
     updateDesktopSettings,
     checkUpdates,
+    installFormationLapUpdate,
   };
 }

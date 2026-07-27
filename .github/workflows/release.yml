@@ -135,13 +135,6 @@ jobs:
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
 
-      - name: Clear release identity bootstrap
-        shell: pwsh
-        run: >-
-          node scripts/release/manage-release-identity-resource.mjs
-          --manifest "src-tauri\release-identity\formation-lap-release-identity.json"
-          --action clear
-
       - name: Authenticate to Azure with OIDC
         uses: Azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
         with:
@@ -186,6 +179,48 @@ jobs:
           }
           "signer-sha256=$($fingerprints[0])" >> $env:GITHUB_OUTPUT
 
+      - name: Bundle signed bootstrap installer for release identity
+        id: bootstrap_bundle
+        shell: pwsh
+        env:
+          FORMATION_LAP_RELEASE_CHANNEL: ${{ steps.release.outputs.prerelease == 'true' && 'beta' || 'stable' }}
+          FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
+          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
+        run: |
+          pnpm tauri bundle --bundles nsis --config src-tauri/tauri.release-bundle.conf.json --no-sign --ci
+          $installers = @(Get-ChildItem "src-tauri\target\release\bundle\nsis" -Filter "*-setup.exe" -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one bootstrap NSIS installer."
+          }
+          "installer=$($installers[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Extract bootstrap installer payload for release identity
+        id: bootstrap_payload
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.bootstrap_bundle.outputs.installer }}
+        run: |
+          $installation = Join-Path $env:RUNNER_TEMP "formation-lap-release-identity-bootstrap"
+          $sevenZip = Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          if (-not (Test-Path -LiteralPath $sevenZip)) {
+            throw "The hosted runner does not provide 7-Zip for installer payload verification."
+          }
+          New-Item -ItemType Directory -Force -Path $installation | Out-Null
+          & $sevenZip x -y "-o$installation" $env:INSTALLER
+          if ($LASTEXITCODE -ne 0) {
+            throw "The bootstrap installer payload could not be extracted for release identity sealing."
+          }
+          "main=$(Join-Path $installation 'formation-lap.exe')" >> $env:GITHUB_OUTPUT
+          "helper=$(Join-Path $installation 'formation-lap-elevated-helper.exe')" >> $env:GITHUB_OUTPUT
+          Remove-Item -LiteralPath $env:INSTALLER -Force
+
+      - name: Clear release identity bootstrap
+        shell: pwsh
+        run: >-
+          node scripts/release/manage-release-identity-resource.mjs
+          --manifest "src-tauri\release-identity\formation-lap-release-identity.json"
+          --action clear
+
       - name: Bind and sign the signed helper release identity
         shell: pwsh
         env:
@@ -196,9 +231,8 @@ jobs:
         run: |
           $payload = "src-tauri\release-identity\formation-lap-release-identity.payload"
           $manifest = "src-tauri\release-identity\formation-lap-release-identity.json"
-          $main = "src-tauri\target\release\formation-lap.exe"
-          $helper = "src-tauri\target\release\formation-lap-elevated-helper.exe"
-          Copy-Item -LiteralPath "src-tauri\binaries\formation-lap-elevated-helper-x86_64-pc-windows-msvc.exe" -Destination $helper -Force
+          $main = "${{ steps.bootstrap_payload.outputs.main }}"
+          $helper = "${{ steps.bootstrap_payload.outputs.helper }}"
           node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --authenticode-signer-sha256 "${{ steps.authenticode.outputs.signer-sha256 }}" --payload $payload
           pnpm tauri signer sign $payload
           node scripts/release/generate-release-identity.mjs --main $main --helper $helper --version $env:VERSION --channel $env:CHANNEL --authenticode-signer-sha256 "${{ steps.authenticode.outputs.signer-sha256 }}" --payload $payload --signature "$payload.sig" --output $manifest

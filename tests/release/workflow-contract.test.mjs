@@ -31,20 +31,24 @@ function assertActionsPinned(workflow) {
 function assertReleaseIdentityBootstrapOrder(workflow) {
   const prepare = workflow.indexOf("--action prepare");
   const build = workflow.indexOf("tauri build --no-bundle");
+  const bootstrapBundle = workflow.indexOf("id: bootstrap_bundle");
+  const bootstrapPayload = workflow.indexOf("id: bootstrap_payload");
   const clear = workflow.indexOf("--action clear");
   const identity = workflow.indexOf("generate-release-identity.mjs");
-  const bundle = workflow.indexOf("tauri bundle --bundles nsis");
+  const bundle = workflow.lastIndexOf("tauri bundle --bundles nsis");
   const verifyInstalledIdentity = workflow.indexOf(
     "verify-release-identity-layout.mjs",
   );
   assert.ok(
     prepare >= 0 &&
       prepare < build &&
-      build < clear &&
+      build < bootstrapBundle &&
+      bootstrapBundle < bootstrapPayload &&
+      bootstrapPayload < clear &&
       clear < identity &&
       identity < bundle &&
       bundle < verifyInstalledIdentity,
-    "release identity must bind the exact bytes bundled into the installer and be verified after installation",
+    "release identity must be sealed from a bootstrap installer payload and verified in the final installer",
   );
 }
 
@@ -85,6 +89,11 @@ test("release workflow signs every shipped executable before updater metadata", 
     /Formation Lap and its elevated helper do not have the same signer certificate/,
   );
   assert.match(release, /tauri bundle --bundles nsis/);
+  assert.equal(
+    [...release.matchAll(/tauri bundle --bundles nsis/g)].length,
+    2,
+    "release workflow must bundle a bootstrap installer before sealing the final identity",
+  );
   assert.match(release, /tauri signer sign/);
   assert.match(release, /generate-license-report\.mjs/);
   assert.match(release, /generate-release-metadata\.mjs/);
@@ -99,8 +108,9 @@ test("release workflow signs every shipped executable before updater metadata", 
 
   const build = release.indexOf("tauri build --no-bundle");
   const firstSigning = release.indexOf("Azure/artifact-signing-action");
+  const bootstrapBundle = release.indexOf("id: bootstrap_bundle");
   const releaseIdentity = release.indexOf("generate-release-identity.mjs");
-  const bundle = release.indexOf("tauri bundle --bundles nsis");
+  const bundle = release.lastIndexOf("tauri bundle --bundles nsis");
   const secondSigning = release.indexOf(
     "Azure/artifact-signing-action",
     firstSigning + 1,
@@ -112,6 +122,8 @@ test("release workflow signs every shipped executable before updater metadata", 
   assert.ok(
     build < firstSigning &&
       firstSigning < releaseIdentity &&
+      firstSigning < bootstrapBundle &&
+      bootstrapBundle < releaseIdentity &&
       releaseIdentity < bundle &&
       bundle < secondSigning &&
       secondSigning < updaterSigning &&
@@ -137,6 +149,11 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
     /tauri build --no-bundle --config src-tauri\/tauri\.release-bundle\.conf\.json/,
   );
   assert.match(preview, /tauri bundle --bundles nsis/);
+  assert.equal(
+    [...preview.matchAll(/tauri bundle --bundles nsis/g)].length,
+    2,
+    "preview workflow must bundle a bootstrap installer before sealing the final identity",
+  );
   assert.doesNotMatch(preview, /Azure\/artifact-signing-action/);
   assert.doesNotMatch(preview, /Get-AuthenticodeSignature/);
   assert.doesNotMatch(preview, /--authenticode-signer-sha256/);
@@ -168,9 +185,14 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
 
   const build = preview.indexOf("tauri build --no-bundle");
   const identity = preview.indexOf("generate-release-identity.mjs");
-  const bundle = preview.indexOf("tauri bundle --bundles nsis");
+  const bootstrapBundle = preview.indexOf("id: bootstrap_bundle");
+  const bootstrapPayload = preview.indexOf("id: bootstrap_payload");
+  const bundle = preview.lastIndexOf("tauri bundle --bundles nsis");
   assert.ok(
-    build < identity && identity < bundle,
-    "preview release identity must bind the executable bytes that final packaging installs",
+    build < bootstrapBundle &&
+      bootstrapBundle < bootstrapPayload &&
+      bootstrapPayload < identity &&
+      identity < bundle,
+    "preview release identity must bind the executable bytes that bootstrap packaging installs",
   );
 });

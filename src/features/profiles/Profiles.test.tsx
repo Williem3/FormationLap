@@ -710,7 +710,7 @@ describe("Racing Profile behavior", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit profile" }),
     );
-    await user.click(screen.getAllByText("Launch Recipe details")[0]!);
+    await user.click(screen.getAllByText("Launch Arguments")[0]!);
 
     expect(screen.getAllByText("No arguments.")).toHaveLength(2);
     await user.click(
@@ -727,16 +727,16 @@ describe("Racing Profile behavior", () => {
     expect(hiddenConsole).toBeChecked();
     await user.click(hiddenConsole);
 
-    const requirement = screen.getByLabelText("Requirement for SimHub");
+    const requirement = screen.getByLabelText("Launch Requirement");
     const policy = requirement.closest(".supporting-policy");
     if (!(policy instanceof HTMLElement)) {
       throw new Error("Supporting Application policy should be grouped");
     }
-    expect(within(policy).getByLabelText("Shutdown strategy")).toHaveValue(
+    expect(within(policy).getByLabelText("Shutdown Method")).toHaveValue(
       "closeWindows",
     );
     await user.selectOptions(
-      within(policy).getByLabelText("Shutdown strategy"),
+      within(policy).getByLabelText("Shutdown Method"),
       "consoleInterrupt",
     );
     const keepRunning = screen.getByRole("checkbox", {
@@ -829,32 +829,23 @@ describe("Racing Profile behavior", () => {
     expect(simHubToggle).toHaveAttribute("aria-expanded", "true");
     expect(crewChiefToggle).toHaveAttribute("aria-expanded", "false");
     expect(
-      within(crewChiefEditor).queryByText("Launch Recipe details"),
+      within(crewChiefEditor).queryByText("Launch Arguments"),
     ).not.toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("Supporting Application 1 name"));
-    await user.type(
-      screen.getByLabelText("Supporting Application 1 name"),
-      "SimHub draft",
-    );
+    await user.clear(screen.getByLabelText("Application Name"));
+    await user.type(screen.getByLabelText("Application Name"), "SimHub draft");
     await user.click(crewChiefToggle);
 
     expect(simHubToggle).toHaveAttribute("aria-expanded", "false");
     expect(crewChiefToggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByDisplayValue("SimHub draft")).not.toBeInTheDocument();
+    expect(within(crewChiefEditor).getByText("Launch Arguments")).toBeVisible();
     expect(
-      screen.queryByLabelText("Supporting Application 1 name"),
-    ).not.toBeInTheDocument();
-    expect(
-      within(crewChiefEditor).getByText("Launch Recipe details"),
-    ).toBeVisible();
-    expect(
-      within(crewChiefEditor)
-        .getByText("Launch Recipe details")
-        .closest("details"),
+      within(crewChiefEditor).getByText("Launch Arguments").closest("details"),
     ).not.toHaveAttribute("open");
 
     await user.click(simHubToggle);
-    expect(screen.getByLabelText("Supporting Application 1 name")).toHaveValue(
+    expect(screen.getByLabelText("Application Name")).toHaveValue(
       "SimHub draft",
     );
 
@@ -864,6 +855,118 @@ describe("Racing Profile behavior", () => {
       "SimHub draft",
     );
   });
+  it("reorders Supporting Applications by dragging the six-dot handle and clears a release away from it", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.selectedProfile!.supportingApplications = [
+      {
+        application: createProfileApplication({
+          id: "simhub-drag",
+          name: "SimHub",
+        }),
+        requirement: "required",
+        keepRunning: false,
+      },
+      {
+        application: createProfileApplication({
+          id: "crew-chief-drag",
+          name: "Crew Chief",
+        }),
+        requirement: "optional",
+        keepRunning: false,
+      },
+    ];
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    const sourceHandle = screen.getByRole("button", {
+      name: /Reorder SimHub/,
+    });
+    const sourceRow = sourceHandle.closest(".supporting-editor-row");
+    if (!(sourceRow instanceof HTMLElement)) {
+      throw new Error("SimHub should be contained in its editor row");
+    }
+    expect(sourceRow.querySelector(".requirement-chip")).toHaveTextContent(
+      "Required",
+    );
+    expect(
+      within(sourceRow).queryByText("Required application"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sourceRow).queryByText("Optional application"),
+    ).not.toBeInTheDocument();
+    vi.spyOn(sourceRow, "getBoundingClientRect").mockReturnValue({
+      bottom: 120,
+      height: 58,
+      left: 52,
+      right: 842,
+      top: 62,
+      width: 790,
+      x: 52,
+      y: 62,
+      toJSON: () => ({}),
+    });
+    const destinationRow = screen
+      .getByRole("button", { name: "Edit Crew Chief" })
+      .closest(".supporting-editor-row");
+    if (!(destinationRow instanceof HTMLElement)) {
+      throw new Error("Crew Chief should be contained in its editor row");
+    }
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: vi.fn().mockReturnValue(destinationRow),
+    });
+    fireEvent.pointerDown(sourceHandle, {
+      clientX: 91,
+      clientY: 91,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(sourceHandle, {
+      pointerId: 1,
+      clientX: 520,
+      clientY: 160,
+    });
+    expect(sourceRow).toHaveClass("is-reordering");
+    const dragPreview = document.querySelector(".supporting-drag-preview");
+    expect(dragPreview).toHaveTextContent("SimHub");
+    expect(dragPreview?.parentElement).toBe(document.body);
+    expect(dragPreview).toHaveStyle({
+      transform: "translate3d(481px, 131px, 0)",
+    });
+    expect(
+      Array.from(document.querySelectorAll(".supporting-editor-row strong"))
+        .map((element) => element.textContent)
+        .slice(0, 2),
+    ).toEqual(["Crew Chief", "SimHub"]);
+    fireEvent.pointerUp(document, {
+      pointerId: 1,
+      clientX: 520,
+      clientY: 160,
+    });
+    expect(
+      document.querySelector(".supporting-drag-preview"),
+    ).not.toBeInTheDocument();
+    expect(sourceRow).not.toHaveClass("is-reordering");
+
+    expect(
+      Array.from(document.querySelectorAll(".supporting-editor-row strong"))
+        .map((element) => element.textContent)
+        .slice(0, 2),
+    ).toEqual(["Crew Chief", "SimHub"]);
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(
+      (
+        await bridge.getAppSnapshot()
+      ).selectedProfile?.supportingApplications.map(
+        (supporting) => supporting.application.name,
+      ),
+    ).toEqual(["Crew Chief", "SimHub"]);
+  });
+
   it("shows profile save failures beside the editor save action", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
@@ -895,6 +998,24 @@ describe("Racing Profile behavior", () => {
       screen.getByText("Healthy fixture needs an executable path."),
     ).toBeVisible();
   });
+  it("keeps source and executable controls visible while launch arguments are collapsed", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit profile" }),
+    );
+
+    expect(screen.getByLabelText("Primary Sim source")).toBeVisible();
+    expect(screen.getByLabelText("Primary Sim executable path")).toBeVisible();
+
+    const launchArguments = screen.getByText("Launch Arguments");
+    expect(launchArguments.closest("details")).not.toHaveAttribute("open");
+    await user.click(launchArguments);
+    expect(
+      screen.getByRole("button", { name: "Add Primary Sim argument" }),
+    ).toBeVisible();
+  });
   it("selects an executable through the native file picker instead of requiring a typed path", async () => {
     const user = userEvent.setup();
     const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
@@ -907,7 +1028,6 @@ describe("Racing Profile behavior", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit profile" }),
     );
-    await user.click(screen.getByText("Launch Recipe details"));
     await user.click(
       screen.getByRole("button", {
         name: "Browse for Primary Sim executable",
@@ -930,8 +1050,8 @@ describe("Racing Profile behavior", () => {
       screen.queryByLabelText("Primary Sim monitored process"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/monitor this exact executable automatically/),
-    ).toBeVisible();
+      screen.queryByText(/monitor this exact executable automatically/),
+    ).not.toBeInTheDocument();
   });
   it("groups Primary Sim Steam and runtime details behind compact disclosures", async () => {
     const user = userEvent.setup();
@@ -951,8 +1071,6 @@ describe("Racing Profile behavior", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit profile" }),
     );
-    await user.click(screen.getByText("Launch Recipe details"));
-
     const steamSettings = screen.getByText("Steam launch settings");
     const steamDetails = steamSettings.closest("details");
     const processMatching = screen.getByText("Process matching");
@@ -966,7 +1084,7 @@ describe("Racing Profile behavior", () => {
       !(processDetails instanceof HTMLDetailsElement) ||
       !(runtimeDetails instanceof HTMLDetailsElement)
     ) {
-      throw new Error("Launch Recipe groups should use native disclosures");
+      throw new Error("Launch Settings groups should use native disclosures");
     }
     expect(steamDetails).not.toHaveAttribute("open");
     expect(processDetails).not.toHaveAttribute("open");
@@ -983,7 +1101,7 @@ describe("Racing Profile behavior", () => {
     );
 
     await user.click(runtimeSettings);
-    expect(screen.getByLabelText("Shutdown strategy")).toHaveValue(
+    expect(screen.getByLabelText("Shutdown Method")).toHaveValue(
       "closeWindows",
     );
     expect(
@@ -1007,8 +1125,6 @@ describe("Racing Profile behavior", () => {
     await user.click(
       await screen.findByRole("button", { name: "Edit profile" }),
     );
-    await user.click(screen.getByText("Launch Recipe details"));
-
     expect(screen.getByLabelText("Primary Sim executable path")).toHaveValue(
       String.raw`C:\Fixtures\healthy.exe`,
     );
@@ -1329,11 +1445,13 @@ describe("Racing Profile behavior", () => {
     );
     await user.click(
       screen.getByLabelText(
-        "I reviewed executable paths, arguments, working directories, elevation, monitored executables, and stop recipes.",
+        "I reviewed executable paths, arguments, working directories, elevation, monitored executables, and stop settings.",
       ),
     );
     await user.click(
-      screen.getByLabelText(/Approve privileged recipe for Automobilista 2/),
+      screen.getByLabelText(
+        /Approve privileged launch settings for Automobilista 2/,
+      ),
     );
     await user.click(
       screen.getByRole("button", { name: "Save and approve profile" }),

@@ -510,16 +510,6 @@
   grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.28fr);
 }
 
-.recipe-derived-details {
-  margin: 14px 0 0;
-  padding: 10px 12px;
-  border-left: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .recipe-subsection {
   margin-top: 14px;
   border-top: 1px solid var(--border);

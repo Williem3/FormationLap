@@ -890,6 +890,15 @@ describe("Racing Profile behavior", () => {
     if (!(sourceRow instanceof HTMLElement)) {
       throw new Error("SimHub should be contained in its editor row");
     }
+    expect(sourceRow.querySelector(".requirement-chip")).toHaveTextContent(
+      "Required",
+    );
+    expect(
+      within(sourceRow).queryByText("Required application"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sourceRow).queryByText("Optional application"),
+    ).not.toBeInTheDocument();
     vi.spyOn(sourceRow, "getBoundingClientRect").mockReturnValue({
       bottom: 120,
       height: 58,
@@ -1039,8 +1048,8 @@ describe("Racing Profile behavior", () => {
       screen.queryByLabelText("Primary Sim monitored process"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/monitor this exact executable automatically/),
-    ).toBeVisible();
+      screen.queryByText(/monitor this exact executable automatically/),
+    ).not.toBeInTheDocument();
   });
   it("groups Primary Sim Steam and runtime details behind compact disclosures", async () => {
     const user = userEvent.setup();

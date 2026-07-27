@@ -655,11 +655,6 @@ export function ProfileEditor({
                           <strong>
                             {supportingApplication.application.name}
                           </strong>
-                          <small>
-                            {supportingApplication.requirement === "required"
-                              ? "Required application"
-                              : "Optional application"}
-                          </small>
                         </span>
                       </button>
                       <span className="requirement-chip">
@@ -878,11 +873,6 @@ export function ProfileEditor({
             </span>
             <span className="supporting-editor-toggle-copy">
               <strong>{previewSupportingApplication.application.name}</strong>
-              <small>
-                {previewSupportingApplication.requirement === "required"
-                  ? "Required application"
-                  : "Optional application"}
-              </small>
             </span>
             <span className="requirement-chip">
               {previewSupportingApplication.requirement === "required"
@@ -1099,7 +1089,7 @@ function ApplicationRecipeFields({
           </div>
         </details>
       )}
-      {source.kind === "steam" ? (
+      {source.kind === "steam" && (
         <details className="recipe-subsection">
           <summary>Process matching</summary>
           <div className="recipe-subsection-content">
@@ -1167,11 +1157,6 @@ function ApplicationRecipeFields({
             </label>
           </div>
         </details>
-      ) : (
-        <p className="recipe-derived-details">
-          Formation Lap will launch from this executable&apos;s folder and
-          monitor this exact executable automatically.
-        </p>
       )}
       <details className="recipe-subsection recipe-runtime-settings">
         <summary>Shutdown and advanced launch settings</summary>

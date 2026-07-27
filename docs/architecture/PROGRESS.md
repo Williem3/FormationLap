@@ -36,11 +36,10 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- Profile Editor launch-settings wording and layout is complete. Source and
-  executable path remain visible above the collapsed Launch Arguments
-  disclosure; user-facing Recipe labels now use Launch Settings, and the
-  application field labels use Application Name, Launch Requirement, and
-  Shutdown Method. There is no active implementation file scope.
+- Profile Editor row-copy cleanup is complete. The redundant direct-launch
+  helper footer and repeated Required/Optional subtitle are removed; the
+  requirement chip remains the single row-level indicator. There is no active
+  implementation file scope.
 
 - The installed-preview elevated-launch bugfix is complete: preview and signed
   release workflows now build with the release bundle configuration before
@@ -341,6 +340,8 @@ logs.
 | 2026-07-26 | Codex `/root` | M10 | Reworked Supporting Application dragging into a live sortable interaction: the pointer-anchored lifted row leaves a placeholder and reorders the Startup Sequence on hover before release | Focused React live-sort regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the sortable interaction. External signed Beta and Windows qualification remain the next M10 action |
 
 | 2026-07-26 | Codex `/root` | M10 | Kept source and executable-path controls visible in Profile Editor, placed only launch arguments in a collapsed disclosure, renamed user-facing Recipe wording to Launch Settings, and retained the requested application labels | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the Profile Editor wording and layout. The existing untracked `target-codex-icons/` cache remains excluded |
+
+| 2026-07-26 | Codex `/root` | M10 | Removed the redundant direct-launch helper footer and Required/Optional subtitle from Supporting Application rows and their lifted drag preview, retaining the requirement chip as the single indicator | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the cleaner rows. The existing untracked `target-codex-icons/` cache remains excluded |
 
 ## Handoff entry template
 

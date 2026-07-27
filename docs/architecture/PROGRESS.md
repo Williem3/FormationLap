@@ -36,14 +36,18 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- The installed `0.9.0-preview.5` preview’s helper matches its sealed release
-  identity but its main executable does not. Both release workflows now let
-  Tauri normalize executable bundle metadata before sealing the identity, and
-  `Cancel Startup` completes synchronously when cleanup has no remaining work.
-  The authorized `0.9.0-preview.6` candidate is in progress. File scope:
-  synchronized package/Rust/Tauri versions, preview artifact contracts,
-  release notes, README install guidance, and this ledger. The candidate will
-  be published only after local and hosted release gates pass.
+- The installed `0.9.0-preview.6` preview proves two release-critical defects:
+  its helper SHA-256 matches the sealed identity while the installed main
+  executable SHA-256 does not, and a rejected `Start Session` command leaves
+  the Dashboard rendering the old snapshot until navigation fetches a newer
+  one. Current behavior slice: refresh the authoritative snapshot after a
+  rejected Session action and seal/repackage release identity against the
+  exact installed executable bytes. File scope: Dashboard controller/tests,
+  release workflows/contracts, release-identity packaging support, version and
+  release notes, and this ledger. The user has authorized a new prerelease
+  after the focused regressions and release gates pass. The `0.9.0-preview.7`
+  candidate is verified locally and awaits commit, review, merge, immutable
+  tagging, protected preview publication, and independent artifact inspection.
 
 - The authorized `0.9.0-preview.5` updater fix-forward publication is
   complete. PR
@@ -462,3 +466,4 @@ When blocked:
 | 2026-07-27 | Codex `/root` | M10 | Merged updater fix PR [#8](https://github.com/Williem3/FormationLap/pull/8), created immutable `v0.9.0-preview.5` at `a9e822f`, and published [Formation Lap 0.9.0-preview.5](https://github.com/Williem3/FormationLap/releases/tag/v0.9.0-preview.5) as a disclosed unsigned prerelease | [Preview run 30288482761](https://github.com/Williem3/FormationLap/actions/runs/30288482761) passed repository, RustSec, release-identity, bundle, updater-signing, SBOM, checksum, artifact-contract, attestation, and publication steps; independent downloads passed the exact eight-asset contract, SHA-256 verification, updater URL/signature metadata, all provenance attestations bound to the tag/commit/run, and expected `NotSigned` Authenticode status | Existing `.4` users must install `.5` manually once because `.4` contains the launch defect. Qualify the corrected in-app path against a separately authorized version newer than `.5`; external signed Beta and Windows 10/11 qualification remain the next M10 action. The pre-existing `target-codex-icons/` cache remains excluded |
 | 2026-07-27 | Codex `/root` | M10 | Diagnosed the installed `.5` release-identity failure: its helper hash matches but its main executable hash differs after Tauri bundle metadata normalization; release workflows now normalize before sealing, and cancellation completes without a later Process refresh | Red/green workflow and Session tests; `pnpm.cmd format`, `pnpm.cmd test:release` (29), `pnpm.cmd lint`, `pnpm.cmd typecheck`, `cargo test --all-features`, `cargo clippy --all-targets --all-features -- -D warnings`, and `git diff --check` passed | Immutable `.5` remains affected. Authorize a new preview/release, publish it, install it manually, and verify an elevated Session; external signed Beta and Windows qualification remain the next M10 action |
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.6` fix-forward candidate with synchronized versions, unsigned-preview disclosure, release notes, and installer guidance | `pnpm.cmd verify` (52 React, 3 accessibility, 29 release contracts, version/generated-binding/catalog/capability checks), Rust format, all-target/all-feature Clippy, all-target/all-feature Rust tests, and diff checks passed | Commit, refresh `origin/master`, merge, tag immutable `v0.9.0-preview.6`, dispatch the protected preview workflow, then independently verify installer identity, checksums, updater signature, assets, and provenance |
+| 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.7` fix-forward: rejected Session commands now refresh the Dashboard snapshot, release identity is sealed before the bundle mutates its build artifact, and both release workflows install and hash-verify their own installer before publication | Red/green Dashboard and release-workflow regressions; extracted published `.6` installer proved manifest `9b9f…` disagreed with packaged main `ee228…` while helper matched; local release-config extraction proved the corrected pre-bundle hash equals the installer payload; `pnpm.cmd verify` (53 React, 3 accessibility, 30 release contracts), Rust format, all-target/all-feature Clippy, serial all-target/all-feature Rust tests, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.7`, dispatch the protected preview workflow, then independently verify installed identity, checksums, updater signature, assets, and provenance |

@@ -124,15 +124,6 @@ jobs:
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
 
-      - name: Normalize Tauri executable metadata before sealing release identity
-        shell: pwsh
-        env:
-          FORMATION_LAP_RELEASE_CHANNEL: preview
-          FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-        run: >-
-          pnpm tauri bundle --bundles nsis --config src-tauri/tauri.release-bundle.conf.json --no-sign --ci
-
       - name: Clear release identity bootstrap
         shell: pwsh
         run: >-
@@ -169,6 +160,21 @@ jobs:
             throw "Expected exactly one NSIS installer."
           }
           "installer=$($installers[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Verify the installed preview release identity
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.bundle.outputs.installer }}
+        run: |
+          $installation = Join-Path $env:RUNNER_TEMP "formation-lap-preview-identity"
+          & $env:INSTALLER /S "/D=$installation"
+          if ($LASTEXITCODE -ne 0) {
+            throw "The preview installer could not be verified in a temporary installation."
+          }
+          $main = Join-Path $installation "formation-lap.exe"
+          $helper = Join-Path $installation "formation-lap-elevated-helper.exe"
+          $manifest = Join-Path $installation "formation-lap-release-identity.json"
+          node scripts/release/verify-release-identity-layout.mjs --main $main --helper $helper --manifest $manifest
 
       - name: Prepare named installer and unsigned-preview disclosure
         id: prepared

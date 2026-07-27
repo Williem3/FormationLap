@@ -167,6 +167,7 @@ jobs:
           INSTALLER: ${{ steps.bundle.outputs.installer }}
         run: |
           $installation = Join-Path $env:RUNNER_TEMP "formation-lap-preview-identity"
+          New-Item -ItemType Directory -Force -Path $installation | Out-Null
           & $env:INSTALLER /S "/D=$installation"
           if ($LASTEXITCODE -ne 0) {
             throw "The preview installer could not be verified in a temporary installation."

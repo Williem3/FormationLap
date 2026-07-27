@@ -153,6 +153,8 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
     preview,
     /New-Item -ItemType Directory -Force -Path \$installation/,
   );
+  assert.match(preview, /7-Zip\\7z\.exe/);
+  assert.match(preview, /& \$sevenZip x -y/);
   assert.match(preview, /manage-release-identity-resource\.mjs/);
   assert.match(preview, /formation-lap-release-identity\.payload/);
   assert.match(preview, /formation-lap-release-identity\.json/);

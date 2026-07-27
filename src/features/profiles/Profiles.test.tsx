@@ -930,6 +930,7 @@ describe("Racing Profile behavior", () => {
       clientX: 520,
       clientY: 160,
     });
+    expect(sourceRow).toHaveClass("is-reordering");
     const dragPreview = document.querySelector(".supporting-drag-preview");
     expect(dragPreview).toHaveTextContent("SimHub");
     expect(dragPreview?.parentElement).toBe(document.body);
@@ -949,6 +950,7 @@ describe("Racing Profile behavior", () => {
     expect(
       document.querySelector(".supporting-drag-preview"),
     ).not.toBeInTheDocument();
+    expect(sourceRow).not.toHaveClass("is-reordering");
 
     expect(
       Array.from(document.querySelectorAll(".supporting-editor-row strong"))

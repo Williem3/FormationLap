@@ -178,7 +178,7 @@
 }
 
 .supporting-editor-row.is-reordering .supporting-row-heading {
-  opacity: 0;
+  opacity: 0.38;
 }
 
 .supporting-editor-row.is-reordering .supporting-editor-content {

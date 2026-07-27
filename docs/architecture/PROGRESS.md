@@ -36,9 +36,9 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- Profile Editor row-copy cleanup is complete. The redundant direct-launch
-  helper footer and repeated Required/Optional subtitle are removed; the
-  requirement chip remains the single row-level indicator. There is no active
+- Profile Editor drag-placeholder polish is complete. The currently lifted
+  Supporting Application row remains visible at reduced opacity while the
+  full-row drag preview and insertion marker remain intact. There is no active
   implementation file scope.
 
 - The installed-preview elevated-launch bugfix is complete: preview and signed
@@ -342,6 +342,8 @@ logs.
 | 2026-07-26 | Codex `/root` | M10 | Kept source and executable-path controls visible in Profile Editor, placed only launch arguments in a collapsed disclosure, renamed user-facing Recipe wording to Launch Settings, and retained the requested application labels | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the Profile Editor wording and layout. The existing untracked `target-codex-icons/` cache remains excluded |
 
 | 2026-07-26 | Codex `/root` | M10 | Removed the redundant direct-launch helper footer and Required/Optional subtitle from Supporting Application rows and their lifted drag preview, retaining the requirement chip as the single indicator | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the cleaner rows. The existing untracked `target-codex-icons/` cache remains excluded |
+
+| 2026-07-26 | Codex `/root` | M10 | Kept the original Supporting Application row visible at reduced opacity while its full-row drag preview is lifted and reorders live | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the drag-placeholder polish. The existing untracked `target-codex-icons/` cache remains excluded |
 
 ## Handoff entry template
 

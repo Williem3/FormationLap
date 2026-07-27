@@ -1,4 +1,10 @@
-import { useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   AppSnapshot,
@@ -67,6 +73,38 @@ export function ProfileEditor({
     approvedPrivilegedApplicationIds,
     setApprovedPrivilegedApplicationIds,
   ] = useState<string[]>([]);
+  const clearSupportingApplicationReorder = useCallback(
+    (pointerId?: number) => {
+      if (
+        pointerId !== undefined &&
+        activeReorderPointerId.current !== pointerId
+      ) {
+        return;
+      }
+      activeReorderPointerId.current = null;
+      lastReorderTarget.current = null;
+      setDraggedSupportingApplicationId(null);
+      setDragPreview(null);
+      setDropTarget(null);
+    },
+    [],
+  );
+  useEffect(() => {
+    const clearOnPointerEnd = (event: PointerEvent) => {
+      clearSupportingApplicationReorder(event.pointerId);
+    };
+    const clearOnWindowBlur = () => {
+      clearSupportingApplicationReorder();
+    };
+    window.addEventListener("pointerup", clearOnPointerEnd);
+    window.addEventListener("pointercancel", clearOnPointerEnd);
+    window.addEventListener("blur", clearOnWindowBlur);
+    return () => {
+      window.removeEventListener("pointerup", clearOnPointerEnd);
+      window.removeEventListener("pointercancel", clearOnPointerEnd);
+      window.removeEventListener("blur", clearOnWindowBlur);
+    };
+  }, [clearSupportingApplicationReorder]);
   const profileApplications = [
     profile.primarySim,
     ...profile.supportingApplications.map(
@@ -585,26 +623,16 @@ export function ProfileEditor({
                           );
                         }}
                         onPointerUp={(event) => {
-                          if (
-                            activeReorderPointerId.current !== event.pointerId
-                          ) {
-                            return;
-                          }
                           event.currentTarget.releasePointerCapture?.(
                             event.pointerId,
                           );
-                          activeReorderPointerId.current = null;
-                          lastReorderTarget.current = null;
-                          setDraggedSupportingApplicationId(null);
-                          setDragPreview(null);
-                          setDropTarget(null);
+                          clearSupportingApplicationReorder(event.pointerId);
                         }}
-                        onPointerCancel={() => {
-                          activeReorderPointerId.current = null;
-                          lastReorderTarget.current = null;
-                          setDraggedSupportingApplicationId(null);
-                          setDragPreview(null);
-                          setDropTarget(null);
+                        onPointerCancel={(event) => {
+                          clearSupportingApplicationReorder(event.pointerId);
+                        }}
+                        onLostPointerCapture={(event) => {
+                          clearSupportingApplicationReorder(event.pointerId);
                         }}
                         onKeyDown={(event) => {
                           if (event.key === "ArrowUp" && index > 0) {

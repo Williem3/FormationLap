@@ -855,7 +855,7 @@ describe("Racing Profile behavior", () => {
       "SimHub draft",
     );
   });
-  it("reorders Supporting Applications by dragging the six-dot handle", async () => {
+  it("reorders Supporting Applications by dragging the six-dot handle and clears a release away from it", async () => {
     const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();
     snapshot.selectedProfile!.supportingApplications = [
@@ -942,7 +942,7 @@ describe("Racing Profile behavior", () => {
         .map((element) => element.textContent)
         .slice(0, 2),
     ).toEqual(["Crew Chief", "SimHub"]);
-    fireEvent.pointerUp(sourceHandle, {
+    fireEvent.pointerUp(document, {
       pointerId: 1,
       clientX: 520,
       clientY: 160,

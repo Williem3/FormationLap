@@ -149,6 +149,10 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
     /FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY:\s*\$\{\{ vars\.FORMATION_LAP_UPDATE_PUBLIC_KEY \}\}/,
   );
   assert.match(preview, /generate-release-identity\.mjs/);
+  assert.match(
+    preview,
+    /New-Item -ItemType Directory -Force -Path \$installation/,
+  );
   assert.match(preview, /manage-release-identity-resource\.mjs/);
   assert.match(preview, /formation-lap-release-identity\.payload/);
   assert.match(preview, /formation-lap-release-identity\.json/);

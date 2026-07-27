@@ -298,8 +298,8 @@ export function Dashboard({
                 </h2>
                 <span>
                   Session start stays blocked until paths, arguments, working
-                  directories, elevation, monitored executables, and stop
-                  recipes are reviewed.
+                  directories, elevation, monitored executables, and stop launch
+                  settings are reviewed.
                 </span>
               </div>
               <button

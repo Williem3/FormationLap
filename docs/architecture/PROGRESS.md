@@ -36,10 +36,11 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- Supporting Application sortable-drag interaction is complete. The Profile
-  Editor lifts the complete row into a pointer-anchored preview, retains a
-  placeholder in the Startup Sequence, and reorders the list live while the
-  pointer hovers. There is no active implementation file scope.
+- Profile Editor launch-settings wording and layout is complete. Source and
+  executable path remain visible above the collapsed Launch Arguments
+  disclosure; user-facing Recipe labels now use Launch Settings, and the
+  application field labels use Application Name, Launch Requirement, and
+  Shutdown Method. There is no active implementation file scope.
 
 - The installed-preview elevated-launch bugfix is complete: preview and signed
   release workflows now build with the release bundle configuration before
@@ -338,6 +339,8 @@ logs.
 | 2026-07-26 | Codex `/root` | M10 | Portaled the fixed-position Supporting Application drag preview to `document.body`, preventing transformed workspace layout from double-offsetting it from its measured source-row coordinates | Focused React portal/alignment regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the portal repair. External signed Beta and Windows qualification remain the next M10 action |
 
 | 2026-07-26 | Codex `/root` | M10 | Reworked Supporting Application dragging into a live sortable interaction: the pointer-anchored lifted row leaves a placeholder and reorders the Startup Sequence on hover before release | Focused React live-sort regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the sortable interaction. External signed Beta and Windows qualification remain the next M10 action |
+
+| 2026-07-26 | Codex `/root` | M10 | Kept source and executable-path controls visible in Profile Editor, placed only launch arguments in a collapsed disclosure, renamed user-facing Recipe wording to Launch Settings, and retained the requested application labels | Focused React profile tests (50), TypeScript typecheck, focused source ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the Profile Editor wording and layout. The existing untracked `target-codex-icons/` cache remains excluded |
 
 ## Handoff entry template
 

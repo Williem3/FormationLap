@@ -308,7 +308,7 @@ export function ProfileEditor({
                 <span>
                   <strong>
                     I reviewed executable paths, arguments, working directories,
-                    elevation, monitored executables, and stop recipes.
+                    elevation, monitored executables, and stop settings.
                   </strong>
                 </span>
               </label>
@@ -333,7 +333,7 @@ export function ProfileEditor({
                   />
                   <span>
                     <strong>
-                      Approve privileged recipe for {application.name}
+                      Approve privileged launch settings for {application.name}
                     </strong>
                     <small>
                       {application.launchRecipe.elevated
@@ -437,7 +437,7 @@ export function ProfileEditor({
           <section className="editor-panel" aria-labelledby="primary-sim-title">
             <div className="editor-panel-heading">
               <p className="eyebrow">Primary Sim</p>
-              <h2 id="primary-sim-title">Game Launch Recipe</h2>
+              <h2 id="primary-sim-title">Game Launch Settings</h2>
             </div>
             <label className="field">
               <span>Primary Sim name</span>
@@ -695,7 +695,7 @@ export function ProfileEditor({
                     {isOpen && (
                       <div className="supporting-editor-content">
                         <label className="field inline-name-field">
-                          <span>Supporting Application {index + 1} name</span>
+                          <span>Application Name</span>
                           <input
                             required
                             value={supportingApplication.application.name}
@@ -712,10 +712,7 @@ export function ProfileEditor({
                         </label>
                         <div className="supporting-policy">
                           <label className="field compact-field">
-                            <span>
-                              Requirement for{" "}
-                              {supportingApplication.application.name}
-                            </span>
+                            <span>Launch Requirement</span>
                             <select
                               value={supportingApplication.requirement}
                               onChange={(event) =>
@@ -733,7 +730,7 @@ export function ProfileEditor({
                             </select>
                           </label>
                           <label className="field compact-field">
-                            <span>Shutdown strategy</span>
+                            <span>Shutdown Method</span>
                             <select
                               value={
                                 supportingApplication.application.launchRecipe
@@ -945,9 +942,8 @@ function ApplicationRecipeFields({
   };
 
   return (
-    <details className="recipe-details">
-      <summary>Launch Recipe details</summary>
-      <div className="recipe-fields">
+    <>
+      <div className="recipe-source-fields">
         <div className="field-grid">
           <label className="field">
             <span>{label} source</span>
@@ -1014,312 +1010,149 @@ function ApplicationRecipeFields({
                     )
                   }
                 >
-                  Browseâ€¦
+                  Browse
                 </button>
               )}
             </div>
           </label>
         </div>
-        {source.kind === "steam" && (
-          <details className="recipe-subsection">
-            <summary>Steam launch settings</summary>
-            <div className="recipe-subsection-content field-grid">
+      </div>
+      <details className="recipe-details">
+        <summary>Launch Arguments</summary>
+        <div className="recipe-fields">
+          <ArgumentList
+            label={`${label} arguments`}
+            arguments={application.launchRecipe.arguments}
+            onChange={(nextArguments) =>
+              update((next) => {
+                next.launchRecipe.arguments = nextArguments;
+              })
+            }
+          />
+        </div>
+      </details>
+      {source.kind === "steam" && (
+        <details className="recipe-subsection">
+          <summary>Steam launch settings</summary>
+          <div className="recipe-subsection-content field-grid">
+            <label className="field compact-field">
+              <span>{label} Steam launch option</span>
+              <select
+                value={source.selector?.kind ?? "curated"}
+                onChange={(event) =>
+                  update((next) => {
+                    const nextSource = next.launchRecipe.source;
+                    if (nextSource.kind !== "steam") {
+                      return;
+                    }
+                    switch (event.currentTarget.value) {
+                      case "default":
+                        nextSource.selector = { kind: "default" };
+                        break;
+                      case "openVr":
+                        nextSource.selector = { kind: "openVr" };
+                        break;
+                      case "oculus":
+                        nextSource.selector = { kind: "oculus" };
+                        break;
+                      case "option":
+                        nextSource.selector = { kind: "option", index: 1 };
+                        break;
+                      default:
+                        nextSource.selector = null;
+                    }
+                  })
+                }
+              >
+                <option value="curated">Use Curated Catalog</option>
+                <option value="default">Default</option>
+                <option value="openVr">OpenVR / SteamVR</option>
+                <option value="oculus">Oculus</option>
+                <option value="option">Numbered launch option</option>
+              </select>
+            </label>
+            {source.selector?.kind === "option" && (
               <label className="field compact-field">
-                <span>{label} Steam launch option</span>
-                <select
-                  value={source.selector?.kind ?? "curated"}
-                  onChange={(event) =>
-                    update((next) => {
-                      const nextSource = next.launchRecipe.source;
-                      if (nextSource.kind !== "steam") {
-                        return;
-                      }
-                      switch (event.currentTarget.value) {
-                        case "default":
-                          nextSource.selector = { kind: "default" };
-                          break;
-                        case "openVr":
-                          nextSource.selector = { kind: "openVr" };
-                          break;
-                        case "oculus":
-                          nextSource.selector = { kind: "oculus" };
-                          break;
-                        case "option":
-                          nextSource.selector = { kind: "option", index: 1 };
-                          break;
-                        default:
-                          nextSource.selector = null;
-                      }
-                    })
-                  }
-                >
-                  <option value="curated">Use Curated Catalog</option>
-                  <option value="default">Default</option>
-                  <option value="openVr">OpenVR / SteamVR</option>
-                  <option value="oculus">Oculus</option>
-                  <option value="option">Numbered launch option</option>
-                </select>
-              </label>
-              {source.selector?.kind === "option" && (
-                <label className="field compact-field">
-                  <span>Launch option index</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="255"
-                    value={source.selector.index}
-                    onChange={(event) =>
-                      update((next) => {
-                        const nextSource = next.launchRecipe.source;
-                        if (
-                          nextSource.kind === "steam" &&
-                          nextSource.selector?.kind === "option"
-                        ) {
-                          nextSource.selector.index = Math.min(
-                            255,
-                            Math.max(0, event.currentTarget.valueAsNumber || 0),
-                          );
-                        }
-                      })
-                    }
-                  />
-                </label>
-              )}
-            </div>
-          </details>
-        )}
-        <ArgumentList
-          label={`${label} arguments`}
-          arguments={application.launchRecipe.arguments}
-          onChange={(nextArguments) =>
-            update((next) => {
-              next.launchRecipe.arguments = nextArguments;
-            })
-          }
-        />
-        {source.kind === "steam" ? (
-          <details className="recipe-subsection">
-            <summary>Process matching</summary>
-            <div className="recipe-subsection-content">
-              <div className="field-grid">
-                <label className="field compact-field">
-                  <span>{label} working directory</span>
-                  <input
-                    value={application.launchRecipe.workingDirectory ?? ""}
-                    onChange={(event) =>
-                      update((next) => {
-                        next.launchRecipe.workingDirectory =
-                          event.currentTarget.value || null;
-                      })
-                    }
-                  />
-                </label>
-                <label className="field compact-field">
-                  <span>{label} monitored process</span>
-                  <input
-                    value={application.launchRecipe.monitoredProcess ?? ""}
-                    onChange={(event) =>
-                      update((next) => {
-                        next.launchRecipe.monitoredProcess =
-                          event.currentTarget.value || null;
-                        next.launchRecipe.monitoredExecutablePath = null;
-                      })
-                    }
-                  />
-                </label>
-              </div>
-              <label className="field">
-                <span>{label} monitored executable path</span>
-                <div className="path-input">
-                  <input
-                    value={displayWindowsPath(
-                      application.launchRecipe.monitoredExecutablePath ?? "",
-                    )}
-                    onChange={(event) =>
-                      update((next) => {
-                        next.launchRecipe.monitoredExecutablePath =
-                          event.currentTarget.value || null;
-                      })
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="secondary-button path-browse-button"
-                    aria-label={`Browse for ${label} monitored executable`}
-                    onClick={() =>
-                      void selectExecutable(
-                        application.launchRecipe.monitoredExecutablePath ??
-                          null,
-                        (next, path) => {
-                          next.launchRecipe.monitoredExecutablePath = path;
-                        },
-                      )
-                    }
-                  >
-                    Browseâ€¦
-                  </button>
-                </div>
-                <small>
-                  Required before a launcher-discovered process can be
-                  Session-owned. Test Game Launch can learn this path for
-                  review.
-                </small>
-              </label>
-            </div>
-          </details>
-        ) : (
-          <p className="recipe-derived-details">
-            Formation Lap will launch from this executable&apos;s folder and
-            monitor this exact executable automatically.
-          </p>
-        )}
-        <details className="recipe-subsection recipe-runtime-settings">
-          <summary>Shutdown and advanced launch settings</summary>
-          <div className="recipe-subsection-content">
-            {includeShutdownStrategy && (
-              <label className="field recipe-shutdown-field">
-                <span>Shutdown strategy</span>
-                <select
-                  value={shutdown.kind}
-                  onChange={(event) =>
-                    update((next) => {
-                      switch (event.currentTarget.value) {
-                        case "consoleInterrupt":
-                          next.launchRecipe.shutdownStrategy = {
-                            kind: "consoleInterrupt",
-                          };
-                          break;
-                        case "customStop":
-                          next.launchRecipe.shutdownStrategy = {
-                            kind: "customStop",
-                            executablePath: "",
-                            arguments: [],
-                          };
-                          break;
-                        case "forceOnly":
-                          next.launchRecipe.shutdownStrategy = {
-                            kind: "forceOnly",
-                          };
-                          break;
-                        default:
-                          next.launchRecipe.shutdownStrategy = {
-                            kind: "closeWindows",
-                          };
-                      }
-                    })
-                  }
-                >
-                  <option value="closeWindows">Close windows</option>
-                  <option value="consoleInterrupt">Console interrupt</option>
-                  <option value="customStop">Custom stop executable</option>
-                  <option value="forceOnly">No graceful strategy</option>
-                </select>
-              </label>
-            )}
-            <div className="recipe-launch-flags">
-              <label className="check-row compact-check">
-                <input
-                  type="checkbox"
-                  checked={application.launchRecipe.elevated}
-                  onChange={(event) =>
-                    update((next) => {
-                      next.launchRecipe.elevated = event.currentTarget.checked;
-                    })
-                  }
-                />
-                <span>
-                  <strong>Launch elevated</strong>
-                  <small>
-                    Uses the one-shot helper when elevation is required.
-                  </small>
-                </span>
-              </label>
-            </div>
-            <div className="recipe-number-grid">
-              <label className="field compact-field">
-                <span>Startup timeout · seconds</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={application.launchRecipe.startupTimeoutSeconds}
-                  onChange={(event) =>
-                    update((next) => {
-                      next.launchRecipe.startupTimeoutSeconds =
-                        event.currentTarget.valueAsNumber || 30;
-                    })
-                  }
-                />
-              </label>
-              <label className="field compact-field">
-                <span>Post-start delay · ms</span>
+                <span>Launch option index</span>
                 <input
                   type="number"
                   min="0"
-                  value={application.launchRecipe.postStartDelayMilliseconds}
+                  max="255"
+                  value={source.selector.index}
                   onChange={(event) =>
                     update((next) => {
-                      next.launchRecipe.postStartDelayMilliseconds =
-                        event.currentTarget.valueAsNumber || 0;
+                      const nextSource = next.launchRecipe.source;
+                      if (
+                        nextSource.kind === "steam" &&
+                        nextSource.selector?.kind === "option"
+                      ) {
+                        nextSource.selector.index = Math.min(
+                          255,
+                          Math.max(0, event.currentTarget.valueAsNumber || 0),
+                        );
+                      }
                     })
                   }
                 />
               </label>
-              <label className="check-row compact-check">
-                <input
-                  type="checkbox"
-                  aria-label="Hide console"
-                  checked={
-                    application.launchRecipe.consoleVisibility === "hidden"
-                  }
-                  onChange={(event) =>
-                    update((next) => {
-                      next.launchRecipe.consoleVisibility = event.currentTarget
-                        .checked
-                        ? "hidden"
-                        : "visible";
-                    })
-                  }
-                />
-                <span>
-                  <strong>Hide console</strong>
-                  <small>
-                    Keep a console window out of the way while it runs.
-                  </small>
-                </span>
-              </label>
-            </div>
+            )}
           </div>
         </details>
-        {shutdown.kind === "customStop" && (
-          <div className="field-grid">
-            <label className="field">
-              <span>Stop executable path</span>
-              <div className="path-input">
+      )}
+      {source.kind === "steam" ? (
+        <details className="recipe-subsection">
+          <summary>Process matching</summary>
+          <div className="recipe-subsection-content">
+            <div className="field-grid">
+              <label className="field compact-field">
+                <span>{label} working directory</span>
                 <input
-                  value={displayWindowsPath(shutdown.executablePath)}
+                  value={application.launchRecipe.workingDirectory ?? ""}
                   onChange={(event) =>
                     update((next) => {
-                      const nextShutdown = next.launchRecipe.shutdownStrategy;
-                      if (nextShutdown.kind === "customStop") {
-                        nextShutdown.executablePath = event.currentTarget.value;
-                      }
+                      next.launchRecipe.workingDirectory =
+                        event.currentTarget.value || null;
+                    })
+                  }
+                />
+              </label>
+              <label className="field compact-field">
+                <span>{label} monitored process</span>
+                <input
+                  value={application.launchRecipe.monitoredProcess ?? ""}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.launchRecipe.monitoredProcess =
+                        event.currentTarget.value || null;
+                      next.launchRecipe.monitoredExecutablePath = null;
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>{label} monitored executable path</span>
+              <div className="path-input">
+                <input
+                  value={displayWindowsPath(
+                    application.launchRecipe.monitoredExecutablePath ?? "",
+                  )}
+                  onChange={(event) =>
+                    update((next) => {
+                      next.launchRecipe.monitoredExecutablePath =
+                        event.currentTarget.value || null;
                     })
                   }
                 />
                 <button
                   type="button"
                   className="secondary-button path-browse-button"
-                  aria-label={`Browse for ${label} stop executable`}
+                  aria-label={`Browse for ${label} monitored executable`}
                   onClick={() =>
                     void selectExecutable(
-                      shutdown.kind === "customStop"
-                        ? shutdown.executablePath
-                        : null,
+                      application.launchRecipe.monitoredExecutablePath ?? null,
                       (next, path) => {
-                        const nextShutdown = next.launchRecipe.shutdownStrategy;
-                        if (nextShutdown.kind === "customStop") {
-                          nextShutdown.executablePath = path;
-                        }
+                        next.launchRecipe.monitoredExecutablePath = path;
                       },
                     )
                   }
@@ -1327,23 +1160,189 @@ function ApplicationRecipeFields({
                   Browseâ€¦
                 </button>
               </div>
+              <small>
+                Required before a launcher-discovered process can be
+                Session-owned. Test Game Launch can learn this path for review.
+              </small>
             </label>
-            <ArgumentList
-              label="Stop arguments"
-              arguments={shutdown.arguments}
-              onChange={(nextArguments) =>
-                update((next) => {
-                  const nextShutdown = next.launchRecipe.shutdownStrategy;
-                  if (nextShutdown.kind === "customStop") {
-                    nextShutdown.arguments = nextArguments;
-                  }
-                })
-              }
-            />
           </div>
-        )}
-      </div>
-    </details>
+        </details>
+      ) : (
+        <p className="recipe-derived-details">
+          Formation Lap will launch from this executable&apos;s folder and
+          monitor this exact executable automatically.
+        </p>
+      )}
+      <details className="recipe-subsection recipe-runtime-settings">
+        <summary>Shutdown and advanced launch settings</summary>
+        <div className="recipe-subsection-content">
+          {includeShutdownStrategy && (
+            <label className="field recipe-shutdown-field">
+              <span>Shutdown Method</span>
+              <select
+                value={shutdown.kind}
+                onChange={(event) =>
+                  update((next) => {
+                    switch (event.currentTarget.value) {
+                      case "consoleInterrupt":
+                        next.launchRecipe.shutdownStrategy = {
+                          kind: "consoleInterrupt",
+                        };
+                        break;
+                      case "customStop":
+                        next.launchRecipe.shutdownStrategy = {
+                          kind: "customStop",
+                          executablePath: "",
+                          arguments: [],
+                        };
+                        break;
+                      case "forceOnly":
+                        next.launchRecipe.shutdownStrategy = {
+                          kind: "forceOnly",
+                        };
+                        break;
+                      default:
+                        next.launchRecipe.shutdownStrategy = {
+                          kind: "closeWindows",
+                        };
+                    }
+                  })
+                }
+              >
+                <option value="closeWindows">Close windows</option>
+                <option value="consoleInterrupt">Console interrupt</option>
+                <option value="customStop">Custom stop executable</option>
+                <option value="forceOnly">No graceful strategy</option>
+              </select>
+            </label>
+          )}
+          <div className="recipe-launch-flags">
+            <label className="check-row compact-check">
+              <input
+                type="checkbox"
+                checked={application.launchRecipe.elevated}
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.elevated = event.currentTarget.checked;
+                  })
+                }
+              />
+              <span>
+                <strong>Launch elevated</strong>
+                <small>
+                  Uses the one-shot helper when elevation is required.
+                </small>
+              </span>
+            </label>
+          </div>
+          <div className="recipe-number-grid">
+            <label className="field compact-field">
+              <span>Startup timeout · seconds</span>
+              <input
+                type="number"
+                min="1"
+                value={application.launchRecipe.startupTimeoutSeconds}
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.startupTimeoutSeconds =
+                      event.currentTarget.valueAsNumber || 30;
+                  })
+                }
+              />
+            </label>
+            <label className="field compact-field">
+              <span>Post-start delay · ms</span>
+              <input
+                type="number"
+                min="0"
+                value={application.launchRecipe.postStartDelayMilliseconds}
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.postStartDelayMilliseconds =
+                      event.currentTarget.valueAsNumber || 0;
+                  })
+                }
+              />
+            </label>
+            <label className="check-row compact-check">
+              <input
+                type="checkbox"
+                aria-label="Hide console"
+                checked={
+                  application.launchRecipe.consoleVisibility === "hidden"
+                }
+                onChange={(event) =>
+                  update((next) => {
+                    next.launchRecipe.consoleVisibility = event.currentTarget
+                      .checked
+                      ? "hidden"
+                      : "visible";
+                  })
+                }
+              />
+              <span>
+                <strong>Hide console</strong>
+                <small>
+                  Keep a console window out of the way while it runs.
+                </small>
+              </span>
+            </label>
+          </div>
+        </div>
+      </details>
+      {shutdown.kind === "customStop" && (
+        <div className="field-grid">
+          <label className="field">
+            <span>Stop executable path</span>
+            <div className="path-input">
+              <input
+                value={displayWindowsPath(shutdown.executablePath)}
+                onChange={(event) =>
+                  update((next) => {
+                    const nextShutdown = next.launchRecipe.shutdownStrategy;
+                    if (nextShutdown.kind === "customStop") {
+                      nextShutdown.executablePath = event.currentTarget.value;
+                    }
+                  })
+                }
+              />
+              <button
+                type="button"
+                className="secondary-button path-browse-button"
+                aria-label={`Browse for ${label} stop executable`}
+                onClick={() =>
+                  void selectExecutable(
+                    shutdown.kind === "customStop"
+                      ? shutdown.executablePath
+                      : null,
+                    (next, path) => {
+                      const nextShutdown = next.launchRecipe.shutdownStrategy;
+                      if (nextShutdown.kind === "customStop") {
+                        nextShutdown.executablePath = path;
+                      }
+                    },
+                  )
+                }
+              >
+                Browseâ€¦
+              </button>
+            </div>
+          </label>
+          <ArgumentList
+            label="Stop arguments"
+            arguments={shutdown.arguments}
+            onChange={(nextArguments) =>
+              update((next) => {
+                const nextShutdown = next.launchRecipe.shutdownStrategy;
+                if (nextShutdown.kind === "customStop") {
+                  nextShutdown.arguments = nextArguments;
+                }
+              })
+            }
+          />
+        </div>
+      )}
+    </>
   );
 }
 

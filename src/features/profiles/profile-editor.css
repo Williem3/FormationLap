@@ -506,7 +506,7 @@
   padding-top: 4px;
 }
 
-.recipe-fields > .field-grid:first-of-type {
+.recipe-source-fields > .field-grid {
   grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.28fr);
 }
 

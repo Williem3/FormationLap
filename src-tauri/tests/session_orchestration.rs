@@ -779,10 +779,12 @@ fn cancel_startup_stops_only_attempt_owned_processes_and_never_launches_the_prim
         .expect("Starting should accept Cancel Startup");
 
     assert_eq!(outcome, CommandOutcome::SessionCancellationRequested);
-    assert_eq!(core.snapshot().session.state, SessionState::Cancelling);
+    assert_eq!(
+        core.snapshot().session.state,
+        SessionState::Idle,
+        "cancellation must finish without relying on a later Process refresh"
+    );
 
-    core.execute(AppCommand::RefreshProcesses)
-        .expect("attempt cleanup should finish");
     let snapshot = core.snapshot();
     assert_eq!(snapshot.session.state, SessionState::Idle);
     assert_eq!(snapshot.session.active_profile_id, None);

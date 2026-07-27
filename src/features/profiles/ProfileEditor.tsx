@@ -32,6 +32,7 @@ interface SupportingApplicationDragPreview {
   x: number;
   y: number;
   width: number;
+  grabOffsetX: number;
   grabOffsetY: number;
 }
 
@@ -48,6 +49,7 @@ export function ProfileEditor({
 }: ProfileEditorProps) {
   const nextSupportingApplicationKey = useRef(0);
   const activeReorderPointerId = useRef<number | null>(null);
+  const lastReorderTarget = useRef<string | null>(null);
   const [configurationReviewed, setConfigurationReviewed] = useState(false);
   const [openSupportingApplicationId, setOpenSupportingApplicationId] =
     useState<string | null>(
@@ -528,6 +530,7 @@ export function ProfileEditor({
                           }
                           const bounds = row.getBoundingClientRect();
                           activeReorderPointerId.current = event.pointerId;
+                          lastReorderTarget.current = null;
                           event.currentTarget.setPointerCapture?.(
                             event.pointerId,
                           );
@@ -536,6 +539,7 @@ export function ProfileEditor({
                             x: bounds.left,
                             y: bounds.top,
                             width: bounds.width,
+                            grabOffsetX: event.clientX - bounds.left,
                             grabOffsetY: event.clientY - bounds.top,
                           });
                           setDraggedSupportingApplicationId(
@@ -548,14 +552,33 @@ export function ProfileEditor({
                           ) {
                             return;
                           }
-                          setDropTarget(
-                            dropTargetAt(event.clientX, event.clientY),
+                          const nextDropTarget = dropTargetAt(
+                            event.clientX,
+                            event.clientY,
                           );
+                          setDropTarget(nextDropTarget);
+                          const reorderTargetKey = nextDropTarget
+                            ? `${nextDropTarget.applicationId}:${nextDropTarget.position}`
+                            : null;
+                          if (
+                            nextDropTarget &&
+                            nextDropTarget.applicationId !==
+                              supportingApplication.application.id &&
+                            reorderTargetKey !== lastReorderTarget.current
+                          ) {
+                            reorderSupportingApplications(
+                              supportingApplication.application.id,
+                              nextDropTarget.applicationId,
+                              nextDropTarget.position,
+                            );
+                            lastReorderTarget.current = reorderTargetKey;
+                          }
                           setDragPreview((current) =>
                             current?.applicationId ===
                             supportingApplication.application.id
                               ? {
                                   ...current,
+                                  x: event.clientX - current.grabOffsetX,
                                   y: event.clientY - current.grabOffsetY,
                                 }
                               : current,
@@ -567,27 +590,18 @@ export function ProfileEditor({
                           ) {
                             return;
                           }
-                          const nextDropTarget = dropTargetAt(
-                            event.clientX,
-                            event.clientY,
-                          );
-                          if (nextDropTarget) {
-                            reorderSupportingApplications(
-                              supportingApplication.application.id,
-                              nextDropTarget.applicationId,
-                              nextDropTarget.position,
-                            );
-                          }
                           event.currentTarget.releasePointerCapture?.(
                             event.pointerId,
                           );
                           activeReorderPointerId.current = null;
+                          lastReorderTarget.current = null;
                           setDraggedSupportingApplicationId(null);
                           setDragPreview(null);
                           setDropTarget(null);
                         }}
                         onPointerCancel={() => {
                           activeReorderPointerId.current = null;
+                          lastReorderTarget.current = null;
                           setDraggedSupportingApplicationId(null);
                           setDragPreview(null);
                           setDropTarget(null);

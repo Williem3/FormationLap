@@ -178,7 +178,15 @@
 }
 
 .supporting-editor-row.is-reordering .supporting-row-heading {
-  opacity: 0.4;
+  opacity: 0;
+}
+
+.supporting-editor-row.is-reordering .supporting-editor-content {
+  display: none;
+}
+
+.supporting-editor-row.is-reordering {
+  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
 }
 
 .supporting-drag-preview {

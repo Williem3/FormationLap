@@ -934,8 +934,13 @@ describe("Racing Profile behavior", () => {
     expect(dragPreview).toHaveTextContent("SimHub");
     expect(dragPreview?.parentElement).toBe(document.body);
     expect(dragPreview).toHaveStyle({
-      transform: "translate3d(52px, 131px, 0)",
+      transform: "translate3d(481px, 131px, 0)",
     });
+    expect(
+      Array.from(document.querySelectorAll(".supporting-editor-row strong"))
+        .map((element) => element.textContent)
+        .slice(0, 2),
+    ).toEqual(["Crew Chief", "SimHub"]);
     fireEvent.pointerUp(sourceHandle, {
       pointerId: 1,
       clientX: 520,

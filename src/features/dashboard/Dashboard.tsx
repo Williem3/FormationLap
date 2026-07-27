@@ -213,27 +213,28 @@ export function Dashboard({
         </section>
       )}
 
-      {updates?.formationLap.kind === "updateAvailable" && (
-        <section className="update-notice" role="status">
-          <div>
-            <p className="eyebrow">Verified Formation Lap release</p>
-            <strong>
-              Formation Lap {updates.formationLap.latestVersion} is available
-            </strong>
-            <span>
-              Current {updates.formationLap.currentVersion} · signed installer
-            </span>
-          </div>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={isBusy || sessionState !== "idle"}
-            onClick={onInstallFormationLapUpdate}
-          >
-            Install verified update
-          </button>
-        </section>
-      )}
+      {onlineChecksEnabled &&
+        updates?.formationLap.kind === "updateAvailable" && (
+          <section className="update-notice" role="status">
+            <div>
+              <p className="eyebrow">Verified Formation Lap release</p>
+              <strong>
+                Formation Lap {updates.formationLap.latestVersion} is available
+              </strong>
+              <span>
+                Current {updates.formationLap.currentVersion} · signed installer
+              </span>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isBusy || sessionState !== "idle"}
+              onClick={onInstallFormationLapUpdate}
+            >
+              Install verified update
+            </button>
+          </section>
+        )}
 
       {state.kind === "loading" && (
         <section className="foundation-card" aria-labelledby="foundation-title">

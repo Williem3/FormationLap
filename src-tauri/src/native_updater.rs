@@ -374,8 +374,20 @@ fn stage_verified_installer(bytes: &[u8], version: &str) -> Result<StagedInstall
     fs::create_dir(&directory)
         .map_err(|error| format!("The update staging directory could not be created: {error}"))?;
     let path = directory.join(format!("Formation-Lap_{}_x64-setup.exe", version));
+    {
+        let mut writer = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| format!("The update installer could not be staged: {error}"))?;
+        writer
+            .write_all(bytes)
+            .and_then(|()| writer.sync_all())
+            .map_err(|error| format!("The update installer could not be staged: {error}"))?;
+    }
+
     let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
+    options.read(true);
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -384,10 +396,15 @@ fn stage_verified_installer(bytes: &[u8], version: &str) -> Result<StagedInstall
     }
     let mut file = options
         .open(&path)
-        .map_err(|error| format!("The update installer could not be staged: {error}"))?;
-    file.write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("The update installer could not be staged: {error}"))?;
+        .map_err(|error| format!("The staged update installer could not be secured: {error}"))?;
+    let mut staged_bytes = Vec::with_capacity(bytes.len());
+    file.read_to_end(&mut staged_bytes)
+        .map_err(|error| format!("The staged update installer could not be verified: {error}"))?;
+    if staged_bytes != bytes {
+        drop(file);
+        let _ = fs::remove_dir_all(&directory);
+        return Err("The staged update installer changed before it was secured.".to_owned());
+    }
     Ok(StagedInstaller { file, path })
 }
 
@@ -410,10 +427,10 @@ fn launch_installer(installer: &StagedInstaller) -> Result<(), String> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect::<Vec<_>>();
-    // Keep the verified staging handle open with read-only sharing until
+    // Keep the verified read-only staging handle open until
     // ShellExecute has created the installer Process. This closes the
-    // verification-to-launch replacement window while still allowing Windows
-    // to map the executable.
+    // verification-to-launch replacement window while allowing Windows to map
+    // the executable.
     let _verified_file = &installer.file;
     // SAFETY: All strings are stable, null-terminated UTF-16 values for the
     // duration of the call. The file and directory arguments are fixed local
@@ -654,6 +671,32 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
         ] {
             assert!(validate_redirect_url(&Url::parse(denied).unwrap()).is_err());
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verified_staging_handle_allows_windows_to_open_the_installer_for_execution() {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_DELETE, FILE_SHARE_READ};
+
+        let installer = stage_verified_installer(b"MZ verified fixture", "1.2.3")
+            .expect("verified fixture should stage");
+        let mut executable_open = OpenOptions::new();
+        executable_open
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE);
+
+        executable_open
+            .open(&installer.path)
+            .expect("the retained staging handle must permit Windows to map the installer");
+
+        let directory = installer
+            .path
+            .parent()
+            .expect("staged installer should have a parent")
+            .to_path_buf();
+        drop(installer);
+        fs::remove_dir_all(directory).expect("test staging directory should be removable");
     }
 
     #[cfg(windows)]

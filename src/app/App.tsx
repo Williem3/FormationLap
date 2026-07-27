@@ -155,11 +155,12 @@ export function App({ bridge }: AppProps) {
   });
   const applicationName = snapshot?.applicationName ?? "Formation Lap";
   const {
-    isSaving: settingsIsSaving,
+    activity: settingsActivity,
     error: settingsError,
     clearError: clearSettingsError,
     updateDesktopSettings,
     checkUpdates,
+    installFormationLapUpdate: installFormationLapUpdateFromSettings,
   } = useSettingsController({
     bridge,
     onSnapshotChanged: (nextSnapshot) =>
@@ -393,10 +394,13 @@ export function App({ bridge }: AppProps) {
             settings={state.snapshot.settings}
             updates={state.snapshot.updates}
             sessionState={state.snapshot.session.state}
-            isSaving={settingsIsSaving}
+            activity={settingsActivity}
             error={settingsError}
             onChange={(settings) => void updateDesktopSettings(settings)}
             onCheckUpdates={() => void checkUpdates()}
+            onInstallFormationLapUpdate={() =>
+              void installFormationLapUpdateFromSettings()
+            }
             onOpenDiagnostics={() => void openDiagnostics()}
             onQuit={() => {
               setIsQuitOpen(true);

@@ -36,6 +36,24 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- The `0.9.0-preview.5` fix-forward candidate is verified and awaiting its
+  authorized branch/PR/tag/workflow publication. Settings exposes the native
+  Formation Lap Unknown reason, and the preview version,
+  disclosure-complete notes, installer guidance, and release contracts are
+  synchronized. File scope: `src/features/settings/`, version metadata and
+  lockfiles, `docs/releases/0.9.0-preview.5.md`, release guidance/contracts,
+  M9/M10 evidence, and this ledger. The pre-existing
+  `target-codex-icons/` cache remains excluded.
+- The Settings self-update bugfix is complete. Manual results expose the
+  first-party install action beside Check now, the Dashboard banner appears
+  only when automatic checks are enabled, and both surfaces preserve native
+  failure/recovery details. The updater replaces its write-capable staging
+  handle with a byte-reverified read-only handle that Windows can execute while
+  still preventing path replacement. There is no active implementation file
+  scope. Published `0.9.0-preview.4` predates this fix, so one new explicitly
+  authorized build must be installed manually before later in-app updates can
+  exercise the corrected path. The pre-existing `target-codex-icons/` cache
+  remains excluded.
 - The authorized `0.9.0-preview.4` fix-forward publication is complete. The
   immutable `v0.9.0-preview.3` workflow failed before signing or publication;
   `.4` bootstraps only the release-config build, replaces that resource with
@@ -426,3 +444,5 @@ When blocked:
 | 2026-07-26 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.3` candidate with synchronized package/Tauri/Cargo versions, disclosure-complete notes, updated installer guidance, and exact preview artifact contracts | Red/green candidate contract; frozen install; format; lint excluding only the pre-existing untracked cache; typecheck; 50 React, 3 accessibility, and 27 release tests; generated bindings, catalog, capability, Rust format, all-target/all-feature Clippy and tests; live npm/RustSec audits; debug native build; and diff checks passed | Commit the reviewed candidate, refresh `origin/master`, integrate and push the candidate, create immutable tag `v0.9.0-preview.3`, dispatch the protected preview workflow, and independently verify every published artifact |
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.4` fix-forward after immutable `.3` failed before publication: both release workflows now create an exact one-use bootstrap identity resource for the release-config build, remove it before generating the signed real identity, and refuse to overwrite or clear unexpected identity data | Red/green bootstrap and workflow contracts; exact optimized release-config reproduction; frozen install; format, focused lint, typecheck, 50 React, 3 accessibility, and 29 release tests; generated bindings/catalog/capability gates; Rust format, all-target/all-feature Clippy and serialized tests; live npm/RustSec audits; debug native build; version and diff checks passed | Commit and review the fix, refresh from `origin/master`, publish immutable tag `v0.9.0-preview.4` only after merge, run the protected preview workflow, and independently verify every published artifact; the pre-existing `target-codex-icons/` cache remains excluded |
 | 2026-07-27 | Codex `/root` | M10 | Merged fix PR [#6](https://github.com/Williem3/FormationLap/pull/6), created immutable `v0.9.0-preview.4` at `b16abaa`, and published [Formation Lap 0.9.0-preview.4](https://github.com/Williem3/FormationLap/releases/tag/v0.9.0-preview.4) as a disclosed unsigned prerelease; immutable `.3` remains unpublished | [Preview run 30278730177](https://github.com/Williem3/FormationLap/actions/runs/30278730177) passed every repository, RustSec, release-config build/bootstrap, identity, bundle, SBOM, checksum, artifact-contract, attestation, and publication step; independent downloads passed the exact artifact contract and checksum verification, all eight provenance attestations, tag provenance, and expected `NotSigned` Authenticode status | No blocker in this preview slice; external signed Beta authorization and Windows 10/11 qualification remain the next M10 action. The pre-existing `target-codex-icons/` cache remains excluded |
+| 2026-07-27 | Codex `/root` | M10 | Fixed Windows self-update launch sharing error 32; moved manual install into Settings, reserved the Dashboard banner for enabled automatic checks, and surfaced structured updater failures | [M9 self-update regression evidence](evidence/M9.md); red/green Windows staging-handle test; 51 React, 3 accessibility, 29 release, and 168 native tests; all-feature Clippy; generated bindings/catalog/capability gates; production frontend build; semantic and visual browser QA passed | Published `0.9.0-preview.4` predates the fix. Explicitly authorize a new version/build, install it manually once, then qualify its in-app update to the following version. The pre-existing `target-codex-icons/` cache remains excluded |
+| 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.5` fix-forward candidate, including actionable Settings detail when native update status is Unknown, synchronized version metadata, release guidance, and disclosure-complete notes | Red/green Settings coverage; frozen install; format; lint excluding only the pre-existing cache; typecheck; 52 React, 3 accessibility, 29 release, and 168 native tests; version/generated bindings/catalog/capability gates; all-target/all-feature Clippy; production frontend and debug Tauri builds; live npm/RustSec audits; diff checks passed | Commit and review the candidate, refresh from `origin/master`, publish immutable tag `v0.9.0-preview.5` only after merge, run the protected preview workflow, and independently verify every published artifact; the pre-existing `target-codex-icons/` cache remains excluded |

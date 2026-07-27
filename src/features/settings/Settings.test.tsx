@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { App } from "../../app/App";
 import { InMemoryNativeBridge } from "../../native-bridge/in-memory-native-bridge";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import type { AppSnapshot } from "../../generated/bindings";
 import { idleSessionSnapshot } from "../../session/session-snapshot";
@@ -87,7 +87,24 @@ describe("Settings behavior", () => {
     await user.click(screen.getByRole("button", { name: "Dashboard" }));
     expect(screen.getByText("Local data · Online checks off")).toBeVisible();
   });
+  it("explains why the Formation Lap update state is Unknown", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.updates.formationLap = {
+      kind: "unknown",
+      reason: "The official updater public key is not configured.",
+    };
+    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+
+    expect(screen.getByText("Unknown")).toBeVisible();
+    expect(
+      screen.getByText("The official updater public key is not configured."),
+    ).toBeVisible();
+  });
   it("renders Formation Lap and Supporting Application update advice without a third-party install action", async () => {
+    const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();
     const supportingApplication = {
       ...snapshot.selectedProfile!.primarySim,
@@ -124,7 +141,15 @@ describe("Settings behavior", () => {
       resultDeferred: false,
     };
 
-    render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
+    const bridge = new InMemoryNativeBridge(snapshot);
+    Object.assign(bridge, {
+      installFormationLapUpdate: vi.fn().mockRejectedValue({
+        message:
+          "The verified update installer could not start (ShellExecute error 32).",
+        recovery: "Run a fresh update check or install an official release.",
+      }),
+    });
+    render(<App bridge={bridge} />);
 
     expect(
       await screen.findByText("Formation Lap 1.0.0 is available"),
@@ -136,6 +161,40 @@ describe("Settings behavior", () => {
     expect(
       screen.queryByRole("button", { name: /Install LMUFFB/ }),
     ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Install verified update" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The verified update installer could not start (ShellExecute error 32). Run a fresh update check or install an official release.",
+    );
+  });
+  it("keeps a manual update install action in Settings", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.settings.automaticUpdateChecks = false;
+    snapshot.updates.formationLap = {
+      kind: "updateAvailable",
+      currentVersion: "0.9.0-preview.2",
+      latestVersion: "0.9.0-preview.4",
+    };
+    const bridge = new InMemoryNativeBridge(snapshot);
+    const installFormationLapUpdate = vi.spyOn(
+      bridge,
+      "installFormationLapUpdate",
+    );
+    render(<App bridge={bridge} />);
+
+    expect(
+      screen.queryByText("Formation Lap 0.9.0-preview.4 is available"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const install = screen.getByRole("button", {
+      name: "Install update 0.9.0-preview.4",
+    });
+    expect(install).toBeEnabled();
+    await user.click(install);
+    expect(installFormationLapUpdate).toHaveBeenCalledOnce();
   });
   it("makes race-safe update deferral visible while a Session is active", async () => {
     const user = userEvent.setup();
@@ -151,7 +210,9 @@ describe("Settings behavior", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
     expect(
-      screen.getByText(/Checks resume when the Session is idle/),
+      screen.getByText(
+        /Checks and installation resume when the Session is idle/,
+      ),
     ).toBeVisible();
   });
 });

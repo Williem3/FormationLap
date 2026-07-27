@@ -121,6 +121,19 @@
   accent-color: var(--accent);
 }
 
+.settings-update-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.settings-update-actions .primary-button,
+.settings-update-actions .secondary-button {
+  min-height: 36px;
+}
+
 .status-enabled {
   color: var(--running-ink);
 }

@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import type {
   AppSnapshot,
   ProfileApplication,
@@ -836,49 +837,52 @@ export function ProfileEditor({
           </div>
         </section>
       </div>
-      {dragPreview && previewSupportingApplication && (
-        <div
-          aria-hidden="true"
-          className="supporting-drag-preview"
-          style={{
-            transform: `translate3d(${dragPreview.x}px, ${dragPreview.y}px, 0)`,
-            width: dragPreview.width,
-          }}
-        >
-          <span className="supporting-drag-preview-handle">
-            <span className="drag-dots">
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
+      {dragPreview &&
+        previewSupportingApplication &&
+        createPortal(
+          <div
+            aria-hidden="true"
+            className="supporting-drag-preview"
+            style={{
+              transform: `translate3d(${dragPreview.x}px, ${dragPreview.y}px, 0)`,
+              width: dragPreview.width,
+            }}
+          >
+            <span className="supporting-drag-preview-handle">
+              <span className="drag-dots">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
             </span>
-          </span>
-          <span className="supporting-application-icon">
-            {profileApplicationIcon(
-              previewSupportingApplication.application.id,
-              applicationIcons,
-              <FlagIcon />,
-            )}
-          </span>
-          <span className="supporting-editor-toggle-copy">
-            <strong>{previewSupportingApplication.application.name}</strong>
-            <small>
+            <span className="supporting-application-icon">
+              {profileApplicationIcon(
+                previewSupportingApplication.application.id,
+                applicationIcons,
+                <FlagIcon />,
+              )}
+            </span>
+            <span className="supporting-editor-toggle-copy">
+              <strong>{previewSupportingApplication.application.name}</strong>
+              <small>
+                {previewSupportingApplication.requirement === "required"
+                  ? "Required application"
+                  : "Optional application"}
+              </small>
+            </span>
+            <span className="requirement-chip">
               {previewSupportingApplication.requirement === "required"
-                ? "Required application"
-                : "Optional application"}
-            </small>
-          </span>
-          <span className="requirement-chip">
-            {previewSupportingApplication.requirement === "required"
-              ? "Required"
-              : "Optional"}
-          </span>
-          <span className="supporting-drag-preview-action">…</span>
-          <span className="supporting-drag-preview-remove">×</span>
-        </div>
-      )}
+                ? "Required"
+                : "Optional"}
+            </span>
+            <span className="supporting-drag-preview-action">…</span>
+            <span className="supporting-drag-preview-remove">×</span>
+          </div>,
+          document.body,
+        )}
     </form>
   );
 }

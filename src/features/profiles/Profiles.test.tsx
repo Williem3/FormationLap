@@ -932,6 +932,7 @@ describe("Racing Profile behavior", () => {
     });
     const dragPreview = document.querySelector(".supporting-drag-preview");
     expect(dragPreview).toHaveTextContent("SimHub");
+    expect(dragPreview?.parentElement).toBe(document.body);
     expect(dragPreview).toHaveStyle({
       transform: "translate3d(52px, 131px, 0)",
     });

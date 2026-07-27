@@ -46,9 +46,12 @@ M10 security hardening is in progress, owned by Codex `/root`.
   release workflows/contracts, release-identity packaging support, version and
   release notes, and this ledger. The user has authorized a new prerelease
   after the focused regressions and release gates pass. Unpublished
-  `0.9.0-preview.7` failed because its NSIS verification destination did not
-  exist. The `0.9.0-preview.8` fix-forward creates that directory before the
-  silent install and awaits verification, publication, and artifact inspection.
+  `0.9.0-preview.7` and `.8` failed because the NSIS installer returned an
+  error in the GitHub-hosted verification environment. The
+  `0.9.0-preview.9` fix-forward extracts the generated installer with 7-Zip
+  and hash-verifies its exact main executable, elevated helper, and release
+  identity payload before publication. It awaits verification, publication,
+  and artifact inspection.
 
 - The authorized `0.9.0-preview.5` updater fix-forward publication is
   complete. PR
@@ -469,3 +472,4 @@ When blocked:
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.6` fix-forward candidate with synchronized versions, unsigned-preview disclosure, release notes, and installer guidance | `pnpm.cmd verify` (52 React, 3 accessibility, 29 release contracts, version/generated-binding/catalog/capability checks), Rust format, all-target/all-feature Clippy, all-target/all-feature Rust tests, and diff checks passed | Commit, refresh `origin/master`, merge, tag immutable `v0.9.0-preview.6`, dispatch the protected preview workflow, then independently verify installer identity, checksums, updater signature, assets, and provenance |
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.7` fix-forward: rejected Session commands now refresh the Dashboard snapshot, release identity is sealed before the bundle mutates its build artifact, and both release workflows install and hash-verify their own installer before publication | Red/green Dashboard and release-workflow regressions; extracted published `.6` installer proved manifest `9b9f…` disagreed with packaged main `ee228…` while helper matched; local release-config extraction proved the corrected pre-bundle hash equals the installer payload; `pnpm.cmd verify` (53 React, 3 accessibility, 30 release contracts), Rust format, all-target/all-feature Clippy, serial all-target/all-feature Rust tests, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.7`, dispatch the protected preview workflow, then independently verify installed identity, checksums, updater signature, assets, and provenance |
 | 2026-07-27 | Codex `/root` | M10 | Diagnosed unpublished `.7` preview publication failure: the NSIS silent installer returned exit code 1 before identity hashing because its temporary `/D=` destination was absent; `.8` creates it before installation | GitHub run [30301367128](https://github.com/Williem3/FormationLap/actions/runs/30301367128) failed only at `Verify the installed preview release identity`; red/green workflow-contract regression | Verify and publish immutable `v0.9.0-preview.8`; inspect its installed identity, checksums, updater signature, assets, and provenance |
+| 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.9` fix-forward: both release workflows now extract the generated NSIS archive with 7-Zip and verify the exact packaged main executable, elevated helper, and release identity instead of executing the installer in CI | Red/green workflow contract; `pnpm.cmd test:release` (30 contracts), format, release-version, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.9`, dispatch and approve the protected preview workflow, then independently verify published artifacts |

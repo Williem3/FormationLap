@@ -1035,6 +1035,7 @@ impl FormationLapCore {
                     });
                 }
                 self.session.state = crate::SessionState::Cancelling;
+                self.advance_session_cancellation()?;
                 Ok(CommandOutcome::SessionCancellationRequested)
             }
             AppCommand::CloseSession => {

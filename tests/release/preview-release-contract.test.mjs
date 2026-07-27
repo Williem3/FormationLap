@@ -25,7 +25,7 @@ const verifier = join(
   "release",
   "verify-preview-artifacts.mjs",
 );
-const version = "0.9.0-preview.2";
+const version = "0.9.0-preview.3";
 const tag = `v${version}`;
 const installerName = `Formation-Lap_${version}_x64-setup.exe`;
 

@@ -109,6 +109,13 @@ jobs:
             }
           }
 
+      - name: Prepare release identity resource for the build
+        shell: pwsh
+        run: >-
+          node scripts/release/manage-release-identity-resource.mjs
+          --manifest "src-tauri\release-identity\formation-lap-release-identity.json"
+          --action prepare
+
       - name: Build application and helper before bundling
         shell: pwsh
         env:
@@ -116,6 +123,13 @@ jobs:
           FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
+
+      - name: Clear release identity bootstrap
+        shell: pwsh
+        run: >-
+          node scripts/release/manage-release-identity-resource.mjs
+          --manifest "src-tauri\release-identity\formation-lap-release-identity.json"
+          --action clear
 
       - name: Bind and sign the preview helper release identity
         shell: pwsh

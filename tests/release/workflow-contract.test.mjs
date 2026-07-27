@@ -28,6 +28,17 @@ function assertActionsPinned(workflow) {
   }
 }
 
+function assertReleaseIdentityBootstrapOrder(workflow) {
+  const prepare = workflow.indexOf("--action prepare");
+  const build = workflow.indexOf("tauri build --no-bundle");
+  const clear = workflow.indexOf("--action clear");
+  const identity = workflow.indexOf("generate-release-identity.mjs");
+  assert.ok(
+    prepare >= 0 && prepare < build && build < clear && clear < identity,
+    "release identity resource must be prepared for the build, cleared, then sealed",
+  );
+}
+
 test("CI pins actions and gates the complete Windows and dependency surface", () => {
   assertActionsPinned(ci);
   assert.match(ci, /pnpm verify/);
@@ -54,6 +65,7 @@ test("release workflow signs every shipped executable before updater metadata", 
   );
   assert.match(release, /FORMATION_LAP_RELEASE_CHANNEL:/);
   assert.match(release, /generate-release-identity\.mjs/);
+  assert.match(release, /manage-release-identity-resource\.mjs/);
   assert.match(release, /Azure\/artifact-signing-action@[0-9a-f]{40}/);
   assert.match(release, /Get-AuthenticodeSignature/);
   assert.match(release, /GetCertHashString/);
@@ -74,6 +86,7 @@ test("release workflow signs every shipped executable before updater metadata", 
     release,
     /generate-preview-metadata|verify-preview-artifacts|UNSIGNED-PREVIEW/,
   );
+  assertReleaseIdentityBootstrapOrder(release);
 
   const build = release.indexOf("tauri build --no-bundle");
   const firstSigning = release.indexOf("Azure/artifact-signing-action");
@@ -127,6 +140,7 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
     /FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY:\s*\$\{\{ vars\.FORMATION_LAP_UPDATE_PUBLIC_KEY \}\}/,
   );
   assert.match(preview, /generate-release-identity\.mjs/);
+  assert.match(preview, /manage-release-identity-resource\.mjs/);
   assert.match(preview, /formation-lap-release-identity\.payload/);
   assert.match(preview, /formation-lap-release-identity\.json/);
   assert.match(preview, /generate-preview-metadata\.mjs/);
@@ -135,6 +149,7 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
   assert.match(preview, /gh release create/);
   assert.match(preview, /--prerelease/);
   assert.doesNotMatch(preview, /--latest/);
+  assertReleaseIdentityBootstrapOrder(preview);
 
   const build = preview.indexOf("tauri build --no-bundle");
   const identity = preview.indexOf("generate-release-identity.mjs");

@@ -1,6 +1,6 @@
 [package]
 name = "formation-lap"
-version = "0.9.0-preview.3"
+version = "0.9.0-preview.4"
 description = "Formation Lap prepares, monitors, and closes sim-racing sessions."
 authors = ["Formation Lap contributors"]
 edition = "2024"

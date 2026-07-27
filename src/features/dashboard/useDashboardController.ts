@@ -122,6 +122,15 @@ export function useDashboardController({
                 : await bridge.dismissRecovery();
       onSnapshotChanged(nextSnapshot);
     } catch (error) {
+      // A native Session command can transition authoritative state before a
+      // later launch step fails. Refresh so the Dashboard does not keep an
+      // obsolete action label until the user navigates away and back.
+      try {
+        onSnapshotChanged(await bridge.getAppSnapshot());
+      } catch {
+        // Preserve the original command failure when a recovery snapshot is
+        // unavailable; the initial application snapshot remains rendered.
+      }
       setDashboardError(
         commandErrorMessage(
           error,

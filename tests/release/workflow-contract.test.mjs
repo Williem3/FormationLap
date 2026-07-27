@@ -31,21 +31,20 @@ function assertActionsPinned(workflow) {
 function assertReleaseIdentityBootstrapOrder(workflow) {
   const prepare = workflow.indexOf("--action prepare");
   const build = workflow.indexOf("tauri build --no-bundle");
-  const preIdentityBundle = workflow.indexOf("tauri bundle --bundles nsis");
   const clear = workflow.indexOf("--action clear");
   const identity = workflow.indexOf("generate-release-identity.mjs");
-  const finalBundle = workflow.indexOf(
-    "tauri bundle --bundles nsis",
-    preIdentityBundle + 1,
+  const bundle = workflow.indexOf("tauri bundle --bundles nsis");
+  const verifyInstalledIdentity = workflow.indexOf(
+    "verify-release-identity-layout.mjs",
   );
   assert.ok(
     prepare >= 0 &&
       prepare < build &&
-      build < preIdentityBundle &&
-      preIdentityBundle < clear &&
+      build < clear &&
       clear < identity &&
-      identity < finalBundle,
-    "release identity must be sealed after Tauri patches executable metadata and before final packaging",
+      identity < bundle &&
+      bundle < verifyInstalledIdentity,
+    "release identity must bind the exact bytes bundled into the installer and be verified after installation",
   );
 }
 
@@ -99,13 +98,9 @@ test("release workflow signs every shipped executable before updater metadata", 
   assertReleaseIdentityBootstrapOrder(release);
 
   const build = release.indexOf("tauri build --no-bundle");
-  const preIdentityBundle = release.indexOf("tauri bundle --bundles nsis");
   const firstSigning = release.indexOf("Azure/artifact-signing-action");
   const releaseIdentity = release.indexOf("generate-release-identity.mjs");
-  const bundle = release.indexOf(
-    "tauri bundle --bundles nsis",
-    preIdentityBundle + 1,
-  );
+  const bundle = release.indexOf("tauri bundle --bundles nsis");
   const secondSigning = release.indexOf(
     "Azure/artifact-signing-action",
     firstSigning + 1,
@@ -115,8 +110,7 @@ test("release workflow signs every shipped executable before updater metadata", 
   );
   const metadata = release.indexOf("generate-release-metadata.mjs");
   assert.ok(
-    build < preIdentityBundle &&
-      preIdentityBundle < firstSigning &&
+    build < firstSigning &&
       firstSigning < releaseIdentity &&
       releaseIdentity < bundle &&
       bundle < secondSigning &&
@@ -168,15 +162,9 @@ test("preview workflow publishes only explicit unsigned v0.x prereleases", () =>
 
   const build = preview.indexOf("tauri build --no-bundle");
   const identity = preview.indexOf("generate-release-identity.mjs");
-  const preIdentityBundle = preview.indexOf("tauri bundle --bundles nsis");
-  const bundle = preview.indexOf(
-    "tauri bundle --bundles nsis",
-    preIdentityBundle + 1,
-  );
+  const bundle = preview.indexOf("tauri bundle --bundles nsis");
   assert.ok(
-    build < preIdentityBundle &&
-      preIdentityBundle < identity &&
-      identity < bundle,
-    "preview release identity must bind Tauri-patched executable bytes before final packaging",
+    build < identity && identity < bundle,
+    "preview release identity must bind the executable bytes that final packaging installs",
   );
 });

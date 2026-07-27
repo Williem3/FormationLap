@@ -135,15 +135,6 @@ jobs:
           FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
         run: pnpm tauri build --no-bundle --config src-tauri/tauri.release-bundle.conf.json
 
-      - name: Normalize Tauri executable metadata before sealing release identity
-        shell: pwsh
-        env:
-          FORMATION_LAP_RELEASE_CHANNEL: ${{ steps.release.outputs.prerelease == 'true' && 'beta' || 'stable' }}
-          FORMATION_LAP_RELEASE_IDENTITY_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-          FORMATION_LAP_UPDATE_PUBLIC_KEY: ${{ vars.FORMATION_LAP_UPDATE_PUBLIC_KEY }}
-        run: >-
-          pnpm tauri bundle --bundles nsis --config src-tauri/tauri.release-bundle.conf.json --no-sign --ci
-
       - name: Clear release identity bootstrap
         shell: pwsh
         run: >-
@@ -226,6 +217,21 @@ jobs:
             throw "Expected exactly one NSIS installer."
           }
           "installer=$($installers[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Verify the installed release identity
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.bundle.outputs.installer }}
+        run: |
+          $installation = Join-Path $env:RUNNER_TEMP "formation-lap-release-identity"
+          & $env:INSTALLER /S "/D=$installation"
+          if ($LASTEXITCODE -ne 0) {
+            throw "The installer could not be verified in a temporary installation."
+          }
+          $main = Join-Path $installation "formation-lap.exe"
+          $helper = Join-Path $installation "formation-lap-elevated-helper.exe"
+          $manifest = Join-Path $installation "formation-lap-release-identity.json"
+          node scripts/release/verify-release-identity-layout.mjs --main $main --helper $helper --manifest $manifest
 
       - name: Authenticode-sign installer
         uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0

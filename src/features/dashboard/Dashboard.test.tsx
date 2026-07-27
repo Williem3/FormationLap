@@ -554,6 +554,29 @@ describe("Dashboard behavior", () => {
       "The elevated helper could not launch Virtual Desktop Switcher. Approve the Windows prompt and verify the application path.",
     );
   });
+  it("refreshes the authoritative starting snapshot when the first launch fails", async () => {
+    const user = userEvent.setup();
+    const bridge = new InMemoryNativeBridge(lifecycleSnapshot());
+    const startSession = bridge.startSession.bind(bridge);
+    Object.assign(bridge, {
+      startSession: vi.fn(async (payload) => {
+        await startSession(payload);
+        throw new Error("The elevated helper rejected the launch.");
+      }),
+    });
+    render(<App bridge={bridge} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Start session" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Cancel startup" }),
+    ).toBeEnabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The elevated helper rejected the launch.",
+    );
+  });
   it("explains when an application exits during startup", async () => {
     const snapshot = lifecycleSnapshot();
     snapshot.applicationProcesses = [

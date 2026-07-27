@@ -12,6 +12,12 @@ const generator = join(
   "release",
   "generate-release-identity.mjs",
 );
+const layoutVerifier = join(
+  repositoryRoot,
+  "scripts",
+  "release",
+  "verify-release-identity-layout.mjs",
+);
 const protocolSource = readFileSync(
   join(repositoryRoot, "src-tauri", "src", "privilege_protocol.rs"),
   "utf8",
@@ -60,6 +66,22 @@ function runGenerator(
       encoding: "utf8",
       shell: false,
     },
+  );
+}
+
+function verifyLayout(paths) {
+  return spawnSync(
+    process.execPath,
+    [
+      layoutVerifier,
+      "--main",
+      paths.main,
+      "--helper",
+      paths.helper,
+      "--manifest",
+      paths.output,
+    ],
+    { cwd: repositoryRoot, encoding: "utf8", shell: false },
   );
 }
 
@@ -125,6 +147,37 @@ test("release identity refuses to seal after either executable changes", () => {
     ]);
     assert.notEqual(sealed.status, 0);
     assert.match(`${sealed.stderr}${sealed.stdout}`, /final executable bytes/i);
+  } finally {
+    rmSync(paths.directory, { recursive: true, force: true });
+  }
+});
+
+test("installed release identity verifier accepts matching sibling bytes and rejects drift", () => {
+  const paths = fixture();
+  try {
+    const prepared = runGenerator(paths);
+    assert.equal(prepared.status, 0, prepared.stderr);
+    writeFileSync(
+      paths.signature,
+      Buffer.from("fixture minisign signature").toString("base64"),
+    );
+    const sealed = runGenerator(paths, [
+      "--signature",
+      paths.signature,
+      "--output",
+      paths.output,
+    ]);
+    assert.equal(sealed.status, 0, sealed.stderr);
+    const verified = verifyLayout(paths);
+    assert.equal(verified.status, 0, verified.stderr);
+
+    writeFileSync(paths.main, "changed installed main bytes");
+    const rejected = verifyLayout(paths);
+    assert.notEqual(rejected.status, 0);
+    assert.match(
+      `${rejected.stderr}${rejected.stdout}`,
+      /Formation Lap executable hash does not match/i,
+    );
   } finally {
     rmSync(paths.directory, { recursive: true, force: true });
   }

@@ -26,6 +26,15 @@ export interface ProfileEditorProps {
   onSubmit(event: FormEvent<HTMLFormElement>, approval?: ProfileApproval): void;
 }
 
+interface SupportingApplicationDragPreview {
+  applicationId: string;
+  x: number;
+  y: number;
+  width: number;
+  grabOffsetX: number;
+  grabOffsetY: number;
+}
+
 export function ProfileEditor({
   profile,
   applicationIcons,
@@ -46,6 +55,8 @@ export function ProfileEditor({
     );
   const [draggedSupportingApplicationId, setDraggedSupportingApplicationId] =
     useState<string | null>(null);
+  const [dragPreview, setDragPreview] =
+    useState<SupportingApplicationDragPreview | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     applicationId: string;
     position: "before" | "after";
@@ -76,6 +87,11 @@ export function ProfileEditor({
     privilegedApplications.every((application) =>
       approvedPrivilegedApplicationIds.includes(application.id),
     );
+  const previewSupportingApplication = dragPreview
+    ? profile.supportingApplications.find(
+        (supporting) => supporting.application.id === dragPreview.applicationId,
+      )
+    : null;
 
   const update = (change: (next: RacingProfile) => void) => {
     const next = structuredClone(profile);
@@ -504,10 +520,25 @@ export function ProfileEditor({
                         className="supporting-drag-handle"
                         aria-label={`Reorder ${supportingApplication.application.name}. Use Up and Down arrow keys to move it.`}
                         onPointerDown={(event) => {
+                          const row = event.currentTarget.closest<HTMLElement>(
+                            ".supporting-editor-row",
+                          );
+                          if (!row) {
+                            return;
+                          }
+                          const bounds = row.getBoundingClientRect();
                           activeReorderPointerId.current = event.pointerId;
                           event.currentTarget.setPointerCapture?.(
                             event.pointerId,
                           );
+                          setDragPreview({
+                            applicationId: supportingApplication.application.id,
+                            x: bounds.left,
+                            y: bounds.top,
+                            width: bounds.width,
+                            grabOffsetX: event.clientX - bounds.left,
+                            grabOffsetY: event.clientY - bounds.top,
+                          });
                           setDraggedSupportingApplicationId(
                             supportingApplication.application.id,
                           );
@@ -520,6 +551,16 @@ export function ProfileEditor({
                           }
                           setDropTarget(
                             dropTargetAt(event.clientX, event.clientY),
+                          );
+                          setDragPreview((current) =>
+                            current?.applicationId ===
+                            supportingApplication.application.id
+                              ? {
+                                  ...current,
+                                  x: event.clientX - current.grabOffsetX,
+                                  y: event.clientY - current.grabOffsetY,
+                                }
+                              : current,
                           );
                         }}
                         onPointerUp={(event) => {
@@ -544,11 +585,13 @@ export function ProfileEditor({
                           );
                           activeReorderPointerId.current = null;
                           setDraggedSupportingApplicationId(null);
+                          setDragPreview(null);
                           setDropTarget(null);
                         }}
                         onPointerCancel={() => {
                           activeReorderPointerId.current = null;
                           setDraggedSupportingApplicationId(null);
+                          setDragPreview(null);
                           setDropTarget(null);
                         }}
                         onKeyDown={(event) => {
@@ -796,6 +839,49 @@ export function ProfileEditor({
           </div>
         </section>
       </div>
+      {dragPreview && previewSupportingApplication && (
+        <div
+          aria-hidden="true"
+          className="supporting-drag-preview"
+          style={{
+            transform: `translate3d(${dragPreview.x}px, ${dragPreview.y}px, 0)`,
+            width: dragPreview.width,
+          }}
+        >
+          <span className="supporting-drag-preview-handle">
+            <span className="drag-dots">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          </span>
+          <span className="supporting-application-icon">
+            {profileApplicationIcon(
+              previewSupportingApplication.application.id,
+              applicationIcons,
+              <FlagIcon />,
+            )}
+          </span>
+          <span className="supporting-editor-toggle-copy">
+            <strong>{previewSupportingApplication.application.name}</strong>
+            <small>
+              {previewSupportingApplication.requirement === "required"
+                ? "Required application"
+                : "Optional application"}
+            </small>
+          </span>
+          <span className="requirement-chip">
+            {previewSupportingApplication.requirement === "required"
+              ? "Required"
+              : "Optional"}
+          </span>
+          <span className="supporting-drag-preview-action">…</span>
+          <span className="supporting-drag-preview-remove">×</span>
+        </div>
+      )}
     </form>
   );
 }

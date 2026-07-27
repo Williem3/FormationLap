@@ -911,11 +911,17 @@ describe("Racing Profile behavior", () => {
       clientX: 24,
       clientY: 1,
     });
+    expect(
+      document.querySelector(".supporting-drag-preview"),
+    ).toHaveTextContent("SimHub");
     fireEvent.pointerUp(sourceHandle, {
       pointerId: 1,
       clientX: 24,
       clientY: 1,
     });
+    expect(
+      document.querySelector(".supporting-drag-preview"),
+    ).not.toBeInTheDocument();
 
     expect(
       Array.from(document.querySelectorAll(".supporting-editor-row strong"))

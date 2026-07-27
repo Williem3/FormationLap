@@ -31,7 +31,6 @@ interface SupportingApplicationDragPreview {
   x: number;
   y: number;
   width: number;
-  grabOffsetX: number;
   grabOffsetY: number;
 }
 
@@ -536,7 +535,6 @@ export function ProfileEditor({
                             x: bounds.left,
                             y: bounds.top,
                             width: bounds.width,
-                            grabOffsetX: event.clientX - bounds.left,
                             grabOffsetY: event.clientY - bounds.top,
                           });
                           setDraggedSupportingApplicationId(
@@ -557,7 +555,6 @@ export function ProfileEditor({
                             supportingApplication.application.id
                               ? {
                                   ...current,
-                                  x: event.clientX - current.grabOffsetX,
                                   y: event.clientY - current.grabOffsetY,
                                 }
                               : current,

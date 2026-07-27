@@ -36,10 +36,10 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- Supporting Application drag-preview animation is complete. The Profile
-  Editor renders a floating visual copy of the grabbed Supporting Application,
-  leaves a subdued placeholder in the Startup Sequence, and respects reduced
-  motion. There is no active implementation file scope.
+- Supporting Application drag-preview alignment repair is complete. The Profile
+  Editor locks the preview to the source row's horizontal track while it moves
+  vertically through the Startup Sequence. There is no active implementation
+  file scope.
 
 - The installed-preview elevated-launch bugfix is complete: preview and signed
   release workflows now build with the release bundle configuration before
@@ -332,6 +332,8 @@ logs.
 | 2026-07-26 | Codex `/root` | M10 | Replaced unreliable native Supporting Application drag-and-drop with pointer-driven reordering, retained keyboard arrows, and aligned compact Required/Optional, ellipsis, and remove controls | Focused React pointer-drag regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the UI repair. External signed Beta and Windows qualification remain the next M10 action |
 
 | 2026-07-26 | Codex `/root` | M10 | Added a pointer-following, full-row Supporting Application drag preview with a subdued source placeholder, raised surface, insertion markers, and reduced-motion fallback | Focused React drag-preview regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the interaction polish. External signed Beta and Windows qualification remain the next M10 action |
+
+| 2026-07-26 | Codex `/root` | M10 | Kept the Supporting Application drag preview aligned to the source row's horizontal track while it follows vertical reordering movement | Focused React alignment regression (49 tests), TypeScript typecheck, focused ESLint, Prettier, and `git diff --check` passed | No blocker; restart the dev renderer to load the corrected preview alignment. External signed Beta and Windows qualification remain the next M10 action |
 
 ## Handoff entry template
 

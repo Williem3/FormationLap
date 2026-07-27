@@ -895,6 +895,21 @@ describe("Racing Profile behavior", () => {
     const sourceHandle = screen.getByRole("button", {
       name: /Reorder SimHub/,
     });
+    const sourceRow = sourceHandle.closest(".supporting-editor-row");
+    if (!(sourceRow instanceof HTMLElement)) {
+      throw new Error("SimHub should be contained in its editor row");
+    }
+    vi.spyOn(sourceRow, "getBoundingClientRect").mockReturnValue({
+      bottom: 120,
+      height: 58,
+      left: 52,
+      right: 842,
+      top: 62,
+      width: 790,
+      x: 52,
+      y: 62,
+      toJSON: () => ({}),
+    });
     const destinationRow = screen
       .getByRole("button", { name: "Edit Crew Chief" })
       .closest(".supporting-editor-row");
@@ -905,19 +920,25 @@ describe("Racing Profile behavior", () => {
       configurable: true,
       value: vi.fn().mockReturnValue(destinationRow),
     });
-    fireEvent.pointerDown(sourceHandle, { pointerId: 1 });
+    fireEvent.pointerDown(sourceHandle, {
+      clientX: 91,
+      clientY: 91,
+      pointerId: 1,
+    });
     fireEvent.pointerMove(sourceHandle, {
       pointerId: 1,
-      clientX: 24,
-      clientY: 1,
+      clientX: 520,
+      clientY: 160,
     });
-    expect(
-      document.querySelector(".supporting-drag-preview"),
-    ).toHaveTextContent("SimHub");
+    const dragPreview = document.querySelector(".supporting-drag-preview");
+    expect(dragPreview).toHaveTextContent("SimHub");
+    expect(dragPreview).toHaveStyle({
+      transform: "translate3d(52px, 131px, 0)",
+    });
     fireEvent.pointerUp(sourceHandle, {
       pointerId: 1,
-      clientX: 24,
-      clientY: 1,
+      clientX: 520,
+      clientY: 160,
     });
     expect(
       document.querySelector(".supporting-drag-preview"),

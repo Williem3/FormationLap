@@ -1,5 +1,5 @@
 use formation_lap_lib::{
-    AppCommand, CommandOutcome, ConsoleVisibility, FormationLapCore, GracefulStopResult,
+    AppCommand, CommandOutcome, ConsoleVisibility, CoreError, FormationLapCore, GracefulStopResult,
     LaunchRecipe, LaunchSource, ProcessIdentity, ProcessObservation, ProcessOutput, ProcessRuntime,
     ProcessRuntimeError, QuitAction, QuitDisposition, RacingProfile, SessionState,
     ShutdownStrategy, ThemePreference, WindowCloseAction,
@@ -238,6 +238,12 @@ fn native_window_close_exits_when_idle_and_hides_while_monitoring_a_session() {
         profile: Box::new(profile),
     })
     .expect("profile should save");
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: Vec::new(),
+    })
+    .expect("fixture configuration should be approved");
     core.execute(AppCommand::StartSession { profile_id })
         .expect("Session should start");
     core.execute(AppCommand::RefreshProcesses)
@@ -289,6 +295,12 @@ fn active_core(storage: &TempStorage, stop_requests: Arc<AtomicU64>) -> Formatio
         profile: Box::new(profile),
     })
     .expect("profile should save");
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: Vec::new(),
+    })
+    .expect("fixture configuration should be approved");
     core.execute(AppCommand::StartSession { profile_id })
         .expect("Session should start");
     core.execute(AppCommand::RefreshProcesses)
@@ -396,6 +408,268 @@ fn desktop_settings_default_safe_and_persist_with_a_bounded_backup() {
     )
     .expect("saved settings should reopen");
     assert_eq!(reopened.snapshot().settings, second_settings);
+}
+
+#[test]
+fn corrupt_live_settings_recovers_from_a_valid_backup_without_growing_artifacts() {
+    let storage = TempStorage::new();
+    let mut core = FormationLapCore::open_with_runtime(
+        storage.path(),
+        RunningProcessRuntime {
+            next_identity: None,
+            stop_requests: Arc::new(AtomicU64::new(0)),
+        },
+    )
+    .expect("settings fixture should open");
+    let mut backup_settings = core.snapshot().settings;
+    backup_settings.theme = ThemePreference::Dark;
+    core.execute(AppCommand::UpdateSettings {
+        settings: backup_settings.clone(),
+    })
+    .expect("first settings write should succeed");
+    let mut newer_settings = backup_settings.clone();
+    newer_settings.theme = ThemePreference::Light;
+    core.execute(AppCommand::UpdateSettings {
+        settings: newer_settings,
+    })
+    .expect("second settings write should retain the first as backup");
+    drop(core);
+
+    let settings_path = storage.path().join("settings.json");
+    fs::write(&settings_path, b"{ truncated settings")
+        .expect("fixture should corrupt live settings");
+    fs::write(
+        settings_path.with_extension("json.recovery.tmp"),
+        b"interrupted restore copy",
+    )
+    .expect("fixture should simulate an interrupted restore");
+
+    let reopened = FormationLapCore::open_with_runtime(
+        storage.path(),
+        RunningProcessRuntime {
+            next_identity: None,
+            stop_requests: Arc::new(AtomicU64::new(0)),
+        },
+    )
+    .expect("a valid settings backup should recover corrupt live settings");
+    assert_eq!(reopened.snapshot().settings, backup_settings);
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            &fs::read(&settings_path).expect("recovered live settings should remain readable"),
+        )
+        .is_ok()
+    );
+    assert!(
+        storage
+            .path()
+            .join("backups")
+            .join("settings.json")
+            .is_file()
+    );
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            &fs::read(storage.path().join("backups").join("settings.json"))
+                .expect("valid backup should survive interrupted restore"),
+        )
+        .is_ok()
+    );
+    let corrupt_artifacts = fs::read_dir(storage.path().join("backups"))
+        .expect("backup directory should be readable")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains(".corrupt."))
+        .count();
+    assert_eq!(
+        corrupt_artifacts, 1,
+        "the first deterministic corrupt slot should be used"
+    );
+    assert!(
+        corrupt_artifacts <= 2,
+        "corrupt recovery artifacts must stay bounded"
+    );
+    let artifacts_before = fs::read_dir(storage.path().join("backups"))
+        .expect("backup directory should be readable")
+        .count();
+    drop(reopened);
+    FormationLapCore::open_with_runtime(
+        storage.path(),
+        RunningProcessRuntime {
+            next_identity: None,
+            stop_requests: Arc::new(AtomicU64::new(0)),
+        },
+    )
+    .expect("reopening recovered settings should remain idempotent");
+    assert_eq!(
+        fs::read_dir(storage.path().join("backups"))
+            .expect("backup directory should remain readable")
+            .count(),
+        artifacts_before,
+        "recovery artifacts must be bounded across repeated startup"
+    );
+}
+
+#[test]
+fn invalid_live_and_backup_settings_are_preserved_and_reported() {
+    let storage = TempStorage::new();
+    let mut core = FormationLapCore::open_with_runtime(
+        storage.path(),
+        RunningProcessRuntime {
+            next_identity: None,
+            stop_requests: Arc::new(AtomicU64::new(0)),
+        },
+    )
+    .expect("settings fixture should open");
+    let settings = core.snapshot().settings;
+    core.execute(AppCommand::UpdateSettings { settings })
+        .expect("first settings write should succeed");
+    core.execute(AppCommand::UpdateSettings {
+        settings: core.snapshot().settings,
+    })
+    .expect("second settings write should retain a backup");
+    drop(core);
+
+    let live = storage.path().join("settings.json");
+    let backup = storage.path().join("backups").join("settings.json");
+    let corrupt_live = b"not settings".to_vec();
+    let corrupt_backup = b"not backup settings".to_vec();
+    fs::write(&live, &corrupt_live).expect("fixture should corrupt live settings");
+    fs::write(&backup, &corrupt_backup).expect("fixture should corrupt settings backup");
+
+    assert!(matches!(
+        FormationLapCore::open_with_runtime(
+            storage.path(),
+            RunningProcessRuntime {
+                next_identity: None,
+                stop_requests: Arc::new(AtomicU64::new(0)),
+            },
+        ),
+        Err(CoreError::InvalidSettingsDocument(_))
+    ));
+    assert_eq!(
+        fs::read(&live).expect("live corrupt bytes should remain"),
+        corrupt_live
+    );
+    assert_eq!(
+        fs::read(&backup).expect("backup corrupt bytes should remain"),
+        corrupt_backup
+    );
+}
+
+#[test]
+fn newer_live_settings_never_fall_back_to_an_older_backup() {
+    let storage = TempStorage::new();
+    let mut core = FormationLapCore::open_with_runtime(
+        storage.path(),
+        RunningProcessRuntime {
+            next_identity: None,
+            stop_requests: Arc::new(AtomicU64::new(0)),
+        },
+    )
+    .expect("settings fixture should open");
+    let mut settings = core.snapshot().settings;
+    settings.theme = ThemePreference::Dark;
+    core.execute(AppCommand::UpdateSettings { settings })
+        .expect("first settings write should succeed");
+    core.execute(AppCommand::UpdateSettings {
+        settings: core.snapshot().settings,
+    })
+    .expect("second settings write should create a backup");
+    drop(core);
+
+    let settings_path = storage.path().join("settings.json");
+    let mut newer: serde_json::Value = serde_json::from_slice(
+        &fs::read(&settings_path).expect("live settings should be readable"),
+    )
+    .expect("live settings fixture should parse");
+    newer["schemaVersion"] = serde_json::json!(2);
+    let newer_bytes = serde_json::to_vec_pretty(&newer).expect("fixture should serialize");
+    fs::write(&settings_path, &newer_bytes).expect("fixture should write newer schema");
+
+    assert!(matches!(
+        FormationLapCore::open_with_runtime(
+            storage.path(),
+            RunningProcessRuntime {
+                next_identity: None,
+                stop_requests: Arc::new(AtomicU64::new(0)),
+            },
+        ),
+        Err(CoreError::UnsupportedSettingsSchema(2))
+    ));
+    assert_eq!(
+        fs::read(&settings_path).expect("newer live bytes should remain untouched"),
+        newer_bytes
+    );
+}
+
+#[test]
+fn corrupt_live_session_journal_recovers_only_to_a_recovery_offer() {
+    let storage = TempStorage::new();
+    let original = active_core(&storage, Arc::new(AtomicU64::new(0)));
+    drop(original);
+    let journal_path = storage.path().join("active-session.json");
+    let backup_path = storage.path().join("backups").join("active-session.json");
+    fs::copy(&journal_path, &backup_path).expect("fixture should retain a valid journal backup");
+    fs::write(&journal_path, b"{ interrupted journal")
+        .expect("fixture should corrupt live journal");
+
+    let trace = Arc::new(RuntimeTrace::default());
+    let mut recovered = FormationLapCore::open_with_runtime(
+        storage.path(),
+        RecoveryProcessRuntime {
+            observation: ProcessObservation::Running {
+                responsiveness: formation_lap_lib::ProcessResponsiveness::Responsive,
+            },
+            trace: Arc::clone(&trace),
+        },
+    )
+    .expect("a valid journal backup should produce a Recovery Offer");
+    assert_eq!(
+        recovered.snapshot().session.state,
+        SessionState::RecoveryAvailable
+    );
+    assert_eq!(trace.launches.load(Ordering::Relaxed), 0);
+    assert_eq!(trace.stops.load(Ordering::Relaxed), 0);
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(
+            &fs::read(&journal_path).expect("recovered journal should be readable"),
+        )
+        .is_ok()
+    );
+    recovered
+        .execute(AppCommand::DismissRecovery)
+        .expect("dismissal should remain action-free");
+    assert_eq!(trace.launches.load(Ordering::Relaxed), 0);
+    assert_eq!(trace.stops.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn newer_live_session_journal_never_falls_back_to_an_older_backup() {
+    let storage = TempStorage::new();
+    let original = active_core(&storage, Arc::new(AtomicU64::new(0)));
+    drop(original);
+    let journal_path = storage.path().join("active-session.json");
+    let backup_path = storage.path().join("backups").join("active-session.json");
+    fs::copy(&journal_path, &backup_path).expect("fixture should retain a valid journal backup");
+    let mut newer: serde_json::Value =
+        serde_json::from_slice(&fs::read(&journal_path).expect("live journal should be readable"))
+            .expect("live journal fixture should parse");
+    newer["schemaVersion"] = serde_json::json!(2);
+    let newer_bytes = serde_json::to_vec_pretty(&newer).expect("fixture should serialize");
+    fs::write(&journal_path, &newer_bytes).expect("fixture should write newer journal");
+
+    assert!(matches!(
+        FormationLapCore::open_with_runtime(
+            storage.path(),
+            RunningProcessRuntime {
+                next_identity: None,
+                stop_requests: Arc::new(AtomicU64::new(0)),
+            },
+        ),
+        Err(CoreError::UnsupportedSessionJournalSchema(2))
+    ));
+    assert_eq!(
+        fs::read(&journal_path).expect("newer journal bytes should remain untouched"),
+        newer_bytes
+    );
 }
 
 #[test]

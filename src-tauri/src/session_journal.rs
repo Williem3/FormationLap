@@ -1,5 +1,6 @@
 use crate::{
-    ApplicationProcessSnapshot, CoreError, SessionSnapshot, atomic_file::replace_with_backup,
+    ApplicationProcessSnapshot, CoreError, SessionSnapshot,
+    atomic_file::{recover_live_document, replace_with_backup},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -51,18 +52,27 @@ impl SessionJournal {
         if !self.journal_path.exists() {
             return Ok(None);
         }
+        let document = recover_live_document(
+            &self.journal_path,
+            &self.backup_path,
+            Self::load_document,
+            |error| matches!(error, CoreError::UnsupportedSessionJournalSchema(_)),
+        )?;
+        Ok(Some(SessionJournalSnapshot {
+            session: document.session,
+            application_processes: document.application_processes,
+        }))
+    }
+
+    fn load_document(path: &Path) -> Result<SessionJournalDocument, CoreError> {
         let document: SessionJournalDocument =
-            serde_json::from_slice(&fs::read(&self.journal_path)?)
-                .map_err(CoreError::InvalidSessionJournal)?;
+            serde_json::from_slice(&fs::read(path)?).map_err(CoreError::InvalidSessionJournal)?;
         if document.schema_version != SESSION_JOURNAL_SCHEMA_VERSION {
             return Err(CoreError::UnsupportedSessionJournalSchema(
                 document.schema_version,
             ));
         }
-        Ok(Some(SessionJournalSnapshot {
-            session: document.session,
-            application_processes: document.application_processes,
-        }))
+        Ok(document)
     }
 
     pub(crate) fn persist(

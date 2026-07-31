@@ -47,6 +47,19 @@ M10 security hardening is in progress, owned by Codex `/root`.
   release workflow contracts, relevant security/architecture documentation,
   M10 evidence, and this ledger. No push, tag, signing, workflow dispatch,
   repository-setting mutation, or release publication is authorized.
+- Settings and Session-journal backup-recovery slice is in progress. Scope:
+  `settings.rs`, `session_journal.rs`, public Core recovery/settings tests, and
+  M2/M8/M10 storage-security evidence. It will recover only corrupt or
+  semantically invalid live documents from a validated compatible bounded
+  backup, preserve corrupt bytes in bounded recovery artifacts, and never
+  downgrade a newer schema document.
+
+  Delivered: shared validated-backup recovery keeps the valid backup intact,
+  preserves corrupt live bytes in two deterministic slots, synchronizes the
+  restored copy, and retains Recovery Offer identity verification and
+  action-free dismissal. Public Core integration coverage includes corrupt
+  settings/journals, invalid-pair preservation, interrupted restore,
+  bounded repeat opens, and unsupported live schemas.
 - Core-owned one-shot process-confirmation slice is in progress. Scope:
   `core.rs`, Rust command/contracts and lifecycle tests, generated bindings,
   NativeBridge/in-memory adapter, Dashboard process dialog behavior, and M10
@@ -513,3 +526,4 @@ When blocked:
 | 2026-07-30 | Codex `/root/privileged_target_binding` | M10 | Bound protected elevated-launch and custom-stop approval to executable SHA-256 values, centralized executable safety policy (including `regsvr32.exe`), bumped the typed helper protocol to v3, and retained a write/delete-denying verified target handle through helper execution | `cargo test --test racing_profiles` (26); `cargo test --test privileged_operations` (14 passed, 1 manual smoke ignored); verified-target sharing test; `cargo fmt`; `cargo clippy --lib --tests -- -D warnings` | Continue release-readiness slices; no external publication action is authorized |
 | 2026-07-30 | Codex `/root/launch_quarantine` | M10 | Quarantined complete privileged profiles and every repair-needed launch recipe; Start Session recomputes repair state against editable JSON; narrowed the native executable picker and generated NativeBridge to zero payload and `.exe` only; synchronized the helper protocol-v3 release identity source and fixture | Red/green ProfileLibrary/Core tests; 53 React behavior tests; 31 release contracts; generated-binding check; Clippy and diff checks passed. | Continue the remaining release-readiness slices; no external publication action is authorized. |
 | 2026-07-30 | Codex `/root/process_confirmation_intent` | M10 | Replaced renderer-authoritative force booleans with a Core-owned one-shot UUID confirmation bound to exact action and stable Process identity; Dashboard dismissal cancels native intent and stuck Session Close remains explicitly confirmable. | `application_lifecycle` (10), `privileged_operations` (14 passed, 1 ignored), generated-binding check, format/Clippy, Dashboard behavior (53), typecheck, and diff check passed. | Continue remaining release-readiness slices; no external publication action is authorized. |
+| 2026-07-30 | Codex `/root/state_backup_recovery` | M10 | Recovered corrupt settings and active-Session live JSON only from a validated compatible backup; corrupt bytes now use two deterministic bounded artifacts, restoration keeps the backup, and newer schemas fail closed without fallback. | `desktop_integration` (10) including recovery/no-downgrade cases; `cargo fmt`; all-target/all-feature Clippy passed. Full all-target test run exposed the inherited protocol-v3 release-identity fixture signature rejection after 36 lib tests. | Agent 5 owns release-identity fixture synchronization; no external publication action is authorized. |

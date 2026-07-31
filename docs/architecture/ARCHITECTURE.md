@@ -349,6 +349,11 @@ Persistence rules:
 - Writes use a temporary file in the destination directory followed by atomic
   replacement.
 - The prior valid document is retained as a bounded backup.
+- When a live settings or Session-journal document is malformed or fails
+  compatible validation, storage validates the bounded backup before mutation,
+  retains corrupt live bytes in one of two deterministic recovery-artifact
+  slots, then atomically restores a synchronized copy while preserving the
+  valid backup. A structurally valid newer schema never falls back.
 - Failed migration never overwrites the last valid document.
 - Session journal writes happen as ownership changes, not only on clean exit.
 - Exported profiles omit transient process identities and diagnostic state.

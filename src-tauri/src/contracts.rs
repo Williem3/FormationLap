@@ -801,6 +801,27 @@ pub struct SessionSnapshot {
     pub summary: Option<SessionSummary>,
 }
 
+/// The exact destructive Process action awaiting one explicit native confirmation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ProcessConfirmationSnapshot {
+    pub token: String,
+    pub application_id: String,
+    pub action: ProcessConfirmationAction,
+    pub identity: ProcessIdentity,
+}
+
+/// The only Process outcomes a destructive confirmation may authorize.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ProcessConfirmationAction {
+    Exit,
+    Restart,
+    SessionClose,
+}
+
 /// Authoritative native state rendered by React.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -816,6 +837,9 @@ pub struct AppSnapshot {
     #[ts(optional)]
     pub application_icons: Option<Vec<ApplicationIconSnapshot>>,
     pub application_processes: Vec<ApplicationProcessSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pending_process_confirmation: Option<ProcessConfirmationSnapshot>,
     pub session: SessionSnapshot,
 }
 
@@ -830,6 +854,7 @@ impl AppSnapshot {
             selected_profile: None,
             application_icons: None,
             application_processes: Vec::new(),
+            pending_process_confirmation: None,
             session: SessionSnapshot::default(),
         }
     }

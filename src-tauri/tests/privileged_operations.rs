@@ -908,11 +908,14 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
     let primary_application_id = core.snapshot().application_processes[0]
         .application_id
         .clone();
+    let confirmation_token = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("a stuck Session-owned close should require native confirmation")
+        .token;
     assert_eq!(
-        core.execute(AppCommand::ForceStopApplication {
-            application_id: primary_application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: true,
+        core.execute(AppCommand::ConfirmProcessAction {
+            token: confirmation_token,
         })
         .expect("a Stopping Session-owned Process should be force-stoppable during close"),
         CommandOutcome::ApplicationStopped {
@@ -1065,6 +1068,7 @@ fn manual_uac_helper_launches_and_closes_an_elevated_window_fixture() {
     let close = match broker.execute(&[ElevatedOperation::GracefulStop {
         process_identity: identity,
         strategy: ShutdownStrategy::CloseWindows,
+        custom_stop_executable_sha256: None,
     }]) {
         Ok(response) => response,
         Err(error) => {
@@ -1321,6 +1325,12 @@ fn elevated_manual_restart_routes_close_and_relaunch_through_the_broker() {
         profile: Box::new(profile),
     })
     .expect("the elevated Primary Sim should save");
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![application_id.clone()],
+    })
+    .expect("the elevated Primary Sim should be approved");
 
     core.execute(AppCommand::StartApplication {
         profile_id: profile_id.clone(),

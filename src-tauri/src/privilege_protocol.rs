@@ -11,7 +11,7 @@ use std::{
 };
 use uuid::Uuid;
 
-pub const ELEVATED_HELPER_PROTOCOL_VERSION: u16 = 2;
+pub const ELEVATED_HELPER_PROTOCOL_VERSION: u16 = 3;
 pub const MAX_ELEVATED_OPERATIONS: usize = 32;
 pub const MAX_ELEVATED_ARGUMENTS: usize = 32;
 pub const MAX_ELEVATED_ARGUMENT_BYTES: usize = 16_384;
@@ -43,6 +43,7 @@ pub enum ElevatedOperation {
     GracefulStop {
         process_identity: ProcessIdentity,
         strategy: ShutdownStrategy,
+        custom_stop_executable_sha256: Option<String>,
     },
     ForceTerminate {
         process_identity: ProcessIdentity,
@@ -328,6 +329,7 @@ fn validate_operation(
         ElevatedOperation::GracefulStop {
             process_identity,
             strategy,
+            custom_stop_executable_sha256,
         } => {
             validate_controllable_process(process_identity, request, context)?;
             if let ShutdownStrategy::CustomStop {
@@ -335,8 +337,13 @@ fn validate_operation(
                 arguments,
             } = strategy
             {
-                validate_executable(executable_path)?;
+                let expected = custom_stop_executable_sha256
+                    .as_deref()
+                    .ok_or(HelperProtocolError::ExecutableIdentityMismatch)?;
+                validate_executable_identity(executable_path, expected)?;
                 validate_arguments(arguments)?;
+            } else if custom_stop_executable_sha256.is_some() {
+                return Err(HelperProtocolError::ExecutableIdentityMismatch);
             }
             Ok(())
         }
@@ -379,24 +386,10 @@ fn validate_executable(path: &str) -> Result<(), HelperProtocolError> {
             HelperProtocolError::InvalidExecutable("target has no executable name".to_owned())
         })?
         .to_ascii_lowercase();
-    if !executable_name.ends_with(".exe") {
+    if !crate::launch_recipe::is_safe_executable_name(&executable_name) {
         return Err(HelperProtocolError::InvalidExecutable(
-            "target is not an .exe file".to_owned(),
-        ));
-    }
-    if matches!(
-        executable_name.as_str(),
-        "cmd.exe"
-            | "powershell.exe"
-            | "pwsh.exe"
-            | "wscript.exe"
-            | "cscript.exe"
-            | "mshta.exe"
-            | "rundll32.exe"
-            | "regsvr32.exe"
-    ) {
-        return Err(HelperProtocolError::InvalidExecutable(
-            "shell and script hosts are outside the helper protocol".to_owned(),
+            "target is not an allowed .exe file; shell and script hosts are outside the helper protocol"
+                .to_owned(),
         ));
     }
     Ok(())
@@ -418,6 +411,62 @@ pub(crate) fn executable_sha256(path: &str) -> Result<String, HelperProtocolErro
         hasher.update(&buffer[..bytes]);
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// Private Windows helper-executor guard. `FILE_SHARE_READ` intentionally
+/// excludes write and delete sharing, so the path cannot be replaced or
+/// truncated while the executor asks Windows to open it as an image.
+#[cfg(windows)]
+pub(crate) struct VerifiedExecutableTarget {
+    canonical_path: String,
+    _file: File,
+}
+
+#[cfg(windows)]
+impl VerifiedExecutableTarget {
+    pub(crate) fn open(path: &str, expected_sha256: &str) -> Result<Self, HelperProtocolError> {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+        validate_executable(path)?;
+        if expected_sha256.len() != 64
+            || !expected_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(HelperProtocolError::ExecutableIdentityMismatch);
+        }
+        let canonical_path = validate_canonical_file(path)?
+            .to_string_lossy()
+            .into_owned();
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&canonical_path)
+            .map_err(|error| HelperProtocolError::InvalidExecutable(error.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let bytes = file
+                .read(&mut buffer)
+                .map_err(|error| HelperProtocolError::InvalidExecutable(error.to_string()))?;
+            if bytes == 0 {
+                break;
+            }
+            hasher.update(&buffer[..bytes]);
+        }
+        if format!("{:x}", hasher.finalize()) != expected_sha256 {
+            return Err(HelperProtocolError::ExecutableIdentityMismatch);
+        }
+        Ok(Self {
+            canonical_path,
+            _file: file,
+        })
+    }
+
+    pub(crate) fn canonical_path(&self) -> &str {
+        &self.canonical_path
+    }
 }
 
 fn validate_executable_identity(
@@ -487,4 +536,42 @@ pub(crate) fn canonical_executable_path(
     let canonical = canonical.to_string_lossy().into_owned();
     validate_executable(&canonical)?;
     Ok(canonical)
+}
+
+#[cfg(all(test, windows))]
+mod verified_target_tests {
+    use super::{VerifiedExecutableTarget, executable_sha256};
+    use std::{
+        fs, process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn verified_target_denies_replacement_until_the_launch_guard_is_dropped() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be valid")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "formation-lap-verified-target-{}-{nonce}",
+            process::id()
+        ));
+        fs::create_dir_all(&directory).expect("fixture directory should exist");
+        let target = directory.join("target.exe");
+        let replacement = directory.join("replacement.exe");
+        fs::copy(
+            std::env::current_exe().expect("test executable should exist"),
+            &target,
+        )
+        .expect("fixture executable should copy");
+        fs::write(&replacement, b"replacement").expect("replacement fixture should write");
+        let target = target.canonicalize().expect("target should canonicalize");
+        let expected = executable_sha256(&target.to_string_lossy()).expect("target should hash");
+        let guard = VerifiedExecutableTarget::open(&target.to_string_lossy(), &expected)
+            .expect("target should open with exclusive replacement sharing");
+        assert!(fs::rename(&replacement, &target).is_err());
+        drop(guard);
+        fs::rename(&replacement, &target).expect("replacement should succeed after guard drop");
+        fs::remove_dir_all(directory).expect("fixture directory should clean up");
+    }
 }

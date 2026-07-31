@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -27,6 +33,60 @@ const protocolVersion = Number(
     protocolSource,
   )?.[1],
 );
+
+test("release identity protocol sources stay synchronized", () => {
+  const sources = [
+    [
+      "Rust helper protocol",
+      "src-tauri/src/privilege_protocol.rs",
+      `ELEVATED_HELPER_PROTOCOL_VERSION: u16 = ${protocolVersion}`,
+    ],
+    [
+      "Rust release verifier",
+      "src-tauri/src/release_identity.rs",
+      "manifest.protocol_version != ELEVATED_HELPER_PROTOCOL_VERSION",
+    ],
+    [
+      "release identity generator",
+      "scripts/release/generate-release-identity.mjs",
+      `const protocolVersion = ${protocolVersion};`,
+    ],
+    [
+      "signed fixture payload",
+      "src-tauri/tests/fixtures/release_identity_payload.txt",
+      `protocolVersion=${protocolVersion}`,
+    ],
+    [
+      "helper threat checklist",
+      "docs/security/M7_ELEVATED_HELPER_THREAT_CHECKLIST.md",
+      `protocol version \`${protocolVersion}\``,
+    ],
+    [
+      "helper ADR",
+      "docs/adr/0003-one-shot-elevated-helper.md",
+      "protocol version",
+    ],
+    [
+      "release ADR",
+      "docs/adr/0005-signed-github-release-path.md",
+      "helper protocol version",
+    ],
+  ];
+  const testFixtureGenerator = join(
+    repositoryRoot,
+    "scripts",
+    "release",
+    "generate-test-release-identity-fixture.mjs",
+  );
+
+  for (const [name, path, expected] of sources) {
+    assert.ok(
+      readFileSync(join(repositoryRoot, path), "utf8").includes(expected),
+      `${name} must use protocol v${protocolVersion}`,
+    );
+  }
+  assert.ok(existsSync(testFixtureGenerator));
+});
 
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "formation-lap-identity-"));

@@ -29,6 +29,17 @@ const installerHooks = readFileSync(
   resolve(import.meta.dirname, "..", "..", "src-tauri", "windows", "hooks.nsh"),
   "utf8",
 );
+const executablePicker = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "..",
+    "..",
+    "src-tauri",
+    "src",
+    "native_file_picker.rs",
+  ),
+  "utf8",
+);
 
 function binBlock(name) {
   const blocks = manifest.split("[[bin]]").slice(1);
@@ -77,6 +88,12 @@ test("the bundle-only updater config exposes no runtime plugin surface", () => {
   });
   assert.doesNotMatch(manifest, /tauri-plugin-updater/);
   assert.match(manifest, /minisign-verify\s*=\s*"=0\.2\.5"/);
+});
+
+test("the native executable picker accepts only exe files without renderer paths", () => {
+  assert.match(executablePicker, /Executable files\\0\*\.exe\\0\\0/);
+  assert.doesNotMatch(executablePicker, /\*\.com|\*\.bat|\*\.cmd|All files/);
+  assert.match(executablePicker, /pub\(crate\) fn pick_executable_path\(\)/);
 });
 
 test("release bundles install the helper authorization manifest as a native resource", () => {

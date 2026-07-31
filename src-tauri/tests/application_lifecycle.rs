@@ -562,26 +562,14 @@ fn force_stop_requires_explicit_confirmation_after_graceful_timeout() {
         ProcessStatus::Stopping
     );
 
-    let unconfirmed = core
-        .execute(AppCommand::ForceStopApplication {
-            application_id: application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: false,
-        })
-        .expect("an unconfirmed force request should be rejected safely");
-    assert_eq!(
-        unconfirmed,
-        CommandOutcome::ForceStopConfirmationRequired {
-            application_id: application_id.clone(),
-        }
-    );
+    let token = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("graceful timeout should create a native confirmation")
+        .token;
 
     let confirmed = core
-        .execute(AppCommand::ForceStopApplication {
-            application_id: application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: true,
-        })
+        .execute(AppCommand::ConfirmProcessAction { token })
         .expect("a confirmed force request should stop the Process");
     assert_eq!(
         confirmed,
@@ -598,6 +586,110 @@ fn force_stop_requires_explicit_confirmation_after_graceful_timeout() {
             identity: None,
             output: None,
         }
+    );
+}
+
+#[test]
+fn cancelled_restart_cannot_be_replayed_by_a_later_exit_confirmation() {
+    let storage = TempStorage::new();
+    let launched_identity = ProcessIdentity {
+        pid: 6_892,
+        creation_time: "133822944450000000".to_owned(),
+        canonical_executable_path: std::env::current_exe()
+            .expect("test executable path should be available")
+            .canonicalize()
+            .expect("test executable path should canonicalize")
+            .to_string_lossy()
+            .into_owned(),
+    };
+    let runtime = ScriptedProcessRuntime {
+        matching_processes: VecDeque::new(),
+        launch_results: VecDeque::from([Ok(launched_identity)]),
+        observations: VecDeque::new(),
+        graceful_stop_results: VecDeque::from([
+            Ok(GracefulStopResult::Requested),
+            Ok(GracefulStopResult::Requested),
+        ]),
+        wait_for_exit_results: VecDeque::from([Ok(false), Ok(false)]),
+        force_stop_results: VecDeque::from([Ok(())]),
+    };
+    let (mut core, profile_id, application_id) = configured_core(&storage, runtime);
+    core.execute(AppCommand::StartApplication {
+        profile_id: profile_id.clone(),
+        application_id: application_id.clone(),
+    })
+    .expect("configured application should start");
+
+    core.execute(AppCommand::RestartApplication {
+        profile_id,
+        application_id: application_id.clone(),
+        pre_existing_confirmed: false,
+    })
+    .expect("graceful restart timeout should request native confirmation");
+    let restart_token = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("restart should create one pending native intent")
+        .token;
+    core.execute(AppCommand::CancelProcessAction {
+        token: restart_token.clone(),
+    })
+    .expect("cancelling should remove the restart intent");
+    assert!(core.snapshot().pending_process_confirmation.is_none());
+
+    core.execute(AppCommand::ExitApplication {
+        application_id: application_id.clone(),
+        pre_existing_confirmed: false,
+    })
+    .expect("a later exit should create its own confirmation");
+    let exit_confirmation = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("exit should create one pending native intent");
+    assert_ne!(exit_confirmation.token, restart_token);
+    assert_eq!(
+        exit_confirmation.action,
+        formation_lap_lib::ProcessConfirmationAction::Exit
+    );
+
+    assert!(
+        core.execute(AppCommand::ConfirmProcessAction {
+            token: restart_token,
+        })
+        .is_err()
+    );
+    assert_eq!(
+        core.snapshot().application_processes[0].status,
+        ProcessStatus::Stopping,
+        "a stale restart token must not stop or relaunch the Process"
+    );
+    assert_eq!(
+        core.snapshot()
+            .pending_process_confirmation
+            .expect("a stale token must not consume the newer exit intent")
+            .token,
+        exit_confirmation.token
+    );
+
+    assert_eq!(
+        core.execute(AppCommand::ConfirmProcessAction {
+            token: exit_confirmation.token.clone(),
+        })
+        .expect("the exact exit confirmation should stop without restarting"),
+        CommandOutcome::ApplicationStopped {
+            application_id: application_id.clone(),
+        }
+    );
+    assert!(
+        core.execute(AppCommand::ConfirmProcessAction {
+            token: exit_confirmation.token,
+        })
+        .is_err()
+    );
+    assert_eq!(
+        core.snapshot().application_processes[0].status,
+        ProcessStatus::Stopped,
+        "replaying a consumed confirmation must not relaunch the application"
     );
 }
 

@@ -253,11 +253,9 @@ export function useProfileWorkspace({
     onNavigate("edit-profile");
   };
 
-  const pickExecutablePath = async (
-    initialPath?: string | null,
-  ): Promise<string | null> => {
+  const pickExecutablePath = async (): Promise<string | null> => {
     try {
-      return await bridge.pickExecutablePath(initialPath);
+      return await bridge.pickExecutablePath();
     } catch {
       setProfileError(
         "Formation Lap could not open the executable picker. Type the path or try again.",

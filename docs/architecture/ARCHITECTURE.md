@@ -165,6 +165,11 @@ diagnostics.
 - Retain each trusted source path independently from document content.
 - Repair invalid legacy IDs into UUID-named documents while preserving backups.
 - Keep newly imported executable configuration in Needs Review until approved.
+- Fail closed to Needs Review whenever any saved direct, monitored, or
+  custom-stop executable is missing, noncanonical, unsupported, or blocklisted;
+  complete profiles with privileged recipes also require explicit approval.
+- Expose the native executable picker as a zero-payload command that selects
+  `.exe` files only; renderer paths never choose its initial directory.
 - Persist privileged-recipe approval only as a Windows-protected record bound
   to the reviewed Launch Recipe configuration, never in editable profile JSON.
 
@@ -344,6 +349,11 @@ Persistence rules:
 - Writes use a temporary file in the destination directory followed by atomic
   replacement.
 - The prior valid document is retained as a bounded backup.
+- When a live settings or Session-journal document is malformed or fails
+  compatible validation, storage validates the bounded backup before mutation,
+  retains corrupt live bytes in one of two deterministic recovery-artifact
+  slots, then atomically restores a synchronized copy while preserving the
+  valid backup. A structurally valid newer schema never falls back.
 - Failed migration never overwrites the last valid document.
 - Session journal writes happen as ownership changes, not only on clean exit.
 - Exported profiles omit transient process identities and diagnostic state.

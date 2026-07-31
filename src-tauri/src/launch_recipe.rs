@@ -3,6 +3,24 @@ use std::path::Path;
 
 const MAX_STEAM_ARGUMENT_BYTES: usize = 4_096;
 
+/// The small, shared policy for executable targets that Formation Lap may run
+/// directly (including through the elevated helper).  Path canonicalization
+/// and file existence remain adapter concerns.
+pub(crate) fn is_safe_executable_name(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".exe")
+        && !matches!(
+            name.to_ascii_lowercase().as_str(),
+            "cmd.exe"
+                | "powershell.exe"
+                | "pwsh.exe"
+                | "wscript.exe"
+                | "cscript.exe"
+                | "mshta.exe"
+                | "rundll32.exe"
+                | "regsvr32.exe"
+        )
+}
+
 pub(crate) fn sanitized_target(recipe: &LaunchRecipe) -> Result<GameLaunchTarget, String> {
     match &recipe.source {
         LaunchSource::Steam { .. } => {
@@ -67,7 +85,7 @@ fn percent_encode(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::steam_launch_uri;
+    use super::{is_safe_executable_name, steam_launch_uri};
     use crate::{LaunchRecipe, LaunchSource, SteamLaunchSelector};
 
     #[test]
@@ -111,5 +129,22 @@ mod tests {
             steam_launch_uri(&recipe).expect("structured arguments should render"),
             "steam://run/42//-novr%20value%20with%20spaces/"
         );
+    }
+
+    #[test]
+    fn direct_executable_safety_policy_rejects_every_shell_host() {
+        for name in [
+            "cmd.exe",
+            "powershell.exe",
+            "pwsh.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "mshta.exe",
+            "rundll32.exe",
+            "regsvr32.exe",
+        ] {
+            assert!(!is_safe_executable_name(name), "{name} must be blocked");
+        }
+        assert!(is_safe_executable_name("SimHub.exe"));
     }
 }

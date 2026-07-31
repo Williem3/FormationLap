@@ -1,4 +1,7 @@
-use crate::{CoreError, atomic_file::replace_with_backup};
+use crate::{
+    CoreError,
+    atomic_file::{recover_live_document, replace_with_backup, restore_backup_without_replacing},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, OpenOptions},
@@ -37,28 +40,17 @@ impl SettingsStore {
             if settings_path.exists() {
                 fs::remove_file(&temporary_path)?;
             } else if backup_path.exists() {
-                let recovered: SettingsDocument = serde_json::from_slice(&fs::read(&backup_path)?)
-                    .map_err(CoreError::InvalidSettingsDocument)?;
-                if recovered.schema_version != SETTINGS_SCHEMA_VERSION {
-                    return Err(CoreError::UnsupportedSettingsSchema(
-                        recovered.schema_version,
-                    ));
-                }
+                Self::load_document(&backup_path)?;
                 fs::remove_file(&temporary_path)?;
-                fs::rename(&backup_path, &settings_path)?;
+                restore_backup_without_replacing(&backup_path, &settings_path)?;
             } else {
                 fs::remove_file(&temporary_path)?;
             }
         }
         let document = if settings_path.exists() {
-            let document: SettingsDocument = serde_json::from_slice(&fs::read(&settings_path)?)
-                .map_err(CoreError::InvalidSettingsDocument)?;
-            if document.schema_version != SETTINGS_SCHEMA_VERSION {
-                return Err(CoreError::UnsupportedSettingsSchema(
-                    document.schema_version,
-                ));
-            }
-            document
+            recover_live_document(&settings_path, &backup_path, Self::load_document, |error| {
+                matches!(error, CoreError::UnsupportedSettingsSchema(_))
+            })?
         } else {
             SettingsDocument {
                 schema_version: SETTINGS_SCHEMA_VERSION,
@@ -73,6 +65,17 @@ impl SettingsStore {
             document,
             settings_path,
         })
+    }
+
+    fn load_document(path: &Path) -> Result<SettingsDocument, CoreError> {
+        let document: SettingsDocument =
+            serde_json::from_slice(&fs::read(path)?).map_err(CoreError::InvalidSettingsDocument)?;
+        if document.schema_version != SETTINGS_SCHEMA_VERSION {
+            return Err(CoreError::UnsupportedSettingsSchema(
+                document.schema_version,
+            ));
+        }
+        Ok(document)
     }
 
     pub(crate) fn selected_profile_id(&self) -> Option<&str> {

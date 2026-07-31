@@ -906,42 +906,79 @@ mod platform {
         let result = match operation {
             ElevatedOperation::Launch {
                 executable_path,
-                executable_sha256: _,
+                executable_sha256,
                 arguments,
                 working_directory,
                 monitored_process,
                 monitored_executable_path,
                 console_visibility,
                 startup_timeout_seconds,
-            } => crate::process_runtime::launch_without_output_capture(&LaunchRecipe {
-                source: LaunchSource::DirectExecutable {
-                    executable_path: executable_path.clone(),
-                },
-                arguments: arguments.clone(),
-                working_directory: working_directory.clone(),
-                monitored_process: monitored_process.clone(),
-                monitored_executable_path: monitored_executable_path.clone(),
-                console_visibility: console_visibility.clone(),
-                elevated: false,
-                startup_timeout_seconds: *startup_timeout_seconds,
-                post_start_delay_milliseconds: 0,
-                shutdown_strategy: ShutdownStrategy::CloseWindows,
+            } => crate::privilege_protocol::VerifiedExecutableTarget::open(
+                executable_path,
+                executable_sha256,
+            )
+            .map_err(|error| crate::ProcessRuntimeError::new(error.to_string()))
+            .and_then(|verified| {
+                crate::process_runtime::launch_without_output_capture(&LaunchRecipe {
+                    source: LaunchSource::DirectExecutable {
+                        executable_path: verified.canonical_path().to_owned(),
+                    },
+                    arguments: arguments.clone(),
+                    working_directory: working_directory.clone(),
+                    monitored_process: monitored_process.clone(),
+                    monitored_executable_path: monitored_executable_path.clone(),
+                    console_visibility: console_visibility.clone(),
+                    elevated: false,
+                    startup_timeout_seconds: *startup_timeout_seconds,
+                    post_start_delay_milliseconds: 0,
+                    shutdown_strategy: ShutdownStrategy::CloseWindows,
+                })
             })
             .map(|process_identity| ElevatedOperationResult::Launched { process_identity }),
             ElevatedOperation::GracefulStop {
                 process_identity,
                 strategy,
-            } => {
+                custom_stop_executable_sha256,
+            } => (|| -> Result<ElevatedOperationResult, crate::ProcessRuntimeError> {
+                let verified = match strategy {
+                    ShutdownStrategy::CustomStop {
+                        executable_path, ..
+                    } => {
+                        let expected =
+                            custom_stop_executable_sha256.as_deref().ok_or_else(|| {
+                                crate::ProcessRuntimeError::new(
+                                    "custom-stop target is missing its approved executable hash",
+                                )
+                            })?;
+                        Some(
+                            crate::privilege_protocol::VerifiedExecutableTarget::open(
+                                executable_path,
+                                expected,
+                            )
+                            .map_err(|error| crate::ProcessRuntimeError::new(error.to_string()))?,
+                        )
+                    }
+                    _ => None,
+                };
+                let strategy = match (strategy, &verified) {
+                    (ShutdownStrategy::CustomStop { arguments, .. }, Some(verified)) => {
+                        ShutdownStrategy::CustomStop {
+                            executable_path: verified.canonical_path().to_owned(),
+                            arguments: arguments.clone(),
+                        }
+                    }
+                    _ => strategy.clone(),
+                };
                 let mut runtime = WindowsProcessRuntime::new();
                 runtime
-                    .request_graceful_stop(process_identity, strategy)
+                    .request_graceful_stop(process_identity, &strategy)
                     .and_then(|result| {
                         let requested = result == GracefulStopResult::Requested;
                         let exited = requested
                             && runtime.wait_for_exit(process_identity, Duration::from_secs(5))?;
                         Ok(ElevatedOperationResult::GracefulStopRequested { requested, exited })
                     })
-            }
+            })(),
             ElevatedOperation::ForceTerminate { process_identity } => WindowsProcessRuntime::new()
                 .force_stop(process_identity)
                 .map(|()| ElevatedOperationResult::ForceTerminated),

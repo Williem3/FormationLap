@@ -47,6 +47,14 @@ impl Drop for TempStorage {
     }
 }
 
+fn temporary_safe_executable(name: &str) -> PathBuf {
+    let unique = NEXT_TEMP_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("formation-lap-{unique}-{name}"));
+    fs::write(&path, b"test executable bytes").expect("temporary executable should be written");
+    path.canonicalize()
+        .expect("temporary executable should canonicalize")
+}
+
 struct RecipeRecordingRuntime {
     launched_recipes: Arc<Mutex<Vec<LaunchRecipe>>>,
     identity: ProcessIdentity,
@@ -214,12 +222,18 @@ fn a_profile_launch_recipe_overrides_curated_defaults() {
 
 #[test]
 fn standalone_iracing_keeps_its_direct_executable_recipe() {
+    let executable = temporary_safe_executable("iRacingSim64DX11.exe");
+    let working_directory = executable
+        .parent()
+        .expect("temporary executable should have a parent")
+        .to_string_lossy()
+        .to_string();
     let direct_recipe = LaunchRecipe {
         source: LaunchSource::DirectExecutable {
-            executable_path: r"C:\iRacing\iRacingSim64DX11.exe".to_owned(),
+            executable_path: executable.to_string_lossy().to_string(),
         },
         arguments: vec!["-hosted".to_owned()],
-        working_directory: Some(r"C:\iRacing".to_owned()),
+        working_directory: Some(working_directory),
         monitored_process: None,
         monitored_executable_path: None,
         console_visibility: ConsoleVisibility::Hidden,
@@ -234,6 +248,8 @@ fn standalone_iracing_keeps_its_direct_executable_recipe() {
             .expect("standalone iRacing should launch without Steam");
 
     assert_eq!(recipes, vec![direct_recipe]);
+
+    fs::remove_file(executable).expect("temporary executable should be removed");
 }
 
 #[test]

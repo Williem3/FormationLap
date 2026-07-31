@@ -18,9 +18,23 @@ blocked until this program is complete and separately reviewed.
 | Helper caller authentication and preview identity        | Complete | Authenticated caller boundary, three native release-identity tests, helper adversarial test, and release workflow contracts                                                               |
 | Ordered adjacent elevation and ownership acknowledgement | Complete | Saved-position launch test, durable journal-before-ack test, and real helper compensation test                                                                                            |
 | Imported-profile review                                  | Complete | Native review state, exact privileged-entry approval, invalidation tests, and React quarantine behavior                                                                                   |
+| Launch quarantine and executable picker                  | Complete | Complete privileged profiles, edited/forged unsafe executable paths, zero-payload NativeBridge picker, and `.exe`-only release contract regressions                                       |
 | Local storage and startup migration                      | Complete | Three command-host migration tests, six startup policy tests, NSIS bundle contract, and a real debug NSIS build                                                                           |
 | Opt-in native update coordination                        | Pending  | —                                                                                                                                                                                         |
 | Signed-build equality and adversarial qualification      | Pending  | —                                                                                                                                                                                         |
+
+## One-shot destructive Process confirmations
+
+FormationLapCore now owns a single pending destructive Process confirmation.
+It carries a native UUID-v4 token, the exact Exit, Restart, or Session Close
+action, application ID, and complete stable Process identity. Confirm consumes
+the token before force termination and revalidates the identity; stale,
+replayed, cancelled, or replaced-identity tokens fail closed. Only a confirmed
+Restart intent may relaunch. Start, cancel, and Close Session clear incompatible
+manual intent, while a stuck Session-owned Close creates its own explicit
+Session Close confirmation so cleanup can advance. React renders this native
+snapshot and its Cancel/Escape/X route invokes the typed native cancellation
+command.
 
 ## Verified Process handles and monitored paths
 

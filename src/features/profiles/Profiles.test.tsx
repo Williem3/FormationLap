@@ -1034,9 +1034,7 @@ describe("Racing Profile behavior", () => {
       }),
     );
 
-    expect(pickExecutablePath).toHaveBeenCalledWith(
-      String.raw`C:\Fixtures\healthy.exe`,
-    );
+    expect(pickExecutablePath).toHaveBeenCalledWith();
     expect(
       screen.getByRole("button", { name: "Browse for Primary Sim executable" }),
     ).toHaveClass("path-browse-button");

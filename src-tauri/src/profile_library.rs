@@ -16,7 +16,7 @@ use uuid::Uuid;
 const PROFILE_SCHEMA_VERSION: u32 = 2;
 const LEGACY_PROFILE_SCHEMA_VERSION: u32 = 1;
 const PORTABLE_PROFILE_SCHEMA_VERSION: u32 = 1;
-const PROFILE_APPROVAL_SCHEMA_VERSION: u32 = 1;
+const PROFILE_APPROVAL_SCHEMA_VERSION: u32 = 2;
 
 fn validate_profile_names(name: &str, primary_sim_name: &str) -> Result<(), CoreError> {
     if name.trim().is_empty() {
@@ -134,6 +134,15 @@ struct ProfileApprovalRecord {
     schema_version: u32,
     profile_id: String,
     launch_configuration_fingerprint: String,
+    approved_executables: Vec<ApprovedExecutableHashes>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovedExecutableHashes {
+    application_id: String,
+    elevated_executable_sha256: Option<String>,
+    custom_stop_executable_sha256: Option<String>,
 }
 
 struct ProfileApprovalStore {
@@ -175,6 +184,19 @@ impl ProfileApprovalStore {
             && record.profile_id == profile.id
             && record.launch_configuration_fingerprint
                 == ProfileLibrary::approval_fingerprint(profile).unwrap_or_default()
+            && ProfileLibrary::approved_executable_hashes(profile)
+                .ok()
+                .is_some_and(|current| {
+                    current.iter().all(|hashes| {
+                        record.approved_executables.iter().any(|stored| {
+                            stored.application_id == hashes.application_id
+                                && stored.elevated_executable_sha256
+                                    == hashes.elevated_executable_sha256
+                                && stored.custom_stop_executable_sha256
+                                    == hashes.custom_stop_executable_sha256
+                        })
+                    })
+                })
     }
 
     fn persist(&self, profile: &RacingProfileDocument) -> Result<(), CoreError> {
@@ -182,6 +204,7 @@ impl ProfileApprovalStore {
             schema_version: PROFILE_APPROVAL_SCHEMA_VERSION,
             profile_id: profile.id.clone(),
             launch_configuration_fingerprint: ProfileLibrary::approval_fingerprint(profile)?,
+            approved_executables: ProfileLibrary::approved_executable_hashes(profile)?,
         };
         let encrypted_record = protect_approval_record(&serde_json::to_vec(&record)?)?;
         let temporary = self.directory.join(format!(".{}.tmp", profile.id));
@@ -376,12 +399,14 @@ impl ProfileLibrary {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
                 Self::persist_migration(&source_path, &backups_directory, &document)?;
             }
+            Self::refresh_repair_state(&mut document);
             // Profile JSON remains user-writable. A privileged recipe is trusted
             // only when the JSON still says it is approved and the separately
             // protected approval record matches this exact launch configuration.
-            if Self::has_privileged_recipe(&document)
-                && (document.review_status != ProfileReviewStatus::Approved
-                    || !approval_store.matches(&document))
+            if Self::profile_requires_repair(&document)
+                || (Self::has_privileged_recipe(&document)
+                    && (document.review_status != ProfileReviewStatus::Approved
+                        || !approval_store.matches(&document)))
             {
                 document.review_status = ProfileReviewStatus::NeedsReview;
             }
@@ -643,11 +668,10 @@ impl ProfileLibrary {
                 .any(|profile| profile.document.id == profile_id)
     }
 
-    pub(crate) fn review_status(&self, profile_id: &str) -> Result<ProfileReviewStatus, CoreError> {
-        Ok(self.profiles[self.profile_index(profile_id)?]
-            .document
-            .review_status
-            .clone())
+    pub(crate) fn requires_review(&self, profile_id: &str) -> Result<bool, CoreError> {
+        let profile = &self.profiles[self.profile_index(profile_id)?].document;
+        Ok(profile.review_status == ProfileReviewStatus::NeedsReview
+            || Self::profile_requires_repair(profile))
     }
 
     pub(crate) fn profile(&self, profile_id: &str) -> Option<RacingProfile> {
@@ -777,21 +801,29 @@ impl ProfileLibrary {
         {
             return true;
         }
-        path.file_name()
+        let canonical_path = match path.canonicalize() {
+            Ok(canonical_path) if canonical_path == path => canonical_path,
+            _ => return true,
+        };
+        canonical_path
+            .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| {
-                [
-                    "cmd.exe",
-                    "powershell.exe",
-                    "pwsh.exe",
-                    "wscript.exe",
-                    "cscript.exe",
-                    "mshta.exe",
-                    "rundll32.exe",
-                ]
-                .iter()
-                .any(|blocked| name.eq_ignore_ascii_case(blocked))
-            })
+            .is_none_or(|name| !crate::launch_recipe::is_safe_executable_name(name))
+    }
+
+    fn refresh_repair_state(profile: &mut RacingProfileDocument) {
+        profile.primary_sim.path_needs_repair =
+            Self::path_needs_repair(&profile.primary_sim.launch_recipe);
+        for supporting in &mut profile.supporting_applications {
+            supporting.application.path_needs_repair =
+                Self::path_needs_repair(&supporting.application.launch_recipe);
+        }
+    }
+
+    fn profile_requires_repair(profile: &RacingProfileDocument) -> bool {
+        Self::applications(profile).any(|application| {
+            application.path_needs_repair || Self::path_needs_repair(&application.launch_recipe)
+        })
     }
 
     pub(crate) fn create_complete(
@@ -806,7 +838,7 @@ impl ProfileLibrary {
         }
 
         let id = Uuid::new_v4().to_string();
-        let profile = RacingProfileDocument {
+        let mut profile = RacingProfileDocument {
             schema_version: PROFILE_SCHEMA_VERSION,
             id: id.clone(),
             name: profile.name,
@@ -837,6 +869,9 @@ impl ProfileLibrary {
             close_session: profile.close_session,
             review_status: ProfileReviewStatus::Approved,
         };
+        if Self::has_privileged_recipe(&profile) || Self::profile_requires_repair(&profile) {
+            profile.review_status = ProfileReviewStatus::NeedsReview;
+        }
         let destination = self.profiles_directory.join(format!("{id}.json"));
         let temporary = self.profiles_directory.join(format!(".{id}.json.tmp"));
         Self::write_temporary_document(&temporary, &profile)?;
@@ -919,8 +954,11 @@ impl ProfileLibrary {
             Self::approval_fingerprint(&stored_profile)? != Self::approval_fingerprint(&profile)?;
         let privileged_recipe_changed =
             Self::has_privileged_recipe(&profile) && approval_binding_changed;
-        profile.review_status = if stored_profile.review_status == ProfileReviewStatus::NeedsReview
+        profile.review_status = if (stored_profile.review_status
+            == ProfileReviewStatus::NeedsReview
+            && Self::has_privileged_recipe(&profile))
             || privileged_recipe_changed
+            || Self::profile_requires_repair(&profile)
         {
             ProfileReviewStatus::NeedsReview
         } else {
@@ -951,7 +989,7 @@ impl ProfileLibrary {
         }
         let profile_index = self.profile_index(profile_id)?;
         let profile = &self.profiles[profile_index].document;
-        if Self::applications(profile).any(|application| application.path_needs_repair) {
+        if Self::profile_requires_repair(profile) {
             return Err(CoreError::InvalidProfileApproval(
                 "one or more executable paths must be repaired first".to_owned(),
             ));
@@ -1036,6 +1074,81 @@ impl ProfileLibrary {
             "{:x}",
             Sha256::digest(serde_json::to_vec(&binding)?)
         ))
+    }
+
+    fn approved_executable_hashes(
+        profile: &RacingProfileDocument,
+    ) -> Result<Vec<ApprovedExecutableHashes>, CoreError> {
+        Self::applications(profile)
+            .map(|application| {
+                let recipe = &application.launch_recipe;
+                let elevated_executable_sha256 = if recipe.elevated {
+                    let crate::LaunchSource::DirectExecutable { executable_path } = &recipe.source
+                    else {
+                        return Err(CoreError::InvalidProfileApproval(
+                            "elevated recipes must use a direct executable".to_owned(),
+                        ));
+                    };
+                    Some(
+                        crate::privilege_protocol::executable_sha256(executable_path).map_err(
+                            |error| CoreError::InvalidProfileApproval(error.to_string()),
+                        )?,
+                    )
+                } else {
+                    None
+                };
+                let custom_stop_executable_sha256 = match &recipe.shutdown_strategy {
+                    ShutdownStrategy::CustomStop {
+                        executable_path, ..
+                    } => Some(
+                        crate::privilege_protocol::executable_sha256(executable_path).map_err(
+                            |error| CoreError::InvalidProfileApproval(error.to_string()),
+                        )?,
+                    ),
+                    _ => None,
+                };
+                Ok(ApprovedExecutableHashes {
+                    application_id: application.id.clone(),
+                    elevated_executable_sha256,
+                    custom_stop_executable_sha256,
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn approved_executable_sha256(
+        &self,
+        application_id: &str,
+        custom_stop: bool,
+    ) -> Result<String, CoreError> {
+        let profile = self
+            .profiles
+            .iter()
+            .find(|profile| {
+                Self::applications(&profile.document).any(|app| app.id == application_id)
+            })
+            .ok_or_else(|| CoreError::ApplicationNotFound(application_id.to_owned()))?;
+        let encrypted = fs::read(self.approval_store.record_path(&profile.document.id))?;
+        let record: ProfileApprovalRecord =
+            serde_json::from_slice(&unprotect_approval_record(&encrypted)?)?;
+        if record.schema_version != PROFILE_APPROVAL_SCHEMA_VERSION
+            || record.profile_id != profile.document.id
+            || record.launch_configuration_fingerprint
+                != Self::approval_fingerprint(&profile.document)?
+        {
+            return Err(CoreError::ProfileNeedsReview(profile.document.id.clone()));
+        }
+        let hashes = record
+            .approved_executables
+            .into_iter()
+            .find(|hashes| hashes.application_id == application_id)
+            .ok_or_else(|| CoreError::ProfileNeedsReview(profile.document.id.clone()))?;
+        (if custom_stop {
+            hashes.custom_stop_executable_sha256
+        } else {
+            hashes.elevated_executable_sha256
+        })
+        .ok_or_else(|| CoreError::ProfileNeedsReview(profile.document.id.clone()))
     }
 
     pub(crate) fn delete(&mut self, profile_id: &str) -> Result<(), CoreError> {

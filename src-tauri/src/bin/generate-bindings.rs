@@ -5,17 +5,17 @@ use formation_lap_lib::{
     CloseSessionSettings, CommandError, CompatibilityRank, ConsoleVisibility, CreateProfilePayload,
     DesktopSettings, DiagnosticEntry, DiagnosticExport, DiscoveredInstallation,
     DiscoveredPrimarySim, DiscoveredSupportingApplication, DiscoverySnapshot,
-    DuplicateProfilePayload, ExitApplicationPayload, ForceStopApplicationPayload,
-    GameLaunchDiagnostic, GameLaunchTarget, ImportProfilePayload, LaunchRecipe, LaunchSource,
-    NewProfileApplication, NewRacingProfile, NewSupportingApplication, PrimarySimIdPayload,
-    ProcessIdentity, ProcessOutput, ProcessOwnership, ProcessStatus, ProfileApplication,
-    ProfileIdPayload, ProfileReviewStatus, ProfileSummary, QuitDisposition, QuitPayload,
-    RacingProfile, RestartApplicationPayload, SaveProfilePayload, SessionApplicationRole,
-    SessionApplicationSnapshot, SessionApplicationState, SessionEvent, SessionEventKind,
-    SessionSnapshot, SessionState, SessionSummary, ShutdownStrategy, SteamLaunchSelector,
-    SupportingApplication, SupportingApplicationProfileDefaults,
-    SupportingApplicationRecommendation, ThemePreference, UpdateChannel, UpdateSettingsPayload,
-    UpdateSnapshot, UpdateStatus, VrLaunchMode,
+    DuplicateProfilePayload, ExitApplicationPayload, GameLaunchDiagnostic, GameLaunchTarget,
+    ImportProfilePayload, LaunchRecipe, LaunchSource, NewProfileApplication, NewRacingProfile,
+    NewSupportingApplication, PrimarySimIdPayload, ProcessConfirmationAction,
+    ProcessConfirmationPayload, ProcessConfirmationSnapshot, ProcessIdentity, ProcessOutput,
+    ProcessOwnership, ProcessStatus, ProfileApplication, ProfileIdPayload, ProfileReviewStatus,
+    ProfileSummary, QuitDisposition, QuitPayload, RacingProfile, RestartApplicationPayload,
+    SaveProfilePayload, SessionApplicationRole, SessionApplicationSnapshot,
+    SessionApplicationState, SessionEvent, SessionEventKind, SessionSnapshot, SessionState,
+    SessionSummary, ShutdownStrategy, SteamLaunchSelector, SupportingApplication,
+    SupportingApplicationProfileDefaults, SupportingApplicationRecommendation, ThemePreference,
+    UpdateChannel, UpdateSettingsPayload, UpdateSnapshot, UpdateStatus, VrLaunchMode,
 };
 use std::{
     env, fs, io,
@@ -50,6 +50,8 @@ fn render_bindings() -> String {
         ProcessStatus::decl(&config),
         ProcessOutput::decl(&config),
         ApplicationProcessSnapshot::decl(&config),
+        ProcessConfirmationAction::decl(&config),
+        ProcessConfirmationSnapshot::decl(&config),
         SessionState::decl(&config),
         SessionApplicationRole::decl(&config),
         SessionApplicationState::decl(&config),
@@ -88,7 +90,7 @@ fn render_bindings() -> String {
         ApproveProfilePayload::decl(&config),
         ApplicationTargetPayload::decl(&config),
         ExitApplicationPayload::decl(&config),
-        ForceStopApplicationPayload::decl(&config),
+        ProcessConfirmationPayload::decl(&config),
         RestartApplicationPayload::decl(&config),
         PrimarySimIdPayload::decl(&config),
         QuitDisposition::decl(&config),
@@ -142,8 +144,8 @@ export function approveProfile(payload: ApproveProfilePayload): Promise<AppSnaps
   return invoke<AppSnapshot>("approve_profile", {{ payload }});
 }}
 
-export function pickExecutablePath(initialPath?: string | null): Promise<string | null> {{
-  return invoke<string | null>("pick_executable_path", {{ initialPath }});
+export function pickExecutablePath(): Promise<string | null> {{
+  return invoke<string | null>("pick_executable_path");
 }}
 
 export function startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot> {{
@@ -158,8 +160,12 @@ export function exitApplication(payload: ExitApplicationPayload): Promise<AppSna
   return invoke<AppSnapshot>("exit_application", {{ payload }});
 }}
 
-export function forceStopApplication(payload: ForceStopApplicationPayload): Promise<AppSnapshot> {{
-  return invoke<AppSnapshot>("force_stop_application", {{ payload }});
+export function confirmProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("confirm_process_action", {{ payload }});
+}}
+
+export function cancelProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {{
+  return invoke<AppSnapshot>("cancel_process_action", {{ payload }});
 }}
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {{

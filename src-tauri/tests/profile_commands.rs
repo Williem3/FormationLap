@@ -114,6 +114,8 @@ fn create_profile_command_persists_one_complete_profile_without_mutating_the_pri
     let storage = TempStorage::new();
     let supporting_executable = std::env::current_exe()
         .expect("test executable should have a path")
+        .canonicalize()
+        .expect("test executable should canonicalize")
         .to_string_lossy()
         .into_owned();
     let commands =

@@ -62,10 +62,11 @@ pub enum AppCommand {
         application_id: String,
         pre_existing_confirmed: bool,
     },
-    ForceStopApplication {
-        application_id: String,
-        pre_existing_confirmed: bool,
-        force_confirmed: bool,
+    ConfirmProcessAction {
+        token: String,
+    },
+    CancelProcessAction {
+        token: String,
     },
     RestartApplication {
         profile_id: String,
@@ -125,7 +126,8 @@ impl AppCommand {
             Self::ApproveProfile { .. } => "profile.approve",
             Self::StartApplication { .. } => "application.start",
             Self::ExitApplication { .. } => "application.exit",
-            Self::ForceStopApplication { .. } => "application.force_stop",
+            Self::ConfirmProcessAction { .. } => "application.confirm",
+            Self::CancelProcessAction { .. } => "application.cancel",
             Self::RestartApplication { .. } => "application.restart",
             Self::StartSession { .. } => "session.start",
             Self::CancelStartup => "session.cancel_startup",
@@ -238,6 +240,7 @@ pub enum CoreError {
     ProfileNotFound(String),
     ProfileNeedsReview(String),
     InvalidProfileApproval(String),
+    InvalidProcessConfirmation,
     ApplicationNotFound(String),
     ProcessRuntime(ProcessRuntimeError),
     PrivilegeBroker(PrivilegeBrokerError),
@@ -289,6 +292,9 @@ impl fmt::Display for CoreError {
             }
             Self::InvalidProfileApproval(message) => {
                 write!(formatter, "Racing Profile approval is invalid: {message}")
+            }
+            Self::InvalidProcessConfirmation => {
+                write!(formatter, "process confirmation is no longer valid")
             }
             Self::ApplicationNotFound(application_id) => {
                 write!(formatter, "application {application_id} was not found")
@@ -347,6 +353,7 @@ impl Error for CoreError {
             | Self::ProfileNotFound(_)
             | Self::ProfileNeedsReview(_)
             | Self::InvalidProfileApproval(_)
+            | Self::InvalidProcessConfirmation
             | Self::ApplicationNotFound(_)
             | Self::InvalidSessionTransition { .. }
             | Self::UnsupportedProfileSchema(_)
@@ -399,7 +406,7 @@ pub struct FormationLapCore {
     application_processes: BTreeMap<String, ApplicationProcessSnapshot>,
     failed_responsiveness_checks: BTreeMap<String, u8>,
     application_recipes: BTreeMap<String, crate::LaunchRecipe>,
-    pending_restarts: BTreeMap<String, crate::LaunchRecipe>,
+    pending_process_confirmation: Option<PendingProcessConfirmation>,
     prepared_elevated_launches: BTreeMap<String, PreparedElevatedLaunch>,
     startup_started_at: BTreeMap<String, Instant>,
     post_start_ready_at: BTreeMap<String, Instant>,
@@ -417,6 +424,12 @@ enum PreparedElevatedLaunch {
     SessionOwned(ProcessIdentity),
     PreExisting(ProcessIdentity),
     Failed(String),
+}
+
+#[derive(Clone)]
+struct PendingProcessConfirmation {
+    snapshot: crate::ProcessConfirmationSnapshot,
+    restart_recipe: Option<crate::LaunchRecipe>,
 }
 
 impl FormationLapCore {
@@ -561,7 +574,7 @@ impl FormationLapCore {
             application_processes,
             failed_responsiveness_checks: BTreeMap::new(),
             application_recipes,
-            pending_restarts: BTreeMap::new(),
+            pending_process_confirmation: None,
             prepared_elevated_launches: BTreeMap::new(),
             startup_started_at: BTreeMap::new(),
             post_start_ready_at: BTreeMap::new(),
@@ -604,8 +617,83 @@ impl FormationLapCore {
                 .last_automatic_update_check_unix_seconds(),
         );
         snapshot.application_processes = self.application_processes.values().cloned().collect();
+        snapshot.pending_process_confirmation = self
+            .pending_process_confirmation
+            .as_ref()
+            .map(|pending| pending.snapshot.clone());
         snapshot.session = self.session.clone();
         snapshot
+    }
+
+    fn request_process_confirmation(
+        &mut self,
+        application_id: String,
+        action: crate::ProcessConfirmationAction,
+        identity: ProcessIdentity,
+        restart_recipe: Option<crate::LaunchRecipe>,
+    ) {
+        self.pending_process_confirmation = Some(PendingProcessConfirmation {
+            snapshot: crate::ProcessConfirmationSnapshot {
+                token: uuid::Uuid::new_v4().to_string(),
+                application_id,
+                action,
+                identity,
+            },
+            restart_recipe,
+        });
+    }
+
+    fn confirm_process_action(&mut self, token: String) -> Result<CommandOutcome, CoreError> {
+        self.ensure_force_stop_is_available()?;
+        if !self
+            .pending_process_confirmation
+            .as_ref()
+            .is_some_and(|pending| pending.snapshot.token == token)
+        {
+            return Err(CoreError::InvalidProcessConfirmation);
+        }
+        let pending = self
+            .pending_process_confirmation
+            .take()
+            .expect("matching pending Process confirmation should remain present");
+        let application_id = pending.snapshot.application_id.clone();
+        let process = self
+            .application_processes
+            .get(&application_id)
+            .cloned()
+            .ok_or(CoreError::InvalidProcessConfirmation)?;
+        if process.identity.as_ref() != Some(&pending.snapshot.identity) {
+            return Err(CoreError::InvalidProcessConfirmation);
+        }
+        let elevated = self
+            .application_recipes
+            .get(&application_id)
+            .is_some_and(|recipe| recipe.elevated);
+        self.force_stop_process(&pending.snapshot.identity, elevated)?;
+        let process = self
+            .application_processes
+            .get_mut(&application_id)
+            .expect("confirmed application Process should remain present");
+        process.status = ProcessStatus::Stopped;
+        process.ownership = None;
+        process.identity = None;
+        self.failed_responsiveness_checks.remove(&application_id);
+        self.sync_session_application_states();
+        if self.session.state == crate::SessionState::Closing {
+            self.advance_session_close()?;
+        }
+        if pending.snapshot.action == crate::ProcessConfirmationAction::Restart {
+            let recipe = pending
+                .restart_recipe
+                .ok_or(CoreError::InvalidProcessConfirmation)?;
+            let ownership = self.launch_or_adopt(&application_id, recipe)?;
+            return Ok(if ownership == ProcessOwnership::PreExisting {
+                CommandOutcome::ApplicationAlreadyRunning { application_id }
+            } else {
+                CommandOutcome::ApplicationRestarted { application_id }
+            });
+        }
+        Ok(CommandOutcome::ApplicationStopped { application_id })
     }
 
     fn profile_application_icons(
@@ -799,8 +887,12 @@ impl FormationLapCore {
                     .get(&application_id)
                     .map(|recipe| (recipe.shutdown_strategy.clone(), recipe.elevated))
                     .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                let (graceful, exited) =
-                    self.request_graceful_stop(&identity, &strategy.0, strategy.1)?;
+                let (graceful, exited) = self.request_graceful_stop(
+                    &application_id,
+                    &identity,
+                    &strategy.0,
+                    strategy.1,
+                )?;
                 self.application_processes
                     .get_mut(&application_id)
                     .expect("application Process should remain present")
@@ -817,60 +909,25 @@ impl FormationLapCore {
                     self.failed_responsiveness_checks.remove(&application_id);
                     Ok(CommandOutcome::ApplicationStopped { application_id })
                 } else {
+                    self.request_process_confirmation(
+                        application_id.clone(),
+                        crate::ProcessConfirmationAction::Exit,
+                        identity,
+                        None,
+                    );
                     Ok(CommandOutcome::ForceStopConfirmationRequired { application_id })
                 }
             }
-            AppCommand::ForceStopApplication {
-                application_id,
-                pre_existing_confirmed,
-                force_confirmed,
-            } => {
-                self.ensure_force_stop_is_available()?;
-                if !force_confirmed {
-                    return Ok(CommandOutcome::ForceStopConfirmationRequired { application_id });
-                }
-                let process = self
-                    .application_processes
-                    .get(&application_id)
-                    .cloned()
-                    .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                if process.ownership == Some(ProcessOwnership::PreExisting)
-                    && !pre_existing_confirmed
+            AppCommand::ConfirmProcessAction { token } => self.confirm_process_action(token),
+            AppCommand::CancelProcessAction { token } => {
+                if self
+                    .pending_process_confirmation
+                    .as_ref()
+                    .is_some_and(|pending| pending.snapshot.token == token)
                 {
-                    return Ok(CommandOutcome::PreExistingControlConfirmationRequired {
-                        application_id,
-                    });
+                    self.pending_process_confirmation = None;
                 }
-                let Some(identity) = process.identity else {
-                    return Ok(CommandOutcome::ApplicationStopped { application_id });
-                };
-                let elevated = self
-                    .application_recipes
-                    .get(&application_id)
-                    .is_some_and(|recipe| recipe.elevated);
-                self.force_stop_process(&identity, elevated)?;
-                let process = self
-                    .application_processes
-                    .get_mut(&application_id)
-                    .expect("application Process should remain present");
-                process.status = ProcessStatus::Stopped;
-                process.ownership = None;
-                process.identity = None;
-                self.failed_responsiveness_checks.remove(&application_id);
-                self.sync_session_application_states();
-                if self.session.state == crate::SessionState::Closing {
-                    self.advance_session_close()?;
-                }
-                if let Some(recipe) = self.pending_restarts.remove(&application_id) {
-                    let ownership = self.launch_or_adopt(&application_id, recipe)?;
-                    Ok(if ownership == ProcessOwnership::PreExisting {
-                        CommandOutcome::ApplicationAlreadyRunning { application_id }
-                    } else {
-                        CommandOutcome::ApplicationRestarted { application_id }
-                    })
-                } else {
-                    Ok(CommandOutcome::ApplicationStopped { application_id })
-                }
+                Ok(CommandOutcome::ProcessesRefreshed)
             }
             AppCommand::RestartApplication {
                 profile_id,
@@ -914,6 +971,7 @@ impl FormationLapCore {
                     });
                 };
                 let (graceful, exited) = self.request_graceful_stop(
+                    &application_id,
                     &identity,
                     &recipe.shutdown_strategy,
                     recipe.elevated,
@@ -931,11 +989,17 @@ impl FormationLapCore {
                         CommandOutcome::ApplicationRestarted { application_id }
                     })
                 } else {
-                    self.pending_restarts.insert(application_id.clone(), recipe);
+                    self.request_process_confirmation(
+                        application_id.clone(),
+                        crate::ProcessConfirmationAction::Restart,
+                        identity,
+                        Some(recipe),
+                    );
                     Ok(CommandOutcome::ForceStopConfirmationRequired { application_id })
                 }
             }
             AppCommand::StartSession { profile_id } => {
+                self.pending_process_confirmation = None;
                 if self.session.state != crate::SessionState::Idle {
                     return Err(CoreError::InvalidSessionTransition {
                         current: self.session.state.clone(),
@@ -948,9 +1012,7 @@ impl FormationLapCore {
                         command: "Start Session",
                     });
                 }
-                if self.profile_library.review_status(&profile_id)?
-                    == crate::ProfileReviewStatus::NeedsReview
-                {
+                if self.profile_library.requires_review(&profile_id)? {
                     return Err(CoreError::ProfileNeedsReview(profile_id));
                 }
                 let profile = self
@@ -1028,6 +1090,7 @@ impl FormationLapCore {
                 Ok(CommandOutcome::SessionStartRequested { profile_id })
             }
             AppCommand::CancelStartup => {
+                self.pending_process_confirmation = None;
                 if self.session.state != crate::SessionState::Starting {
                     return Err(CoreError::InvalidSessionTransition {
                         current: self.session.state.clone(),
@@ -1039,6 +1102,7 @@ impl FormationLapCore {
                 Ok(CommandOutcome::SessionCancellationRequested)
             }
             AppCommand::CloseSession => {
+                self.pending_process_confirmation = None;
                 if self.session.state != crate::SessionState::Active {
                     return Err(CoreError::InvalidSessionTransition {
                         current: self.session.state.clone(),
@@ -1598,7 +1662,11 @@ impl FormationLapCore {
                 application.id.clone(),
                 launch_identity_is_unambiguous(&application.launch_recipe),
             ));
-            operations.push(elevated_launch_operation(&application.launch_recipe)?);
+            operations.push(elevated_launch_operation(
+                &application.launch_recipe,
+                self.profile_library
+                    .approved_executable_sha256(&application.id, false)?,
+            )?);
         }
         if operations.is_empty() {
             return Ok(());
@@ -1700,7 +1768,11 @@ impl FormationLapCore {
         recipe: &crate::LaunchRecipe,
         ownership: &ProcessOwnership,
     ) -> Result<ProcessIdentity, CoreError> {
-        let operation = elevated_launch_operation(recipe)?;
+        let operation = elevated_launch_operation(
+            recipe,
+            self.profile_library
+                .approved_executable_sha256(application_id, false)?,
+        )?;
         let session = &self.session;
         let journal = &self.session_journal;
         let application_processes = &mut self.application_processes;
@@ -1764,6 +1836,7 @@ impl FormationLapCore {
 
     fn request_graceful_stop(
         &mut self,
+        application_id: &str,
         identity: &ProcessIdentity,
         strategy: &crate::ShutdownStrategy,
         elevated: bool,
@@ -1784,6 +1857,15 @@ impl FormationLapCore {
             .execute(&[ElevatedOperation::GracefulStop {
                 process_identity: identity.clone(),
                 strategy: strategy.clone(),
+                custom_stop_executable_sha256: matches!(
+                    strategy,
+                    crate::ShutdownStrategy::CustomStop { .. }
+                )
+                .then(|| {
+                    self.profile_library
+                        .approved_executable_sha256(application_id, true)
+                })
+                .transpose()?,
             }])?;
         match response.results.into_iter().next() {
             Some(ElevatedOperationResult::GracefulStopRequested { requested, exited }) => Ok((
@@ -2150,6 +2232,16 @@ impl FormationLapCore {
                 continue;
             }
             if process.status == ProcessStatus::Stopping {
+                if self.pending_process_confirmation.is_none()
+                    && let Some(identity) = process.identity
+                {
+                    self.request_process_confirmation(
+                        application_id.clone(),
+                        crate::ProcessConfirmationAction::SessionClose,
+                        identity,
+                        None,
+                    );
+                }
                 return Ok(());
             }
             let Some(identity) = process.identity else {
@@ -2161,6 +2253,7 @@ impl FormationLapCore {
                 .cloned()
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
             let (graceful, exited) = match self.request_graceful_stop(
+                &application_id,
                 &identity,
                 &recipe.shutdown_strategy,
                 recipe.elevated,
@@ -2192,6 +2285,12 @@ impl FormationLapCore {
                     .expect("Session Process should remain present during cleanup")
                     .status = ProcessStatus::Stopping;
                 self.session.applications[index].state = crate::SessionApplicationState::Stopping;
+                self.request_process_confirmation(
+                    application_id.clone(),
+                    crate::ProcessConfirmationAction::SessionClose,
+                    identity,
+                    None,
+                );
                 return Ok(());
             }
         }
@@ -2231,6 +2330,7 @@ impl FormationLapCore {
                         .cloned()
                         .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
                     let (graceful, exited) = self.request_graceful_stop(
+                        &application_id,
                         &identity,
                         &recipe.shutdown_strategy,
                         recipe.elevated,
@@ -2326,6 +2426,17 @@ impl FormationLapCore {
                 Ok(ElevatedOperation::GracefulStop {
                     process_identity: identity.clone(),
                     strategy,
+                    custom_stop_executable_sha256: matches!(
+                        self.application_recipes
+                            .get(application_id)
+                            .map(|recipe| &recipe.shutdown_strategy),
+                        Some(crate::ShutdownStrategy::CustomStop { .. })
+                    )
+                    .then(|| {
+                        self.profile_library
+                            .approved_executable_sha256(application_id, true)
+                    })
+                    .transpose()?,
                 })
             })
             .collect::<Result<Vec<_>, CoreError>>()?;
@@ -2400,7 +2511,10 @@ fn recovery_identity_matches_recipe(
         })
 }
 
-fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOperation, CoreError> {
+fn elevated_launch_operation(
+    recipe: &crate::LaunchRecipe,
+    executable_sha256: String,
+) -> Result<ElevatedOperation, CoreError> {
     let crate::LaunchSource::DirectExecutable { executable_path } = &recipe.source else {
         return Err(CoreError::InvalidLaunchRecipe(
             "Steam launches cannot request elevation".to_owned(),
@@ -2422,11 +2536,7 @@ fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOpe
         .map(|path| path.to_string_lossy().into_owned());
     Ok(ElevatedOperation::Launch {
         executable_path,
-        executable_sha256: crate::privilege_protocol::executable_sha256(match &recipe.source {
-            crate::LaunchSource::DirectExecutable { executable_path } => executable_path,
-            crate::LaunchSource::Steam { .. } => unreachable!("Steam launch was rejected"),
-        })
-        .map_err(|error| CoreError::InvalidLaunchRecipe(error.to_string()))?,
+        executable_sha256,
         arguments: recipe.arguments.clone(),
         working_directory,
         monitored_process: recipe.monitored_process.clone(),

@@ -88,6 +88,8 @@ export function App({ bridge }: AppProps) {
     runSessionAction,
     requestProcessAction,
     confirmProcessAction,
+    confirmNativeProcessAction,
+    cancelProcessAction,
     installFormationLapUpdate,
   } = useDashboardController({
     bridge,
@@ -572,6 +574,8 @@ export function App({ bridge }: AppProps) {
           dashboardError,
           dashboardIsBusy,
           confirmProcessAction,
+          confirmNativeProcessAction,
+          cancelProcessAction,
         }}
       />
       <ProfileDialogs

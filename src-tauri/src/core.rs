@@ -645,11 +645,17 @@ impl FormationLapCore {
 
     fn confirm_process_action(&mut self, token: String) -> Result<CommandOutcome, CoreError> {
         self.ensure_force_stop_is_available()?;
+        if !self
+            .pending_process_confirmation
+            .as_ref()
+            .is_some_and(|pending| pending.snapshot.token == token)
+        {
+            return Err(CoreError::InvalidProcessConfirmation);
+        }
         let pending = self
             .pending_process_confirmation
             .take()
-            .filter(|pending| pending.snapshot.token == token)
-            .ok_or(CoreError::InvalidProcessConfirmation)?;
+            .expect("matching pending Process confirmation should remain present");
         let application_id = pending.snapshot.application_id.clone();
         let process = self
             .application_processes

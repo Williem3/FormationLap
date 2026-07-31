@@ -471,6 +471,31 @@ describe("Dashboard behavior", () => {
       }),
     ).toBeVisible();
   });
+  it("cancels the native destructive intent when the force dialog is dismissed", async () => {
+    const user = userEvent.setup();
+    const snapshot = lifecycleSnapshot();
+    snapshot.applicationProcesses = [
+      processSnapshot({
+        status: "stopping",
+      }),
+    ];
+    snapshot.pendingProcessConfirmation = {
+      token: "native-cancel-token",
+      applicationId: "sim-lifecycle",
+      action: "restart",
+      identity: snapshot.applicationProcesses[0]!.identity!,
+    };
+    const bridge = new InMemoryNativeBridge(snapshot);
+    render(<App bridge={bridge} />);
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect((await bridge.getAppSnapshot()).pendingProcessConfirmation).toBe(
+      undefined,
+    );
+  });
   it("keeps Force stop available for a Stopping Process while closing a Session", async () => {
     const snapshot = lifecycleSnapshot();
     snapshot.applicationProcesses = [processSnapshot({ status: "stopping" })];

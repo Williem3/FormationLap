@@ -36,61 +36,21 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
-- The 2026-07-30 release-readiness remediation is active on
-  `codex/sec-release-readiness-fixes`. Five sequential agents own non-overlapping
-  behavior slices: approval-time executable identity and elevated-handle
-  retention; profile launch quarantine and the no-payload executable picker;
-  Core-owned one-shot process confirmations; settings and Session-journal
-  backup recovery; and local signed-release controls/documentation. File scope
-  spans the related Rust modules and public-interface tests, generated
-  contracts and React behavior where the authoritative snapshot changes,
-  release workflow contracts, relevant security/architecture documentation,
-  M10 evidence, and this ledger. No push, tag, signing, workflow dispatch,
-  repository-setting mutation, or release publication is authorized.
-- Settings and Session-journal backup-recovery slice is in progress. Scope:
-  `settings.rs`, `session_journal.rs`, public Core recovery/settings tests, and
-  M2/M8/M10 storage-security evidence. It will recover only corrupt or
-  semantically invalid live documents from a validated compatible bounded
-  backup, preserve corrupt bytes in bounded recovery artifacts, and never
-  downgrade a newer schema document.
-
-  Delivered: shared validated-backup recovery keeps the valid backup intact,
-  preserves corrupt live bytes in two deterministic slots, synchronizes the
-  restored copy, and retains Recovery Offer identity verification and
-  action-free dismissal. Public Core integration coverage includes corrupt
-  settings/journals, invalid-pair preservation, interrupted restore,
-  bounded repeat opens, and unsupported live schemas.
-
-- Core-owned one-shot process-confirmation slice is in progress. Scope:
-  `core.rs`, Rust command/contracts and lifecycle tests, generated bindings,
-  NativeBridge/in-memory adapter, Dashboard process dialog behavior, and M10
-  security evidence. It replaces renderer boolean authority with an exact
-  action/identity-bound confirmation token.
-
-  Delivered: Core-owned UUID-v4, exact action and full Process-identity-bound
-  force confirmation; typed confirm/cancel bridge commands; snapshot-driven
-  Dashboard dialog whose dismiss path cancels native intent; Session-close
-  confirmation remains explicit. Verification and focused commit follow.
-
-- Privileged-target binding slice: approval records now hold hash-bound
-  elevated-launch and custom-stop targets (schema v2; prior records re-review),
-  Core constructs typed operations from those stored values, and protocol v3
-  requires a custom-stop hash. Scope: `launch_recipe`, `profile_library`,
-  `core`, `privilege_protocol`, `privilege_broker`, public Rust tests, ADR 0006,
-  and M7 security checklist. Verification: 26 `racing_profiles` tests, 14
-  `privileged_operations` tests (one UAC smoke ignored), format, and Clippy.
-- Launch-quarantine and picker slice is in progress. Scope: `profile_library`,
-  `core`, the narrow executable-picker command and generated NativeBridge
-  contract, public Rust/React behavior tests, relevant security architecture
-  documentation, M10 evidence, and this ledger. It will quarantine unsafe or
-  repair-needed launch recipes and remove renderer-supplied picker paths.
-- Release-control aggregate audit slice is in progress. Scope:
-  `.github/workflows/release.yml`, release contracts and fixture-signing
-  support, capability-audit expectation, and M10 evidence. It synchronizes
-  protocol v3 across runtime/generator/fixture/docs, verifies the official
-  installer signer equals the approved main/helper signer, and keeps external
-  official-release gates explicitly pending. No production signing material is
-  present in this repository.
+- The 2026-07-30 local release-readiness remediation is complete on
+  `codex/sec-release-readiness-fixes`: approval-time executable hashes and
+  verified handle retention protect elevated launch/custom-stop; unsafe,
+  missing, forged-approved, and newly privileged profiles remain quarantined;
+  the picker is zero-payload and `.exe`-only; destructive confirmation is a
+  Core-owned, action/identity-bound one-shot token; corrupt settings and
+  Session journals recover only from compatible validated backups without
+  losing either valid or corrupt bytes; and official workflow contracts require
+  protocol-v3 identity, production signing inputs, and one approved signer for
+  main/helper/installer. Final review also proved an old Restart token cannot
+  consume a newer Exit intent, and Dashboard dismissal cancels the native
+  intent. There is no active implementation file scope. M10 remains
+  `in_progress` and official release remains NO-GO pending the external gates
+  listed below. No push, tag, signing, workflow dispatch, repository-setting
+  mutation, or release publication was performed.
 - The installed `0.9.0-preview.6` preview proves two release-critical defects:
   its helper SHA-256 matches the sealed identity while the installed main
   executable SHA-256 does not, and a rejected `Start Session` command leaves
@@ -537,3 +497,4 @@ When blocked:
 | 2026-07-30 | Codex `/root/process_confirmation_intent` | M10 | Replaced renderer-authoritative force booleans with a Core-owned one-shot UUID confirmation bound to exact action and stable Process identity; Dashboard dismissal cancels native intent and stuck Session Close remains explicitly confirmable. | `application_lifecycle` (10), `privileged_operations` (14 passed, 1 ignored), generated-binding check, format/Clippy, Dashboard behavior (53), typecheck, and diff check passed. | Continue remaining release-readiness slices; no external publication action is authorized. |
 | 2026-07-30 | Codex `/root/state_backup_recovery` | M10 | Recovered corrupt settings and active-Session live JSON only from a validated compatible backup; corrupt bytes now use two deterministic bounded artifacts, restoration keeps the backup, and newer schemas fail closed without fallback. | `desktop_integration` (10) including recovery/no-downgrade cases; `cargo fmt`; all-target/all-feature Clippy passed. Full all-target test run exposed the inherited protocol-v3 release-identity fixture signature rejection after 36 lib tests. | Agent 5 owns release-identity fixture synchronization; no external publication action is authorized. |
 | 2026-07-30 | Codex `/root/signed_release_controls` | M10 | Re-signed the protocol-v3 deterministic test identity fixture, added protocol-source and official workflow signer contracts, fail-closed Azure OIDC input checks, and capability-audit synchronization; aggregate audit restored valid Steam recipes while retaining direct-path quarantine and adjusted direct-path fixtures to canonical real executables. | `pnpm.cmd verify` passed (53 React, 3 accessibility, 32 release contracts, generated bindings/catalog/capability); focused release identity, launch recipe (9), profile command (13), and profile library (29) suites passed; format/Clippy passed before the earlier full-run audit exposed and then corrected fixture regressions. | M10 remains in progress/official NO-GO: independently evidence the protected `release` environment and secrets, PR/ruleset/secret-push protection, production signing/updater key, and signed Beta Windows 10 22H2/11 install-launch-elevated-update-uninstall-accessibility/data-preservation qualification. Rerun the complete serialized Rust suite after this aggregate commit; no external publication action is authorized. |
+| 2026-07-30 | Codex `/root` | M10 | Independently verified all five remediation commits; added the missing stale-token regression and fixed Core so an old Restart token cannot consume a newer Exit intent; added Dashboard coverage proving Cancel clears native confirmation. | `pnpm.cmd verify` (54 React, 3 accessibility, 32 release contracts, version/bindings/catalog/capability); serialized all-target/all-feature Rust suite (all automated tests passed; one manual UAC smoke ignored); Rust fmt and all-target/all-feature Clippy; debug Tauri no-bundle build; branch diff/whitespace review passed. | Local implementation is complete. Official release remains NO-GO until protected GitHub release controls/credentials, production signing, and signed Beta Windows 10/11 qualification have durable evidence; no external publication action was performed. |

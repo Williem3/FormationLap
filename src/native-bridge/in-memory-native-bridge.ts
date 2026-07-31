@@ -86,8 +86,7 @@ export class InMemoryNativeBridge implements NativeBridge {
     return Promise.resolve(structuredClone(this.#snapshot));
   }
 
-  pickExecutablePath(initialPath?: string | null): Promise<string | null> {
-    void initialPath;
+  pickExecutablePath(): Promise<string | null> {
     return Promise.resolve(null);
   }
 

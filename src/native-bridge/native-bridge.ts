@@ -29,7 +29,7 @@ export interface NativeBridge {
   exportProfile(payload: ProfileIdPayload): Promise<string>;
   importProfile(payload: ImportProfilePayload): Promise<AppSnapshot>;
   approveProfile(payload: ApproveProfilePayload): Promise<AppSnapshot>;
-  pickExecutablePath(initialPath?: string | null): Promise<string | null>;
+  pickExecutablePath(): Promise<string | null>;
   startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot>;
   refreshProcesses(): Promise<AppSnapshot>;
   exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot>;

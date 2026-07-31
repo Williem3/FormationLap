@@ -953,9 +953,7 @@ impl FormationLapCore {
                         command: "Start Session",
                     });
                 }
-                if self.profile_library.review_status(&profile_id)?
-                    == crate::ProfileReviewStatus::NeedsReview
-                {
+                if self.profile_library.requires_review(&profile_id)? {
                     return Err(CoreError::ProfileNeedsReview(profile_id));
                 }
                 let profile = self

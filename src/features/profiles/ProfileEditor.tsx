@@ -27,7 +27,7 @@ export interface ProfileEditorProps {
   needsReview: boolean;
   isSaving: boolean;
   error: string | null;
-  onPickExecutablePath(initialPath?: string | null): Promise<string | null>;
+  onPickExecutablePath(): Promise<string | null>;
   onChange(profile: RacingProfile): void;
   onCancel(): void;
   onSubmit(event: FormEvent<HTMLFormElement>, approval?: ProfileApproval): void;
@@ -920,7 +920,7 @@ interface ApplicationRecipeFieldsProps {
   application: ProfileApplication;
   label: string;
   includeShutdownStrategy?: boolean;
-  onPickExecutablePath(initialPath?: string | null): Promise<string | null>;
+  onPickExecutablePath(): Promise<string | null>;
   onChange(application: ProfileApplication): void;
 }
 
@@ -950,10 +950,9 @@ function ApplicationRecipeFields({
     next.launchRecipe.monitoredExecutablePath = path || null;
   };
   const selectExecutable = async (
-    initialPath: string | null,
     change: (next: ProfileApplication, path: string) => void,
   ) => {
-    const path = await onPickExecutablePath(initialPath);
+    const path = await onPickExecutablePath();
     if (path) {
       update((next) => change(next, path));
     }
@@ -1014,11 +1013,7 @@ function ApplicationRecipeFields({
                   className="secondary-button path-browse-button"
                   aria-label={`Browse for ${label} executable`}
                   onClick={() =>
-                    void selectExecutable(
-                      source.kind === "directExecutable"
-                        ? source.executablePath
-                        : null,
-                      (next, path) => {
+                    void selectExecutable((next, path) => {
                         const nextSource = next.launchRecipe.source;
                         if (nextSource.kind !== "directExecutable") {
                           return;
@@ -1167,9 +1162,7 @@ function ApplicationRecipeFields({
                   className="secondary-button path-browse-button"
                   aria-label={`Browse for ${label} monitored executable`}
                   onClick={() =>
-                    void selectExecutable(
-                      application.launchRecipe.monitoredExecutablePath ?? null,
-                      (next, path) => {
+                    void selectExecutable((next, path) => {
                         next.launchRecipe.monitoredExecutablePath = path;
                       },
                     )
@@ -1324,11 +1317,7 @@ function ApplicationRecipeFields({
                 className="secondary-button path-browse-button"
                 aria-label={`Browse for ${label} stop executable`}
                 onClick={() =>
-                  void selectExecutable(
-                    shutdown.kind === "customStop"
-                      ? shutdown.executablePath
-                      : null,
-                    (next, path) => {
+                  void selectExecutable((next, path) => {
                       const nextShutdown = next.launchRecipe.shutdownStrategy;
                       if (nextShutdown.kind === "customStop") {
                         nextShutdown.executablePath = path;

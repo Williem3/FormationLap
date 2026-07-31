@@ -165,6 +165,11 @@ diagnostics.
 - Retain each trusted source path independently from document content.
 - Repair invalid legacy IDs into UUID-named documents while preserving backups.
 - Keep newly imported executable configuration in Needs Review until approved.
+- Fail closed to Needs Review whenever any saved direct, monitored, or
+  custom-stop executable is missing, noncanonical, unsupported, or blocklisted;
+  complete profiles with privileged recipes also require explicit approval.
+- Expose the native executable picker as a zero-payload command that selects
+  `.exe` files only; renderer paths never choose its initial directory.
 - Persist privileged-recipe approval only as a Windows-protected record bound
   to the reviewed Launch Recipe configuration, never in editable profile JSON.
 

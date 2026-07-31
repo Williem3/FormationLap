@@ -1,8 +1,8 @@
 use formation_lap_lib::{
     AppCommand, ApplicationIcon, ApplicationRequirement, CloseSessionSettings, CommandOutcome,
-    ConsoleVisibility, FormationLapCore, LaunchRecipe, LaunchSource, ProfileApplication,
-    ProfileReviewStatus, ProfileSummary, RacingProfile, ShutdownStrategy, SupportingApplication,
-    TargetedDiscoverySources, VrLaunchMode,
+    ConsoleVisibility, FormationLapCore, LaunchRecipe, LaunchSource, NewProfileApplication,
+    NewRacingProfile, ProfileApplication, ProfileReviewStatus, ProfileSummary, RacingProfile,
+    ShutdownStrategy, SupportingApplication, TargetedDiscoverySources, VrLaunchMode,
 };
 use std::{
     fs,
@@ -177,9 +177,176 @@ fn created_racing_profile_survives_core_restart() {
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
             primary_sim_application_id: Some(primary_sim_application_id),
-            review_status: ProfileReviewStatus::Approved,
+            review_status: ProfileReviewStatus::NeedsReview,
         }]
     );
+}
+
+#[test]
+fn complete_profile_with_a_privileged_recipe_requires_native_approval_before_starting() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize")
+        .to_string_lossy()
+        .into_owned();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            profile: Box::new(NewRacingProfile {
+                name: "Reviewed complete profile".to_owned(),
+                primary_sim: NewProfileApplication {
+                    name: "Fixture".to_owned(),
+                    launch_recipe: LaunchRecipe {
+                        source: LaunchSource::DirectExecutable {
+                            executable_path: executable_path.clone(),
+                        },
+                        working_directory: executable_path
+                            .rsplit_once('\\')
+                            .map(|(directory, _)| directory.to_owned()),
+                        elevated: true,
+                        shutdown_strategy: ShutdownStrategy::CustomStop {
+                            executable_path,
+                            arguments: vec!["--stop".to_owned()],
+                        },
+                        ..LaunchRecipe::default()
+                    },
+                },
+                supporting_applications: Vec::new(),
+                vr_enabled: false,
+                preferred_vr_launch_mode: None,
+                close_session: CloseSessionSettings::default(),
+            }),
+        })
+        .expect("complete profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert!(matches!(
+        core.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        }),
+        Err(formation_lap_lib::CoreError::ProfileNeedsReview(id)) if id == profile_id
+    ));
+}
+
+#[test]
+fn saving_a_blocklisted_executable_quarantines_an_approved_profile() {
+    let storage = TempStorage::new();
+    let mut core =
+        FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            profile: Box::new(NewRacingProfile::from_names(
+                "Approved profile".to_owned(),
+                "Fixture".to_owned(),
+            )),
+        })
+        .expect("profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("created profile should be selected");
+    profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: r"C:\\Windows\\System32\\cmd.exe".to_owned(),
+    };
+
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("invalid profile data remains available for repair");
+
+    assert_eq!(
+        core.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert!(matches!(
+        core.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        }),
+        Err(formation_lap_lib::CoreError::ProfileNeedsReview(id)) if id == profile_id
+    ));
+}
+
+#[test]
+fn forged_approved_profile_with_a_repair_needed_recipe_cannot_start() {
+    let storage = TempStorage::new();
+    let executable_path = std::env::current_exe()
+        .expect("test executable path should be available")
+        .canonicalize()
+        .expect("test executable path should canonicalize")
+        .to_string_lossy()
+        .into_owned();
+    let profile_id;
+    {
+        let mut core =
+            FormationLapCore::open(storage.path()).expect("empty profile storage should open");
+        profile_id = match core
+            .execute(AppCommand::CreateProfile {
+                profile: Box::new(NewRacingProfile::from_names(
+                    "Forged approval profile".to_owned(),
+                    "Fixture".to_owned(),
+                )),
+            })
+            .expect("profile should be created")
+        {
+            CommandOutcome::ProfileCreated { profile_id } => profile_id,
+            other => panic!("expected profile creation, got {other:?}"),
+        };
+        let mut profile = core
+            .snapshot()
+            .selected_profile
+            .expect("created profile should be selected");
+        profile.primary_sim.launch_recipe.source =
+            LaunchSource::DirectExecutable { executable_path };
+        core.execute(AppCommand::SaveProfile {
+            profile: Box::new(profile),
+        })
+        .expect("safe profile should save approved");
+    }
+    let profile_path = storage
+        .path()
+        .join("profiles")
+        .join(format!("{profile_id}.json"));
+    let mut forged: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&profile_path).expect("saved profile should be readable"),
+    )
+    .expect("saved profile should remain valid JSON");
+    forged["primarySim"]["launchRecipe"]["source"]["executablePath"] =
+        serde_json::json!(r"C:\\Windows\\System32\\regsvr32.exe");
+    forged["primarySim"]["pathNeedsRepair"] = serde_json::json!(false);
+    forged["reviewStatus"] = serde_json::json!("approved");
+    fs::write(
+        &profile_path,
+        serde_json::to_string_pretty(&forged).expect("forged profile should serialize"),
+    )
+    .expect("forged editable profile data should be written");
+
+    let mut reopened =
+        FormationLapCore::open(storage.path()).expect("forged profile storage should reopen");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+    assert!(matches!(
+        reopened.execute(AppCommand::StartSession {
+            profile_id: profile_id.clone(),
+        }),
+        Err(formation_lap_lib::CoreError::ProfileNeedsReview(id)) if id == profile_id
+    ));
 }
 
 #[test]
@@ -396,7 +563,7 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
                 id: source_profile_id,
                 name: "Endurance".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
-                review_status: ProfileReviewStatus::Approved,
+                review_status: ProfileReviewStatus::NeedsReview,
             },
             ProfileSummary {
                 primary_sim_application_id: primary_sim_application_ids
@@ -406,7 +573,7 @@ fn duplicated_racing_profile_gets_a_new_identity_that_survives_restart() {
                 id: duplicate_profile_id,
                 name: "Endurance copy".to_owned(),
                 primary_sim_name: "Le Mans Ultimate".to_owned(),
-                review_status: ProfileReviewStatus::Approved,
+                review_status: ProfileReviewStatus::NeedsReview,
             },
         ]
     );

@@ -28,7 +28,7 @@ export interface ProfileWizardProps {
   onPrimarySimNameChange(value: string): void;
   onPrimarySimSourceChange(value: PrimarySimSource): void;
   onSourceValueChange(value: string): void;
-  onPickExecutablePath(initialPath?: string | null): Promise<string | null>;
+  onPickExecutablePath(): Promise<string |null>;
   onSelectPrimarySim(primarySim: DiscoveredPrimarySim): void;
   onEnterManual(): void;
   onToggleSupporting(applicationId: string): void;
@@ -285,7 +285,7 @@ export function ProfileWizard({
                           className="secondary-button path-browse-button"
                           aria-label="Browse for Primary Sim executable"
                           onClick={() =>
-                            void onPickExecutablePath(sourceValue).then(
+                            void onPickExecutablePath().then(
                               (path) => {
                                 if (path) {
                                   onSourceValueChange(path);

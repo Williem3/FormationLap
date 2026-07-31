@@ -9,7 +9,7 @@ import {
 import { basename, dirname, resolve } from "node:path";
 
 const schemaVersion = 1;
-const protocolVersion = 2;
+const protocolVersion = 3;
 
 function parseArguments(arguments_) {
   const values = {};

@@ -399,12 +399,14 @@ impl ProfileLibrary {
                 document.schema_version = PROFILE_SCHEMA_VERSION;
                 Self::persist_migration(&source_path, &backups_directory, &document)?;
             }
+            Self::refresh_repair_state(&mut document);
             // Profile JSON remains user-writable. A privileged recipe is trusted
             // only when the JSON still says it is approved and the separately
             // protected approval record matches this exact launch configuration.
-            if Self::has_privileged_recipe(&document)
-                && (document.review_status != ProfileReviewStatus::Approved
-                    || !approval_store.matches(&document))
+            if Self::profile_requires_repair(&document)
+                || (Self::has_privileged_recipe(&document)
+                    && (document.review_status != ProfileReviewStatus::Approved
+                        || !approval_store.matches(&document)))
             {
                 document.review_status = ProfileReviewStatus::NeedsReview;
             }
@@ -666,11 +668,10 @@ impl ProfileLibrary {
                 .any(|profile| profile.document.id == profile_id)
     }
 
-    pub(crate) fn review_status(&self, profile_id: &str) -> Result<ProfileReviewStatus, CoreError> {
-        Ok(self.profiles[self.profile_index(profile_id)?]
-            .document
-            .review_status
-            .clone())
+    pub(crate) fn requires_review(&self, profile_id: &str) -> Result<bool, CoreError> {
+        let profile = &self.profiles[self.profile_index(profile_id)?].document;
+        Ok(profile.review_status == ProfileReviewStatus::NeedsReview
+            || Self::profile_requires_repair(profile))
     }
 
     pub(crate) fn profile(&self, profile_id: &str) -> Option<RacingProfile> {
@@ -800,9 +801,29 @@ impl ProfileLibrary {
         {
             return true;
         }
-        path.file_name()
+        let canonical_path = match path.canonicalize() {
+            Ok(canonical_path) if canonical_path == path => canonical_path,
+            _ => return true,
+        };
+        canonical_path
+            .file_name()
             .and_then(|name| name.to_str())
             .is_none_or(|name| !crate::launch_recipe::is_safe_executable_name(name))
+    }
+
+    fn refresh_repair_state(profile: &mut RacingProfileDocument) {
+        profile.primary_sim.path_needs_repair =
+            Self::path_needs_repair(&profile.primary_sim.launch_recipe);
+        for supporting in &mut profile.supporting_applications {
+            supporting.application.path_needs_repair =
+                Self::path_needs_repair(&supporting.application.launch_recipe);
+        }
+    }
+
+    fn profile_requires_repair(profile: &RacingProfileDocument) -> bool {
+        Self::applications(profile).any(|application| {
+            application.path_needs_repair || Self::path_needs_repair(&application.launch_recipe)
+        })
     }
 
     pub(crate) fn create_complete(
@@ -817,7 +838,7 @@ impl ProfileLibrary {
         }
 
         let id = Uuid::new_v4().to_string();
-        let profile = RacingProfileDocument {
+        let mut profile = RacingProfileDocument {
             schema_version: PROFILE_SCHEMA_VERSION,
             id: id.clone(),
             name: profile.name,
@@ -848,6 +869,9 @@ impl ProfileLibrary {
             close_session: profile.close_session,
             review_status: ProfileReviewStatus::Approved,
         };
+        if Self::has_privileged_recipe(&profile) || Self::profile_requires_repair(&profile) {
+            profile.review_status = ProfileReviewStatus::NeedsReview;
+        }
         let destination = self.profiles_directory.join(format!("{id}.json"));
         let temporary = self.profiles_directory.join(format!(".{id}.json.tmp"));
         Self::write_temporary_document(&temporary, &profile)?;
@@ -932,6 +956,7 @@ impl ProfileLibrary {
             Self::has_privileged_recipe(&profile) && approval_binding_changed;
         profile.review_status = if stored_profile.review_status == ProfileReviewStatus::NeedsReview
             || privileged_recipe_changed
+            || Self::profile_requires_repair(&profile)
         {
             ProfileReviewStatus::NeedsReview
         } else {
@@ -962,7 +987,7 @@ impl ProfileLibrary {
         }
         let profile_index = self.profile_index(profile_id)?;
         let profile = &self.profiles[profile_index].document;
-        if Self::applications(profile).any(|application| application.path_needs_repair) {
+        if Self::profile_requires_repair(profile) {
             return Err(CoreError::InvalidProfileApproval(
                 "one or more executable paths must be repaired first".to_owned(),
             ));

@@ -23,6 +23,19 @@ blocked until this program is complete and separately reviewed.
 | Opt-in native update coordination                        | Pending  | —                                                                                                                                                                                         |
 | Signed-build equality and adversarial qualification      | Pending  | —                                                                                                                                                                                         |
 
+## One-shot destructive Process confirmations
+
+FormationLapCore now owns a single pending destructive Process confirmation.
+It carries a native UUID-v4 token, the exact Exit, Restart, or Session Close
+action, application ID, and complete stable Process identity. Confirm consumes
+the token before force termination and revalidates the identity; stale,
+replayed, cancelled, or replaced-identity tokens fail closed. Only a confirmed
+Restart intent may relaunch. Start, cancel, and Close Session clear incompatible
+manual intent, while a stuck Session-owned Close creates its own explicit
+Session Close confirmation so cleanup can advance. React renders this native
+snapshot and its Cancel/Escape/X route invokes the typed native cancellation
+command.
+
 ## Verified Process handles and monitored paths
 
 The public ProcessRuntime interface is unchanged. Its Windows adapter now:

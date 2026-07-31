@@ -83,10 +83,8 @@ pub struct ExitApplicationPayload {
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
-pub struct ForceStopApplicationPayload {
-    pub application_id: String,
-    pub pre_existing_confirmed: bool,
-    pub force_confirmed: bool,
+pub struct ProcessConfirmationPayload {
+    pub token: String,
 }
 
 /// Explicit restart request plus Pre-existing Process confirmation.
@@ -156,6 +154,11 @@ impl From<CoreError> for CommandError {
                 "application_not_found",
                 error.to_string(),
                 Some("Refresh the Racing Profile and try again."),
+            ),
+            CoreError::InvalidProcessConfirmation => (
+                "invalid_process_confirmation",
+                error.to_string(),
+                Some("Refresh the application status and request a new confirmation."),
             ),
             CoreError::ProcessRuntime(_) => (
                 "process_runtime_failed",
@@ -439,14 +442,22 @@ impl NativeCommandHost {
         .map(|(_, snapshot)| snapshot)
     }
 
-    pub fn force_stop_application(
+    pub fn confirm_process_action(
         &self,
-        payload: ForceStopApplicationPayload,
+        payload: ProcessConfirmationPayload,
     ) -> Result<AppSnapshot, CommandError> {
-        self.execute_command(AppCommand::ForceStopApplication {
-            application_id: payload.application_id,
-            pre_existing_confirmed: payload.pre_existing_confirmed,
-            force_confirmed: payload.force_confirmed,
+        self.execute_command(AppCommand::ConfirmProcessAction {
+            token: payload.token,
+        })
+        .map(|(_, snapshot)| snapshot)
+    }
+
+    pub fn cancel_process_action(
+        &self,
+        payload: ProcessConfirmationPayload,
+    ) -> Result<AppSnapshot, CommandError> {
+        self.execute_command(AppCommand::CancelProcessAction {
+            token: payload.token,
         })
         .map(|(_, snapshot)| snapshot)
     }
@@ -775,11 +786,19 @@ pub fn exit_application(
 }
 
 #[tauri::command]
-pub fn force_stop_application(
+pub fn confirm_process_action(
     commands: tauri::State<'_, NativeCommandHost>,
-    payload: ForceStopApplicationPayload,
+    payload: ProcessConfirmationPayload,
 ) -> Result<AppSnapshot, CommandError> {
-    commands.force_stop_application(payload)
+    commands.confirm_process_action(payload)
+}
+
+#[tauri::command]
+pub fn cancel_process_action(
+    commands: tauri::State<'_, NativeCommandHost>,
+    payload: ProcessConfirmationPayload,
+) -> Result<AppSnapshot, CommandError> {
+    commands.cancel_process_action(payload)
 }
 
 #[tauri::command]

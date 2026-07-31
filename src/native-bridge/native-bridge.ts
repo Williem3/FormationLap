@@ -6,7 +6,7 @@ import type {
   DuplicateProfilePayload,
   ExitApplicationPayload,
   DiagnosticExport,
-  ForceStopApplicationPayload,
+  ProcessConfirmationPayload,
   GameLaunchDiagnostic,
   ImportProfilePayload,
   DiscoverySnapshot,
@@ -33,8 +33,11 @@ export interface NativeBridge {
   startApplication(payload: ApplicationTargetPayload): Promise<AppSnapshot>;
   refreshProcesses(): Promise<AppSnapshot>;
   exitApplication(payload: ExitApplicationPayload): Promise<AppSnapshot>;
-  forceStopApplication(
-    payload: ForceStopApplicationPayload,
+  confirmProcessAction(
+    payload: ProcessConfirmationPayload,
+  ): Promise<AppSnapshot>;
+  cancelProcessAction(
+    payload: ProcessConfirmationPayload,
   ): Promise<AppSnapshot>;
   restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot>;
   startSession(payload: ProfileIdPayload): Promise<AppSnapshot>;

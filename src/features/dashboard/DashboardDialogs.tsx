@@ -11,6 +11,8 @@ type DashboardDialogController = Pick<
   | "dashboardError"
   | "dashboardIsBusy"
   | "confirmProcessAction"
+  | "confirmNativeProcessAction"
+  | "cancelProcessAction"
 >;
 
 interface DashboardDialogsProps {
@@ -29,12 +31,42 @@ export function DashboardDialogs({
     setOutputApplication,
     dashboardError,
     dashboardIsBusy,
+    confirmNativeProcessAction,
     confirmProcessAction,
+    cancelProcessAction,
   } = controller;
+  const nativeConfirmation = snapshot?.pendingProcessConfirmation;
+  const confirmedApplication = nativeConfirmation
+    ? snapshot?.selectedProfile?.supportingApplications
+        .map((supporting) => supporting.application)
+        .concat(snapshot.selectedProfile.primarySim)
+        .find((application) => application.id === nativeConfirmation.applicationId)
+    : null;
 
   return (
     <>
-      {pendingProcessAction && (
+      {nativeConfirmation && confirmedApplication ? (
+        <ModalDialog
+          labelledBy="process-confirmation-title"
+          onClose={() => void cancelProcessAction(nativeConfirmation.token)}
+        >
+          <p className="eyebrow">Force termination</p>
+          <h2 id="process-confirmation-title">
+            {nativeConfirmation.action === "restart"
+              ? `Force stop and restart ${confirmedApplication.name}?`
+              : `Force stop ${confirmedApplication.name}?`}
+          </h2>
+          <p>
+            Graceful shutdown did not complete. Force stopping this exact Process may lose unsaved work.
+          </p>
+          <div className="dialog-actions">
+            <button type="button" className="secondary-button" onClick={() => void cancelProcessAction(nativeConfirmation.token)}>Cancel</button>
+            <button type="button" className="danger-button" disabled={dashboardIsBusy} onClick={() => void confirmNativeProcessAction(nativeConfirmation.token)}>
+              {nativeConfirmation.action === "restart" ? `Force stop and restart ${confirmedApplication.name}` : `Force stop ${confirmedApplication.name}`}
+            </button>
+          </div>
+        </ModalDialog>
+      ) : pendingProcessAction && (
         <ModalDialog
           labelledBy="process-confirmation-title"
           onClose={() => setPendingProcessAction(null)}

@@ -12,7 +12,8 @@ import {
   exitApplication,
   exportDiagnostics,
   exportProfile,
-  forceStopApplication,
+  cancelProcessAction,
+  confirmProcessAction,
   getAppSnapshot,
   importProfile,
   installFormationLapUpdate,
@@ -45,7 +46,8 @@ export class TauriNativeBridge implements NativeBridge {
   startApplication = startApplication;
   refreshProcesses = refreshProcesses;
   exitApplication = exitApplication;
-  forceStopApplication = forceStopApplication;
+  confirmProcessAction = confirmProcessAction;
+  cancelProcessAction = cancelProcessAction;
   restartApplication = restartApplication;
   startSession = startSession;
   testGameLaunch = testGameLaunch;

@@ -908,11 +908,14 @@ fn closing_session_does_not_repeat_an_elevated_stop_that_is_already_pending() {
     let primary_application_id = core.snapshot().application_processes[0]
         .application_id
         .clone();
+    let confirmation_token = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("a stuck Session-owned close should require native confirmation")
+        .token;
     assert_eq!(
-        core.execute(AppCommand::ForceStopApplication {
-            application_id: primary_application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: true,
+        core.execute(AppCommand::ConfirmProcessAction {
+            token: confirmation_token,
         })
         .expect("a Stopping Session-owned Process should be force-stoppable during close"),
         CommandOutcome::ApplicationStopped {

@@ -417,7 +417,7 @@ describe("Dashboard behavior", () => {
     );
 
     expect(
-      screen.getByRole("heading", {
+      await screen.findByRole("heading", {
         name: "Control a Pre-existing Process?",
       }),
     ).toBeVisible();
@@ -443,17 +443,17 @@ describe("Dashboard behavior", () => {
         status: "stopping",
       }),
     ];
+    snapshot.pendingProcessConfirmation = {
+      token: "native-confirmation-token",
+      applicationId: "sim-lifecycle",
+      action: "exit",
+      identity: snapshot.applicationProcesses[0]!.identity!,
+    };
     const bridge = new InMemoryNativeBridge(snapshot);
     render(<App bridge={bridge} />);
 
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Force stop Healthy fixture",
-      }),
-    );
-
     expect(
-      screen.getByRole("heading", {
+      await screen.findByRole("heading", {
         name: "Force stop Healthy fixture?",
       }),
     ).toBeVisible();
@@ -489,15 +489,16 @@ describe("Dashboard behavior", () => {
       ],
       summary: null,
     };
+    snapshot.pendingProcessConfirmation = {
+      token: "native-close-token",
+      applicationId: "sim-lifecycle",
+      action: "sessionClose",
+      identity: snapshot.applicationProcesses[0]!.identity!,
+    };
     render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
 
-    const forceStop = await screen.findByRole("button", {
-      name: "Force stop Healthy fixture",
-    });
-    expect(forceStop).toBeEnabled();
-    await user.click(forceStop);
     expect(
-      screen.getByRole("heading", { name: "Force stop Healthy fixture?" }),
+      await screen.findByRole("heading", { name: "Force stop Healthy fixture?" }),
     ).toBeVisible();
   });
   it("shows bounded local console output and truncation state", async () => {

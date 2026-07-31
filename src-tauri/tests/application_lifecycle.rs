@@ -562,26 +562,14 @@ fn force_stop_requires_explicit_confirmation_after_graceful_timeout() {
         ProcessStatus::Stopping
     );
 
-    let unconfirmed = core
-        .execute(AppCommand::ForceStopApplication {
-            application_id: application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: false,
-        })
-        .expect("an unconfirmed force request should be rejected safely");
-    assert_eq!(
-        unconfirmed,
-        CommandOutcome::ForceStopConfirmationRequired {
-            application_id: application_id.clone(),
-        }
-    );
+    let token = core
+        .snapshot()
+        .pending_process_confirmation
+        .expect("graceful timeout should create a native confirmation")
+        .token;
 
     let confirmed = core
-        .execute(AppCommand::ForceStopApplication {
-            application_id: application_id.clone(),
-            pre_existing_confirmed: false,
-            force_confirmed: true,
-        })
+        .execute(AppCommand::ConfirmProcessAction { token })
         .expect("a confirmed force request should stop the Process");
     assert_eq!(
         confirmed,

@@ -47,6 +47,16 @@ M10 security hardening is in progress, owned by Codex `/root`.
   release workflow contracts, relevant security/architecture documentation,
   M10 evidence, and this ledger. No push, tag, signing, workflow dispatch,
   repository-setting mutation, or release publication is authorized.
+- Core-owned one-shot process-confirmation slice is in progress. Scope:
+  `core.rs`, Rust command/contracts and lifecycle tests, generated bindings,
+  NativeBridge/in-memory adapter, Dashboard process dialog behavior, and M10
+  security evidence. It replaces renderer boolean authority with an exact
+  action/identity-bound confirmation token.
+
+  Delivered: Core-owned UUID-v4, exact action and full Process-identity-bound
+  force confirmation; typed confirm/cancel bridge commands; snapshot-driven
+  Dashboard dialog whose dismiss path cancels native intent; Session-close
+  confirmation remains explicit. Verification and focused commit follow.
 - Privileged-target binding slice: approval records now hold hash-bound
   elevated-launch and custom-stop targets (schema v2; prior records re-review),
   Core constructs typed operations from those stored values, and protocol v3
@@ -502,3 +512,4 @@ When blocked:
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.10` candidate with synchronized version metadata and disclosure-complete release notes for the two-pass installer identity repair | `pnpm.cmd test:release` (30 contracts), format, release-version, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.10`, dispatch/approve its protected preview workflow, then verify the published artifacts |
 | 2026-07-30 | Codex `/root/privileged_target_binding` | M10 | Bound protected elevated-launch and custom-stop approval to executable SHA-256 values, centralized executable safety policy (including `regsvr32.exe`), bumped the typed helper protocol to v3, and retained a write/delete-denying verified target handle through helper execution | `cargo test --test racing_profiles` (26); `cargo test --test privileged_operations` (14 passed, 1 manual smoke ignored); verified-target sharing test; `cargo fmt`; `cargo clippy --lib --tests -- -D warnings` | Continue release-readiness slices; no external publication action is authorized |
 | 2026-07-30 | Codex `/root/launch_quarantine` | M10 | Quarantined complete privileged profiles and every repair-needed launch recipe; Start Session recomputes repair state against editable JSON; narrowed the native executable picker and generated NativeBridge to zero payload and `.exe` only; synchronized the helper protocol-v3 release identity source and fixture | Red/green ProfileLibrary/Core tests; 53 React behavior tests; 31 release contracts; generated-binding check; Clippy and diff checks passed. | Continue the remaining release-readiness slices; no external publication action is authorized. |
+| 2026-07-30 | Codex `/root/process_confirmation_intent` | M10 | Replaced renderer-authoritative force booleans with a Core-owned one-shot UUID confirmation bound to exact action and stable Process identity; Dashboard dismissal cancels native intent and stuck Session Close remains explicitly confirmable. | `application_lifecycle` (10), `privileged_operations` (14 passed, 1 ignored), generated-binding check, format/Clippy, Dashboard behavior (53), typecheck, and diff check passed. | Continue remaining release-readiness slices; no external publication action is authorized. |

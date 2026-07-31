@@ -9,7 +9,7 @@ import type {
   DiagnosticExport,
   DiscoverySnapshot,
   ExitApplicationPayload,
-  ForceStopApplicationPayload,
+  ProcessConfirmationPayload,
   GameLaunchDiagnostic,
   ImportProfilePayload,
   LaunchRecipe,
@@ -216,22 +216,30 @@ export class InMemoryNativeBridge implements NativeBridge {
     return this.getAppSnapshot();
   }
 
-  forceStopApplication(
-    payload: ForceStopApplicationPayload,
+  confirmProcessAction(
+    payload: ProcessConfirmationPayload,
   ): Promise<AppSnapshot> {
+    const pending = this.#snapshot.pendingProcessConfirmation;
     const process = this.#snapshot.applicationProcesses.find(
-      (candidate) => candidate.applicationId === payload.applicationId,
+      (candidate) => candidate.applicationId === pending?.applicationId,
     );
     if (
       !process ||
-      !payload.forceConfirmed ||
-      (process.ownership === "preExisting" && !payload.preExistingConfirmed)
+      !pending || pending.token !== payload.token
     ) {
       return this.getAppSnapshot();
     }
     process.status = "stopped";
     process.ownership = null;
     process.identity = null;
+    delete this.#snapshot.pendingProcessConfirmation;
+    return this.getAppSnapshot();
+  }
+
+  cancelProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {
+    if (this.#snapshot.pendingProcessConfirmation?.token === payload.token) {
+      delete this.#snapshot.pendingProcessConfirmation;
+    }
     return this.getAppSnapshot();
   }
 

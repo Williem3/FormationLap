@@ -208,27 +208,25 @@ export function useDashboardController({
     }
   };
 
-  const forceStopApplication = async (
-    application: ProfileApplication,
-    processSnapshot: ApplicationProcessSnapshot,
-  ) => {
+  const confirmNativeProcessAction = async (token: string) => {
     setDashboardIsBusy(true);
     setDashboardError(null);
     try {
-      const nextSnapshot = await bridge.forceStopApplication({
-        applicationId: application.id,
-        preExistingConfirmed: processSnapshot.ownership === "preExisting",
-        forceConfirmed: true,
-      });
+      const nextSnapshot = await bridge.confirmProcessAction({ token });
       onSnapshotChanged(nextSnapshot);
       setPendingProcessAction(null);
     } catch {
       setDashboardError(
-        `${application.name} could not be force stopped. Try again or close it directly.`,
+        "The process confirmation was no longer valid. Request the action again.",
       );
     } finally {
       setDashboardIsBusy(false);
     }
+  };
+
+  const cancelProcessAction = async (token: string) => {
+    const nextSnapshot = await bridge.cancelProcessAction({ token });
+    onSnapshotChanged(nextSnapshot);
   };
 
   const requestProcessAction = (
@@ -236,7 +234,7 @@ export function useDashboardController({
     application: ProfileApplication,
     processSnapshot: ApplicationProcessSnapshot,
   ) => {
-    if (kind === "force" || processSnapshot.ownership === "preExisting") {
+    if (processSnapshot.ownership === "preExisting") {
       setPendingProcessAction({
         kind,
         application,
@@ -255,14 +253,12 @@ export function useDashboardController({
     if (!pendingProcessAction) {
       return;
     }
-    const { kind, application, process } = pendingProcessAction;
+    const { kind, application } = pendingProcessAction;
     setPendingProcessAction(null);
     if (kind === "exit") {
       void exitApplication(application, true);
     } else if (kind === "restart") {
       void restartApplication(application, true);
-    } else {
-      void forceStopApplication(application, process);
     }
   };
 
@@ -302,6 +298,8 @@ export function useDashboardController({
     runSessionAction,
     requestProcessAction,
     confirmProcessAction,
+    confirmNativeProcessAction,
+    cancelProcessAction,
     installFormationLapUpdate,
   };
 }

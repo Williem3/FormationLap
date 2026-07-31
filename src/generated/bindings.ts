@@ -47,6 +47,10 @@ export type ProcessOutput = { stdout: string, stderr: string, truncated: boolean
 
 export type ApplicationProcessSnapshot = { applicationId: string, status: ProcessStatus, ownership: ProcessOwnership | null, identity: ProcessIdentity | null, output: ProcessOutput | null, };
 
+export type ProcessConfirmationAction = "exit" | "restart" | "sessionClose";
+
+export type ProcessConfirmationSnapshot = { token: string, applicationId: string, action: ProcessConfirmationAction, identity: ProcessIdentity, };
+
 export type SessionState = "idle" | "starting" | "cancelling" | "active" | "closing" | "recoveryAvailable";
 
 export type SessionApplicationRole = "supporting" | "primarySim";
@@ -79,7 +83,7 @@ export type ApplicationUpdateSnapshot = { applicationId: string, name: string, s
 
 export type UpdateSnapshot = { formationLap: UpdateStatus, applications: Array<ApplicationUpdateSnapshot>, lastAutomaticCheckUnixSeconds: number | null, resultDeferred: boolean, };
 
-export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, updates: UpdateSnapshot, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationIcons?: Array<ApplicationIconSnapshot>, applicationProcesses: Array<ApplicationProcessSnapshot>, session: SessionSnapshot, };
+export type AppSnapshot = { applicationName: string, foundationStatus: string, settings: DesktopSettings, updates: UpdateSnapshot, profiles: Array<ProfileSummary>, selectedProfile: RacingProfile | null, applicationIcons?: Array<ApplicationIconSnapshot>, applicationProcesses: Array<ApplicationProcessSnapshot>, pendingProcessConfirmation?: ProcessConfirmationSnapshot, session: SessionSnapshot, };
 
 export type ApplicationIcon = { "kind": "localData", media_type: string, data_base64: string, } | { "kind": "generic" };
 
@@ -123,7 +127,7 @@ export type ApplicationTargetPayload = { profileId: string, applicationId: strin
 
 export type ExitApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, };
 
-export type ForceStopApplicationPayload = { applicationId: string, preExistingConfirmed: boolean, forceConfirmed: boolean, };
+export type ProcessConfirmationPayload = { token: string, };
 
 export type RestartApplicationPayload = { profileId: string, applicationId: string, preExistingConfirmed: boolean, };
 
@@ -187,8 +191,12 @@ export function exitApplication(payload: ExitApplicationPayload): Promise<AppSna
   return invoke<AppSnapshot>("exit_application", { payload });
 }
 
-export function forceStopApplication(payload: ForceStopApplicationPayload): Promise<AppSnapshot> {
-  return invoke<AppSnapshot>("force_stop_application", { payload });
+export function confirmProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("confirm_process_action", { payload });
+}
+
+export function cancelProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {
+  return invoke<AppSnapshot>("cancel_process_action", { payload });
 }
 
 export function restartApplication(payload: RestartApplicationPayload): Promise<AppSnapshot> {

@@ -83,10 +83,17 @@ test("release workflow signs every shipped executable before updater metadata", 
   assert.match(release, /Get-AuthenticodeSignature/);
   assert.match(release, /GetCertHashString/);
   assert.match(release, /signer-sha256/);
+  assert.match(release, /AZURE_CLIENT_ID/);
+  assert.match(release, /AZURE_TENANT_ID/);
+  assert.match(release, /AZURE_SUBSCRIPTION_ID/);
   assert.match(release, /--authenticode-signer-sha256/);
   assert.match(
     release,
     /Formation Lap and its elevated helper do not have the same signer certificate/,
+  );
+  assert.match(
+    release,
+    /installer does not have the approved signer certificate/,
   );
   assert.match(release, /tauri bundle --bundles nsis/);
   assert.equal(

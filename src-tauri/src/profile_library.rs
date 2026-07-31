@@ -954,7 +954,9 @@ impl ProfileLibrary {
             Self::approval_fingerprint(&stored_profile)? != Self::approval_fingerprint(&profile)?;
         let privileged_recipe_changed =
             Self::has_privileged_recipe(&profile) && approval_binding_changed;
-        profile.review_status = if stored_profile.review_status == ProfileReviewStatus::NeedsReview
+        profile.review_status = if (stored_profile.review_status
+            == ProfileReviewStatus::NeedsReview
+            && Self::has_privileged_recipe(&profile))
             || privileged_recipe_changed
             || Self::profile_requires_repair(&profile)
         {

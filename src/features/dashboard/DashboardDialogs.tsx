@@ -40,7 +40,9 @@ export function DashboardDialogs({
     ? snapshot?.selectedProfile?.supportingApplications
         .map((supporting) => supporting.application)
         .concat(snapshot.selectedProfile.primarySim)
-        .find((application) => application.id === nativeConfirmation.applicationId)
+        .find(
+          (application) => application.id === nativeConfirmation.applicationId,
+        )
     : null;
 
   return (
@@ -57,64 +59,82 @@ export function DashboardDialogs({
               : `Force stop ${confirmedApplication.name}?`}
           </h2>
           <p>
-            Graceful shutdown did not complete. Force stopping this exact Process may lose unsaved work.
+            Graceful shutdown did not complete. Force stopping this exact
+            Process may lose unsaved work.
           </p>
-          <div className="dialog-actions">
-            <button type="button" className="secondary-button" onClick={() => void cancelProcessAction(nativeConfirmation.token)}>Cancel</button>
-            <button type="button" className="danger-button" disabled={dashboardIsBusy} onClick={() => void confirmNativeProcessAction(nativeConfirmation.token)}>
-              {nativeConfirmation.action === "restart" ? `Force stop and restart ${confirmedApplication.name}` : `Force stop ${confirmedApplication.name}`}
-            </button>
-          </div>
-        </ModalDialog>
-      ) : pendingProcessAction && (
-        <ModalDialog
-          labelledBy="process-confirmation-title"
-          onClose={() => setPendingProcessAction(null)}
-        >
-          <p className="eyebrow">
-            {pendingProcessAction.kind === "force"
-              ? "Force termination"
-              : "Ownership confirmation"}
-          </p>
-          <h2 id="process-confirmation-title">
-            {pendingProcessAction.kind === "force"
-              ? `Force stop ${pendingProcessAction.application.name}?`
-              : `${pendingProcessAction.kind === "restart" ? "Restart" : "Control"} a Pre-existing Process?`}
-          </h2>
-          <p>
-            {pendingProcessAction.kind === "force"
-              ? `Graceful shutdown did not complete. Force stopping ${pendingProcessAction.application.name} may lose unsaved work.`
-              : `${pendingProcessAction.application.name} was already running before Formation Lap observed it. This explicit action will control a Process that the current Session does not own.`}
-          </p>
-          {dashboardError && (
-            <p className="form-error" role="alert">
-              {dashboardError}
-            </p>
-          )}
           <div className="dialog-actions">
             <button
               type="button"
               className="secondary-button"
-              onClick={() => setPendingProcessAction(null)}
+              onClick={() => void cancelProcessAction(nativeConfirmation.token)}
             >
               Cancel
             </button>
             <button
               type="button"
-              className={
-                pendingProcessAction.kind === "force"
-                  ? "danger-button"
-                  : "primary-button"
-              }
+              className="danger-button"
               disabled={dashboardIsBusy}
-              onClick={confirmProcessAction}
+              onClick={() =>
+                void confirmNativeProcessAction(nativeConfirmation.token)
+              }
             >
-              {pendingProcessAction.kind === "force"
-                ? `Force stop ${pendingProcessAction.application.name}`
-                : `${pendingProcessAction.kind === "restart" ? "Restart" : "Exit"} ${pendingProcessAction.application.name}`}
+              {nativeConfirmation.action === "restart"
+                ? `Force stop and restart ${confirmedApplication.name}`
+                : `Force stop ${confirmedApplication.name}`}
             </button>
           </div>
         </ModalDialog>
+      ) : (
+        pendingProcessAction && (
+          <ModalDialog
+            labelledBy="process-confirmation-title"
+            onClose={() => setPendingProcessAction(null)}
+          >
+            <p className="eyebrow">
+              {pendingProcessAction.kind === "force"
+                ? "Force termination"
+                : "Ownership confirmation"}
+            </p>
+            <h2 id="process-confirmation-title">
+              {pendingProcessAction.kind === "force"
+                ? `Force stop ${pendingProcessAction.application.name}?`
+                : `${pendingProcessAction.kind === "restart" ? "Restart" : "Control"} a Pre-existing Process?`}
+            </h2>
+            <p>
+              {pendingProcessAction.kind === "force"
+                ? `Graceful shutdown did not complete. Force stopping ${pendingProcessAction.application.name} may lose unsaved work.`
+                : `${pendingProcessAction.application.name} was already running before Formation Lap observed it. This explicit action will control a Process that the current Session does not own.`}
+            </p>
+            {dashboardError && (
+              <p className="form-error" role="alert">
+                {dashboardError}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setPendingProcessAction(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={
+                  pendingProcessAction.kind === "force"
+                    ? "danger-button"
+                    : "primary-button"
+                }
+                disabled={dashboardIsBusy}
+                onClick={confirmProcessAction}
+              >
+                {pendingProcessAction.kind === "force"
+                  ? `Force stop ${pendingProcessAction.application.name}`
+                  : `${pendingProcessAction.kind === "restart" ? "Restart" : "Exit"} ${pendingProcessAction.application.name}`}
+              </button>
+            </div>
+          </ModalDialog>
+        )
       )}
 
       {outputApplication &&

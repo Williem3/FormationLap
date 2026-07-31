@@ -102,7 +102,8 @@ assert.deepEqual(commands, [
   "commands::start_application",
   "commands::refresh_processes",
   "commands::exit_application",
-  "commands::force_stop_application",
+  "commands::confirm_process_action",
+  "commands::cancel_process_action",
   "commands::restart_application",
   "commands::start_session",
   "commands::test_game_launch",
@@ -121,5 +122,5 @@ assert.deepEqual(commands, [
 assert.match(nativeHost, /on_navigation/);
 
 console.log(
-  "Capability audit passed: local non-administrative main window, zero core/plugin permissions, twenty-eight narrow app commands, one user-mediated native executable picker, one bundled helper, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
+  "Capability audit passed: local non-administrative main window, zero core/plugin permissions, twenty-nine narrow app commands, one user-mediated native executable picker, one bundled helper, remote navigation guard, production IPC-only CSP, development-only Vite loopback.",
 );

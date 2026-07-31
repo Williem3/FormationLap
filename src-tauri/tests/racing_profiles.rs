@@ -461,7 +461,7 @@ fn edited_racing_profile_keeps_its_identity_after_restart() {
             name: "Sunday endurance".to_owned(),
             primary_sim_name: "rFactor 2".to_owned(),
             primary_sim_application_id: Some(primary_sim_application_id),
-            review_status: ProfileReviewStatus::Approved,
+            review_status: ProfileReviewStatus::NeedsReview,
         }]
     );
 }
@@ -950,7 +950,7 @@ fn interrupted_profile_replacement_recovers_the_last_valid_document() {
             name: "Le Mans Ultimate".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
             primary_sim_application_id: Some(primary_sim_application_id),
-            review_status: ProfileReviewStatus::Approved,
+            review_status: ProfileReviewStatus::NeedsReview,
         }]
     );
 }
@@ -1006,7 +1006,7 @@ fn invalid_profile_replacement_recovers_the_last_valid_document() {
             name: "Last valid".to_owned(),
             primary_sim_name: "Le Mans Ultimate".to_owned(),
             primary_sim_application_id: Some(primary_sim_application_id),
-            review_status: ProfileReviewStatus::Approved,
+            review_status: ProfileReviewStatus::NeedsReview,
         }]
     );
 }

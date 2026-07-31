@@ -472,7 +472,6 @@ describe("Dashboard behavior", () => {
     ).toBeVisible();
   });
   it("keeps Force stop available for a Stopping Process while closing a Session", async () => {
-    const user = userEvent.setup();
     const snapshot = lifecycleSnapshot();
     snapshot.applicationProcesses = [processSnapshot({ status: "stopping" })];
     snapshot.session = {
@@ -498,7 +497,9 @@ describe("Dashboard behavior", () => {
     render(<App bridge={new InMemoryNativeBridge(snapshot)} />);
 
     expect(
-      await screen.findByRole("heading", { name: "Force stop Healthy fixture?" }),
+      await screen.findByRole("heading", {
+        name: "Force stop Healthy fixture?",
+      }),
     ).toBeVisible();
   });
   it("shows bounded local console output and truncation state", async () => {

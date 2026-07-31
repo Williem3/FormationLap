@@ -223,10 +223,7 @@ export class InMemoryNativeBridge implements NativeBridge {
     const process = this.#snapshot.applicationProcesses.find(
       (candidate) => candidate.applicationId === pending?.applicationId,
     );
-    if (
-      !process ||
-      !pending || pending.token !== payload.token
-    ) {
+    if (!process || !pending || pending.token !== payload.token) {
       return this.getAppSnapshot();
     }
     process.status = "stopped";
@@ -236,7 +233,9 @@ export class InMemoryNativeBridge implements NativeBridge {
     return this.getAppSnapshot();
   }
 
-  cancelProcessAction(payload: ProcessConfirmationPayload): Promise<AppSnapshot> {
+  cancelProcessAction(
+    payload: ProcessConfirmationPayload,
+  ): Promise<AppSnapshot> {
     if (this.#snapshot.pendingProcessConfirmation?.token === payload.token) {
       delete this.#snapshot.pendingProcessConfirmation;
     }

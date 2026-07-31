@@ -60,6 +60,7 @@ M10 security hardening is in progress, owned by Codex `/root`.
   action-free dismissal. Public Core integration coverage includes corrupt
   settings/journals, invalid-pair preservation, interrupted restore,
   bounded repeat opens, and unsupported live schemas.
+
 - Core-owned one-shot process-confirmation slice is in progress. Scope:
   `core.rs`, Rust command/contracts and lifecycle tests, generated bindings,
   NativeBridge/in-memory adapter, Dashboard process dialog behavior, and M10
@@ -70,6 +71,7 @@ M10 security hardening is in progress, owned by Codex `/root`.
   force confirmation; typed confirm/cancel bridge commands; snapshot-driven
   Dashboard dialog whose dismiss path cancels native intent; Session-close
   confirmation remains explicit. Verification and focused commit follow.
+
 - Privileged-target binding slice: approval records now hold hash-bound
   elevated-launch and custom-stop targets (schema v2; prior records re-review),
   Core constructs typed operations from those stored values, and protocol v3
@@ -82,6 +84,13 @@ M10 security hardening is in progress, owned by Codex `/root`.
   contract, public Rust/React behavior tests, relevant security architecture
   documentation, M10 evidence, and this ledger. It will quarantine unsafe or
   repair-needed launch recipes and remove renderer-supplied picker paths.
+- Release-control aggregate audit slice is in progress. Scope:
+  `.github/workflows/release.yml`, release contracts and fixture-signing
+  support, capability-audit expectation, and M10 evidence. It synchronizes
+  protocol v3 across runtime/generator/fixture/docs, verifies the official
+  installer signer equals the approved main/helper signer, and keeps external
+  official-release gates explicitly pending. No production signing material is
+  present in this repository.
 - The installed `0.9.0-preview.6` preview proves two release-critical defects:
   its helper SHA-256 matches the sealed identity while the installed main
   executable SHA-256 does not, and a rejected `Start Session` command leaves
@@ -527,3 +536,4 @@ When blocked:
 | 2026-07-30 | Codex `/root/launch_quarantine` | M10 | Quarantined complete privileged profiles and every repair-needed launch recipe; Start Session recomputes repair state against editable JSON; narrowed the native executable picker and generated NativeBridge to zero payload and `.exe` only; synchronized the helper protocol-v3 release identity source and fixture | Red/green ProfileLibrary/Core tests; 53 React behavior tests; 31 release contracts; generated-binding check; Clippy and diff checks passed. | Continue the remaining release-readiness slices; no external publication action is authorized. |
 | 2026-07-30 | Codex `/root/process_confirmation_intent` | M10 | Replaced renderer-authoritative force booleans with a Core-owned one-shot UUID confirmation bound to exact action and stable Process identity; Dashboard dismissal cancels native intent and stuck Session Close remains explicitly confirmable. | `application_lifecycle` (10), `privileged_operations` (14 passed, 1 ignored), generated-binding check, format/Clippy, Dashboard behavior (53), typecheck, and diff check passed. | Continue remaining release-readiness slices; no external publication action is authorized. |
 | 2026-07-30 | Codex `/root/state_backup_recovery` | M10 | Recovered corrupt settings and active-Session live JSON only from a validated compatible backup; corrupt bytes now use two deterministic bounded artifacts, restoration keeps the backup, and newer schemas fail closed without fallback. | `desktop_integration` (10) including recovery/no-downgrade cases; `cargo fmt`; all-target/all-feature Clippy passed. Full all-target test run exposed the inherited protocol-v3 release-identity fixture signature rejection after 36 lib tests. | Agent 5 owns release-identity fixture synchronization; no external publication action is authorized. |
+| 2026-07-30 | Codex `/root/signed_release_controls` | M10 | Re-signed the protocol-v3 deterministic test identity fixture, added protocol-source and official workflow signer contracts, fail-closed Azure OIDC input checks, and capability-audit synchronization; aggregate audit restored valid Steam recipes while retaining direct-path quarantine and adjusted direct-path fixtures to canonical real executables. | `pnpm.cmd verify` passed (53 React, 3 accessibility, 32 release contracts, generated bindings/catalog/capability); focused release identity, launch recipe (9), profile command (13), and profile library (29) suites passed; format/Clippy passed before the earlier full-run audit exposed and then corrected fixture regressions. | M10 remains in progress/official NO-GO: independently evidence the protected `release` environment and secrets, PR/ruleset/secret-push protection, production signing/updater key, and signed Beta Windows 10 22H2/11 install-launch-elevated-update-uninstall-accessibility/data-preservation qualification. Rerun the complete serialized Rust suite after this aggregate commit; no external publication action is authorized. |

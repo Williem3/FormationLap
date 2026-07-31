@@ -144,10 +144,17 @@ The workflow:
 12. publishes the release only after every preceding gate passes.
 
 The workflow fails if a signing input is missing or any signature is not
-`Valid`. It also fails if the main/helper signer certificates differ. At
+`Valid`. It also fails if the installer signer certificate differs from the
+approved main/helper certificate SHA-256. At
 runtime, both sides repeat WinVerifyTrust and require their signer certificate
 SHA-256 to equal the value approved by the signed release-identity manifest.
 No unsigned binary is uploaded as a public artifact.
+
+These repository controls do not establish external readiness. Before an
+official release, independently evidence the protected `release` environment
+reviewers and production secrets, required PR review/check rules and
+secret-push protection, production Authenticode/updater signing, and the full
+signed Beta Windows 10 22H2/Windows 11 qualification matrix.
 
 ## Required signed-release assets
 

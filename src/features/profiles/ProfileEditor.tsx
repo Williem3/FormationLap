@@ -1014,13 +1014,12 @@ function ApplicationRecipeFields({
                   aria-label={`Browse for ${label} executable`}
                   onClick={() =>
                     void selectExecutable((next, path) => {
-                        const nextSource = next.launchRecipe.source;
-                        if (nextSource.kind !== "directExecutable") {
-                          return;
-                        }
-                        setDirectExecutable(next, path);
-                      },
-                    )
+                      const nextSource = next.launchRecipe.source;
+                      if (nextSource.kind !== "directExecutable") {
+                        return;
+                      }
+                      setDirectExecutable(next, path);
+                    })
                   }
                 >
                   Browse
@@ -1163,9 +1162,8 @@ function ApplicationRecipeFields({
                   aria-label={`Browse for ${label} monitored executable`}
                   onClick={() =>
                     void selectExecutable((next, path) => {
-                        next.launchRecipe.monitoredExecutablePath = path;
-                      },
-                    )
+                      next.launchRecipe.monitoredExecutablePath = path;
+                    })
                   }
                 >
                   Browseâ€¦
@@ -1318,12 +1316,11 @@ function ApplicationRecipeFields({
                 aria-label={`Browse for ${label} stop executable`}
                 onClick={() =>
                   void selectExecutable((next, path) => {
-                      const nextShutdown = next.launchRecipe.shutdownStrategy;
-                      if (nextShutdown.kind === "customStop") {
-                        nextShutdown.executablePath = path;
-                      }
-                    },
-                  )
+                    const nextShutdown = next.launchRecipe.shutdownStrategy;
+                    if (nextShutdown.kind === "customStop") {
+                      nextShutdown.executablePath = path;
+                    }
+                  })
                 }
               >
                 Browseâ€¦

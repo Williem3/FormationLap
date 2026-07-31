@@ -1386,6 +1386,64 @@ fn an_approved_privileged_recipe_remains_approved_after_restart_when_unchanged()
 }
 
 #[test]
+fn replacing_approved_elevated_or_custom_stop_bytes_requarantines_the_profile() {
+    let storage = TempStorage::new();
+    let executable = storage.path().join("reviewed-target.exe");
+    fs::copy(
+        std::env::current_exe().expect("test executable should exist"),
+        &executable,
+    )
+    .expect("review target should be copied");
+    let executable = executable
+        .canonicalize()
+        .expect("review target should canonicalize");
+    let mut core = FormationLapCore::open(storage.path()).expect("storage should open");
+    let profile_id = match core
+        .execute(AppCommand::CreateProfile {
+            profile: Box::new(formation_lap_lib::NewRacingProfile::from_names(
+                "Bound approval".to_owned(),
+                "Fixture".to_owned(),
+            )),
+        })
+        .expect("profile should be created")
+    {
+        CommandOutcome::ProfileCreated { profile_id } => profile_id,
+        other => panic!("expected profile creation, got {other:?}"),
+    };
+    let mut profile = core
+        .snapshot()
+        .selected_profile
+        .expect("profile should be selected");
+    profile.primary_sim.launch_recipe.source = LaunchSource::DirectExecutable {
+        executable_path: executable.to_string_lossy().into_owned(),
+    };
+    profile.primary_sim.launch_recipe.elevated = true;
+    profile.primary_sim.launch_recipe.shutdown_strategy = ShutdownStrategy::CustomStop {
+        executable_path: executable.to_string_lossy().into_owned(),
+        arguments: vec!["--stop".to_owned()],
+    };
+    let primary_id = profile.primary_sim.id.clone();
+    core.execute(AppCommand::SaveProfile {
+        profile: Box::new(profile),
+    })
+    .expect("privileged recipe should save");
+    core.execute(AppCommand::ApproveProfile {
+        profile_id,
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![primary_id],
+    })
+    .expect("reviewed bytes should approve");
+    drop(core);
+
+    fs::write(&executable, b"replacement bytes").expect("target should be replaceable in fixture");
+    let reopened = FormationLapCore::open(storage.path()).expect("storage should reopen");
+    assert_eq!(
+        reopened.snapshot().profiles[0].review_status,
+        ProfileReviewStatus::NeedsReview
+    );
+}
+
+#[test]
 fn a_missing_protected_approval_requarantines_an_approved_privileged_recipe() {
     let storage = TempStorage::new();
     let executable_path = std::env::current_exe()

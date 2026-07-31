@@ -1065,6 +1065,7 @@ fn manual_uac_helper_launches_and_closes_an_elevated_window_fixture() {
     let close = match broker.execute(&[ElevatedOperation::GracefulStop {
         process_identity: identity,
         strategy: ShutdownStrategy::CloseWindows,
+        custom_stop_executable_sha256: None,
     }]) {
         Ok(response) => response,
         Err(error) => {
@@ -1321,6 +1322,12 @@ fn elevated_manual_restart_routes_close_and_relaunch_through_the_broker() {
         profile: Box::new(profile),
     })
     .expect("the elevated Primary Sim should save");
+    core.execute(AppCommand::ApproveProfile {
+        profile_id: profile_id.clone(),
+        configuration_reviewed: true,
+        approved_privileged_application_ids: vec![application_id.clone()],
+    })
+    .expect("the elevated Primary Sim should be approved");
 
     core.execute(AppCommand::StartApplication {
         profile_id: profile_id.clone(),

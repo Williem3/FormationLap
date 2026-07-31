@@ -3,7 +3,7 @@
 This is the only source of truth for milestone status. The milestone definitions
 and exit criteria live in [`BUILD_PLAN.md`](BUILD_PLAN.md).
 
-Last updated: 2026-07-27
+Last updated: 2026-07-30
 
 ## Status values
 
@@ -36,6 +36,24 @@ their owners and non-overlapping file scopes must be recorded in Current Work.
 
 M10 security hardening is in progress, owned by Codex `/root`.
 
+- The 2026-07-30 release-readiness remediation is active on
+  `codex/sec-release-readiness-fixes`. Five sequential agents own non-overlapping
+  behavior slices: approval-time executable identity and elevated-handle
+  retention; profile launch quarantine and the no-payload executable picker;
+  Core-owned one-shot process confirmations; settings and Session-journal
+  backup recovery; and local signed-release controls/documentation. File scope
+  spans the related Rust modules and public-interface tests, generated
+  contracts and React behavior where the authoritative snapshot changes,
+  release workflow contracts, relevant security/architecture documentation,
+  M10 evidence, and this ledger. No push, tag, signing, workflow dispatch,
+  repository-setting mutation, or release publication is authorized.
+- Privileged-target binding slice: approval records now hold hash-bound
+  elevated-launch and custom-stop targets (schema v2; prior records re-review),
+  Core constructs typed operations from those stored values, and protocol v3
+  requires a custom-stop hash. Scope: `launch_recipe`, `profile_library`,
+  `core`, `privilege_protocol`, `privilege_broker`, public Rust tests, ADR 0006,
+  and M7 security checklist. Verification: 26 `racing_profiles` tests, 14
+  `privileged_operations` tests (one UAC smoke ignored), format, and Clippy.
 - The installed `0.9.0-preview.6` preview proves two release-critical defects:
   its helper SHA-256 matches the sealed identity while the installed main
   executable SHA-256 does not, and a rejected `Start Session` command leaves
@@ -477,3 +495,4 @@ When blocked:
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.9` fix-forward: both release workflows now extract the generated NSIS archive with 7-Zip and verify the exact packaged main executable, elevated helper, and release identity instead of executing the installer in CI | Red/green workflow contract; `pnpm.cmd test:release` (30 contracts), format, release-version, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.9`, dispatch and approve the protected preview workflow, then independently verify published artifacts |
 | 2026-07-27 | Codex `/root` | M10 | Diagnosed failed unpublished `.9`: archive extraction succeeds, but the final NSIS executable differs from the pre-bundle hash. Both workflows now create and extract a bootstrap installer, seal identity from its exact payload, remove the bootstrap artifact, then package and verify the final installer | Run [30309941242](https://github.com/Williem3/FormationLap/actions/runs/30309941242) passed all gates through build and failed only at final archive identity verification; red/green workflow-contract regression and `pnpm.cmd test:release` (30) passed | Commit, merge, prepare a new immutable preview version, then dispatch/approve the protected workflow and verify the final archive identity before publication |
 | 2026-07-27 | Codex `/root` | M10 | Prepared the authorized `0.9.0-preview.10` candidate with synchronized version metadata and disclosure-complete release notes for the two-pass installer identity repair | `pnpm.cmd test:release` (30 contracts), format, release-version, and diff checks passed | Commit, refresh from `origin/master`, merge, tag immutable `v0.9.0-preview.10`, dispatch/approve its protected preview workflow, then verify the published artifacts |
+| 2026-07-30 | Codex `/root/privileged_target_binding` | M10 | Bound protected elevated-launch and custom-stop approval to executable SHA-256 values, centralized executable safety policy (including `regsvr32.exe`), bumped the typed helper protocol to v3, and retained a write/delete-denying verified target handle through helper execution | `cargo test --test racing_profiles` (26); `cargo test --test privileged_operations` (14 passed, 1 manual smoke ignored); verified-target sharing test; `cargo fmt`; `cargo clippy --lib --tests -- -D warnings` | Continue release-readiness slices; no external publication action is authorized |

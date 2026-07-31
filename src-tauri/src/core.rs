@@ -799,8 +799,12 @@ impl FormationLapCore {
                     .get(&application_id)
                     .map(|recipe| (recipe.shutdown_strategy.clone(), recipe.elevated))
                     .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
-                let (graceful, exited) =
-                    self.request_graceful_stop(&identity, &strategy.0, strategy.1)?;
+                let (graceful, exited) = self.request_graceful_stop(
+                    &application_id,
+                    &identity,
+                    &strategy.0,
+                    strategy.1,
+                )?;
                 self.application_processes
                     .get_mut(&application_id)
                     .expect("application Process should remain present")
@@ -914,6 +918,7 @@ impl FormationLapCore {
                     });
                 };
                 let (graceful, exited) = self.request_graceful_stop(
+                    &application_id,
                     &identity,
                     &recipe.shutdown_strategy,
                     recipe.elevated,
@@ -1598,7 +1603,11 @@ impl FormationLapCore {
                 application.id.clone(),
                 launch_identity_is_unambiguous(&application.launch_recipe),
             ));
-            operations.push(elevated_launch_operation(&application.launch_recipe)?);
+            operations.push(elevated_launch_operation(
+                &application.launch_recipe,
+                self.profile_library
+                    .approved_executable_sha256(&application.id, false)?,
+            )?);
         }
         if operations.is_empty() {
             return Ok(());
@@ -1700,7 +1709,11 @@ impl FormationLapCore {
         recipe: &crate::LaunchRecipe,
         ownership: &ProcessOwnership,
     ) -> Result<ProcessIdentity, CoreError> {
-        let operation = elevated_launch_operation(recipe)?;
+        let operation = elevated_launch_operation(
+            recipe,
+            self.profile_library
+                .approved_executable_sha256(application_id, false)?,
+        )?;
         let session = &self.session;
         let journal = &self.session_journal;
         let application_processes = &mut self.application_processes;
@@ -1764,6 +1777,7 @@ impl FormationLapCore {
 
     fn request_graceful_stop(
         &mut self,
+        application_id: &str,
         identity: &ProcessIdentity,
         strategy: &crate::ShutdownStrategy,
         elevated: bool,
@@ -1784,6 +1798,15 @@ impl FormationLapCore {
             .execute(&[ElevatedOperation::GracefulStop {
                 process_identity: identity.clone(),
                 strategy: strategy.clone(),
+                custom_stop_executable_sha256: matches!(
+                    strategy,
+                    crate::ShutdownStrategy::CustomStop { .. }
+                )
+                .then(|| {
+                    self.profile_library
+                        .approved_executable_sha256(application_id, true)
+                })
+                .transpose()?,
             }])?;
         match response.results.into_iter().next() {
             Some(ElevatedOperationResult::GracefulStopRequested { requested, exited }) => Ok((
@@ -2161,6 +2184,7 @@ impl FormationLapCore {
                 .cloned()
                 .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
             let (graceful, exited) = match self.request_graceful_stop(
+                &application_id,
                 &identity,
                 &recipe.shutdown_strategy,
                 recipe.elevated,
@@ -2231,6 +2255,7 @@ impl FormationLapCore {
                         .cloned()
                         .ok_or_else(|| CoreError::ApplicationNotFound(application_id.clone()))?;
                     let (graceful, exited) = self.request_graceful_stop(
+                        &application_id,
                         &identity,
                         &recipe.shutdown_strategy,
                         recipe.elevated,
@@ -2326,6 +2351,17 @@ impl FormationLapCore {
                 Ok(ElevatedOperation::GracefulStop {
                     process_identity: identity.clone(),
                     strategy,
+                    custom_stop_executable_sha256: matches!(
+                        self.application_recipes
+                            .get(application_id)
+                            .map(|recipe| &recipe.shutdown_strategy),
+                        Some(crate::ShutdownStrategy::CustomStop { .. })
+                    )
+                    .then(|| {
+                        self.profile_library
+                            .approved_executable_sha256(application_id, true)
+                    })
+                    .transpose()?,
                 })
             })
             .collect::<Result<Vec<_>, CoreError>>()?;
@@ -2400,7 +2436,10 @@ fn recovery_identity_matches_recipe(
         })
 }
 
-fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOperation, CoreError> {
+fn elevated_launch_operation(
+    recipe: &crate::LaunchRecipe,
+    executable_sha256: String,
+) -> Result<ElevatedOperation, CoreError> {
     let crate::LaunchSource::DirectExecutable { executable_path } = &recipe.source else {
         return Err(CoreError::InvalidLaunchRecipe(
             "Steam launches cannot request elevation".to_owned(),
@@ -2422,11 +2461,7 @@ fn elevated_launch_operation(recipe: &crate::LaunchRecipe) -> Result<ElevatedOpe
         .map(|path| path.to_string_lossy().into_owned());
     Ok(ElevatedOperation::Launch {
         executable_path,
-        executable_sha256: crate::privilege_protocol::executable_sha256(match &recipe.source {
-            crate::LaunchSource::DirectExecutable { executable_path } => executable_path,
-            crate::LaunchSource::Steam { .. } => unreachable!("Steam launch was rejected"),
-        })
-        .map_err(|error| CoreError::InvalidLaunchRecipe(error.to_string()))?,
+        executable_sha256,
         arguments: recipe.arguments.clone(),
         working_directory,
         monitored_process: recipe.monitored_process.clone(),

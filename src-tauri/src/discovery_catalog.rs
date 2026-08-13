@@ -536,6 +536,9 @@ pub enum DiscoveryCatalogError {
         first_location: String,
         duplicate_location: String,
     },
+    UndeclaredDefaultVrLaunchMode {
+        sim_index: usize,
+    },
     UnknownCompatibilitySim {
         sim_id: String,
         application_index: usize,
@@ -599,6 +602,10 @@ impl fmt::Display for DiscoveryCatalogError {
                 formatter,
                 "duplicate VR Launch Mode at {duplicate_location}; first declared at {first_location}"
             ),
+            Self::UndeclaredDefaultVrLaunchMode { sim_index } => write!(
+                formatter,
+                "default VR Launch Mode at sims[{sim_index}].launchRecipes.defaultVrMode is not declared in sims[{sim_index}].launchRecipes.vr"
+            ),
             Self::UnknownCompatibilitySim {
                 sim_id,
                 application_index,
@@ -628,6 +635,7 @@ impl Error for DiscoveryCatalogError {
             | Self::MissingSteamLaunchRecipes { .. }
             | Self::InvalidCatalogMonitoredProcess { .. }
             | Self::DuplicateVrLaunchMode { .. }
+            | Self::UndeclaredDefaultVrLaunchMode { .. }
             | Self::UnknownCompatibilitySim { .. }
             | Self::InvalidUpdateProvider { .. } => None,
         }
@@ -658,6 +666,8 @@ struct SimCatalogEntry {
 #[serde(rename_all = "camelCase")]
 struct CatalogPrimarySimLaunchRecipes {
     ordinary: CatalogLaunchRecipe,
+    #[serde(default)]
+    default_vr_mode: Option<VrLaunchMode>,
     #[serde(default)]
     vr: Vec<CatalogVrLaunchRecipe>,
 }
@@ -894,7 +904,7 @@ impl DiscoveryCatalog {
             && let Some(recipes) = self.steam_launch_recipes.get(app_id)
         {
             let selected_recipe = if vr_enabled {
-                if let Some(mode) = preferred_vr_launch_mode {
+                if let Some(mode) = preferred_vr_launch_mode.or(recipes.default_vr_mode.as_ref()) {
                     match recipes.vr.iter().find(|recipe| &recipe.mode == mode) {
                         Some(vr_recipe) => Some((
                             &vr_recipe.steam_selector,
@@ -1671,6 +1681,13 @@ fn parse_and_validate_catalog_documents(
                 recipe.monitored_process.as_deref(),
                 format!("sims[{index}].launchRecipes.vr[{recipe_index}].monitoredProcess"),
             )?;
+        }
+        if launch_recipes.default_vr_mode.as_ref().is_some_and(|mode| {
+            !declared_vr_modes
+                .iter()
+                .any(|(declared_mode, _)| *declared_mode == mode)
+        }) {
+            return Err(DiscoveryCatalogError::UndeclaredDefaultVrLaunchMode { sim_index: index });
         }
     }
 

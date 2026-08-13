@@ -449,6 +449,7 @@ export function ProfileEditor({
                     })
                   }
                 >
+                  <option value="openXr">OpenXR</option>
                   <option value="openVr">OpenVR / SteamVR</option>
                   <option value="oculus">Oculus</option>
                 </select>

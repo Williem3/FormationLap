@@ -146,7 +146,13 @@
           "steamSelector": { "kind": "default" },
           "monitoredProcess": "Le Mans Ultimate.exe"
         },
+        "defaultVrMode": "openXr",
         "vr": [
+          {
+            "mode": "openXr",
+            "steamSelector": { "kind": "option", "index": 3 },
+            "monitoredProcess": "Le Mans Ultimate.exe"
+          },
           {
             "mode": "openVr",
             "steamSelector": { "kind": "openVr" },

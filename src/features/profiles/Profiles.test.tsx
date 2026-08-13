@@ -660,7 +660,7 @@ describe("Racing Profile behavior", () => {
     ).toHaveAttribute("aria-current", "page");
     expect(screen.getByLabelText("VR")).toBeChecked();
   });
-  it("limits preferred VR launch modes to OpenVR / SteamVR and Oculus", async () => {
+  it("offers OpenXR, OpenVR / SteamVR, and Oculus as preferred VR launch modes", async () => {
     const user = userEvent.setup();
     render(<App bridge={new InMemoryNativeBridge(lifecycleSnapshot())} />);
 
@@ -673,7 +673,7 @@ describe("Racing Profile behavior", () => {
       within(mode)
         .getAllByRole("option")
         .map((option) => option.textContent),
-    ).toEqual(["OpenVR / SteamVR", "Oculus"]);
+    ).toEqual(["OpenXR", "OpenVR / SteamVR", "Oculus"]);
   });
   it("keeps launch arguments, advanced startup settings, and shutdown policy compact", async () => {
     const user = userEvent.setup();

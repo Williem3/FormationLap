@@ -196,6 +196,42 @@ fn catalog_validator_rejects_duplicate_vr_launch_modes() {
 }
 
 #[test]
+fn catalog_validator_requires_the_default_vr_mode_to_be_declared() {
+    let sims = r#"{
+      "schemaVersion": 1,
+      "sims": [
+        {
+          "id": "sim",
+          "name": "Sim",
+          "steamAppId": 42,
+          "launchRecipes": {
+            "ordinary": {
+              "steamSelector": { "kind": "default" },
+              "monitoredProcess": "Sim.exe"
+            },
+            "defaultVrMode": "openXr",
+            "vr": [
+              {
+                "mode": "openVr",
+                "steamSelector": { "kind": "openVr" },
+                "monitoredProcess": "Sim.exe"
+              }
+            ]
+          }
+        }
+      ]
+    }"#;
+    let applications = r#"{ "schemaVersion": 1, "applications": [] }"#;
+
+    assert_eq!(
+        validate_catalog_documents(sims, applications)
+            .expect_err("an undeclared default VR mode should be rejected")
+            .to_string(),
+        "default VR Launch Mode at sims[0].launchRecipes.defaultVrMode is not declared in sims[0].launchRecipes.vr"
+    );
+}
+
+#[test]
 fn catalog_validator_rejects_duplicate_sim_ids_with_an_actionable_location() {
     let temporary = TempStorage::new();
     let sims_path = temporary.path().join("duplicate-sims.json");
